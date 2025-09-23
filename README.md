@@ -1,4 +1,4 @@
-# Deloitte Staff Attendance
+# Staff Attendance
 
 ## Project Overview
 
