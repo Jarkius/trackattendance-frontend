@@ -256,7 +256,7 @@ header h1 {
 
 .collection {
     border: none;
-    max-height: calc(100vh - 480px); /* Adjusted for header and export button */
+    max-height: calc(100vh - 445px); /* Allow slightly taller history list */
     overflow-y: auto;
     margin: 0;
 }
@@ -288,8 +288,8 @@ header h1 {
 /* Export Button */
 .export-section {
     flex-shrink: 0;
-    margin-top: 20px;
-    padding-top: 20px;
+    margin-top: 14px;
+    padding-top: 16px;
     border-top: 1px solid var(--border);
 }
 
