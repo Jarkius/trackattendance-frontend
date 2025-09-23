@@ -1,0 +1,196 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>Deloitte Staff Attendance</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%2386bc25%22></circle></svg>">
+
+    <!-- Materialize CSS -->
+    <link rel="stylesheet" href="materialize/css/materialize.min.css">
+    <!-- Local Fonts -->
+    <link rel="stylesheet" href="css/fonts.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/material-icons.css">
+</head>
+
+<body>
+    <header>
+        <h1>Station : 1</h1>
+    </header>
+    <i id="close-btn" class="material-icons">close</i>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Left Panel: Input and Feedback -->
+            <div class="col s12 m7 l8 left-panel-content">
+                <div id="main-panel">
+                    <div class="main-content-wrapper">
+                        <div class="feedback-section">
+                            <h5>Welcome</h5>
+                            <p id="live-feedback-name">Ready to scan...</p>
+                            <div class="scan-section">
+                                <input type="text" id="barcode-input" placeholder="Scan Badge Barcode" autofocus>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Dashboard and History -->
+            <div class="col s12 m5 l4">
+                <div class="sidebar">
+                    <div class="dashboard-section card">
+                        <div class="card-content">
+                            <span class="card-title">Dashboard</span>
+                            <div class="row">
+                                <div class="col s6">
+                                    <div class="counter">
+                                        <span class="count" id="total-employees">0</span>
+                                        <span class="label">Total Employees</span>
+                                    </div>
+                                </div>
+                                <div class="col s6">
+                                    <div class="counter">
+                                        <span class="count" id="total-scanned">0</span>
+                                        <span class="label">Scanned Today</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="history-section card">
+                        <div class="card-content">
+                            <span class="card-title">Recent Scans</span>
+                            <ul class="collection" id="scan-history-list">
+                                <!-- History items will be added here -->
+                                <li class="collection-item">
+                                    <div>
+                                        <span class="name">John Doe</span><br>
+                                        <span class="timestamp">2 minutes ago</span>
+                                    </div>
+                                </li>
+                                <li class="collection-item">
+                                    <div>
+                                        <span class="name">Jane Smith</span><br>
+                                        <span class="timestamp">5 minutes ago</span>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Export Button Section -->
+                    <div class="export-section">
+                        <button class="export-btn" id="export-data-btn">
+                            <i class="material-icons">file_download</i>
+                            Export Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Materialize JavaScript -->
+    <script src="materialize/js/materialize.min.js"></script>
+    <!-- Qt WebChannel Script -->
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <!-- Custom Script -->
+    <script src="script.js"></script>
+
+    <script>
+        // Focus Management - Always return focus to input
+        function returnFocusToInput() {
+            const barcodeInput = document.getElementById('barcode-input');
+            if (barcodeInput) {
+                setTimeout(() => {
+                    barcodeInput.focus();
+                }, 100);
+            }
+        }
+
+        // Initialize focus management
+        document.addEventListener('DOMContentLoaded', function() {
+            const barcodeInput = document.getElementById('barcode-input');
+            const exportBtn = document.getElementById('export-data-btn');
+            const historyList = document.getElementById('scan-history-list');
+            
+            // Ensure input is always focused initially
+            barcodeInput.focus();
+
+            // Return focus after any click
+            document.addEventListener('click', function(e) {
+                // Don't interfere with input clicks
+                if (e.target !== barcodeInput) {
+                    returnFocusToInput();
+                }
+            });
+
+            // Return focus after scrolling
+            document.addEventListener('scroll', returnFocusToInput, true);
+            if (historyList) {
+                historyList.addEventListener('scroll', returnFocusToInput);
+            }
+
+            // Export button functionality
+            exportBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                // Add loading state
+                exportBtn.disabled = true;
+                exportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>Exporting...';
+                
+                // Simulate export process
+                setTimeout(() => {
+                    // Reset button
+                    exportBtn.disabled = false;
+                    exportBtn.innerHTML = '<i class="material-icons">file_download</i>Export Data';
+                    
+                    // Show feedback
+                    const feedbackName = document.getElementById('live-feedback-name');
+                    const originalText = feedbackName.textContent;
+                    feedbackName.textContent = 'Data exported successfully!';
+                    feedbackName.style.color = '#86bc25';
+                    
+                    // Reset feedback after 3 seconds
+                    setTimeout(() => {
+                        feedbackName.textContent = originalText;
+                        feedbackName.style.color = '#86bc25';
+                    }, 3000);
+                    
+                    // Return focus to input
+                    returnFocusToInput();
+                }, 1500);
+            });
+
+            // Handle keyboard events
+            document.addEventListener('keydown', function(e) {
+                // Always ensure input has focus unless user is actively typing in it
+                if (e.target !== barcodeInput && e.key.length === 1) {
+                    barcodeInput.focus();
+                }
+            });
+
+            // Handle window focus
+            window.addEventListener('focus', returnFocusToInput);
+            
+            // Handle visibility change
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    returnFocusToInput();
+                }
+            });
+        });
+
+        // Prevent focus loss on mouse events
+        document.addEventListener('mouseup', returnFocusToInput);
+        document.addEventListener('touchend', returnFocusToInput);
+    </script>
+</body>
+</html>
+
+
