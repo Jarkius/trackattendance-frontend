@@ -14,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { barcode: '101121', fullName: 'Sasithorn Srisuk' },
         { barcode: '101122', fullName: 'Kittipong Charoensuk' },
         { barcode: '101123', fullName: 'Anusorn Charoensuk' },
-        { barcode: '101124', fullName: 'Sasithorn Srisuk' },
+        { barcode: '101124', fullName: 'Nassaya Sitthichokvarodom' },
     ];
 
     const MOCKED_HISTORY = [];
