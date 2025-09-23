@@ -172,7 +172,18 @@ header h1 {
     text-align: center;
     line-height: 1.2;
     max-width: 100%;
-    overflow-wrap: anywhere;
+    min-height: calc(1.2 * 2.2rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#live-feedback-name.feedback-name--compact {
+    font-size: 1.9rem;
+}
+
+#live-feedback-name.feedback-name--condensed {
+    font-size: 1.6rem;
 }
 
 .left-panel-content {
@@ -321,31 +332,54 @@ header h1 {
 }
 
 /* Responsive Design */
-@media (max-width: 992px) {    max-width: 860px;
+@media (max-width: 992px) {
+    .feedback-section {
+        max-width: 860px;
         padding: 40px 30px;
         min-height: 280px;
     }
-    
-    #live-feedback-name {
-        font-size: 1.8rem;
-    }
-    
-    #barcode-input {
-    font-size: 1.6rem;
+
+#live-feedback-name {
+    font-size: 2.2rem;
+    font-weight: 600;
+    color: var(--deloitte-green);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-    border: 3px solid var(--border);
-    border-radius: 8px;
-    padding: 20px 16px;
-    height: auto;
-    box-sizing: border-box;
-    transition: all 0.3s ease-in-out;
-    background-color: var(--background);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    line-height: 1.2;
+    max-width: 100%;
+    min-height: calc(1.2 * 2.2rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-    
+
+#live-feedback-name.feedback-name--compact {
+    font-size: 1.9rem;
+}
+
+#live-feedback-name.feedback-name--condensed {
+    font-size: 1.6rem;
+}
+
+    #barcode-input {
+        font-size: 1.6rem;
+        text-align: center;
+        width: 100%;
+        max-width: 640px;
+        margin: 0 auto;
+        border: 3px solid var(--border);
+        border-radius: 8px;
+        padding: 20px 16px;
+        height: auto;
+        box-sizing: border-box;
+        transition: all 0.3s ease-in-out;
+        background-color: var(--background);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
     .main-content-wrapper {
         padding: 20px;
     }
@@ -374,9 +408,30 @@ header h1 {
         font-size: 1.2rem;
     }
     
-    #live-feedback-name {
-        font-size: 1.6rem;
-    }
+#live-feedback-name {
+    font-size: 2.2rem;
+    font-weight: 600;
+    color: var(--deloitte-green);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+    max-width: 100%;
+    min-height: calc(1.2 * 2.2rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#live-feedback-name.feedback-name--compact {
+    font-size: 1.9rem;
+}
+
+#live-feedback-name.feedback-name--condensed {
+    font-size: 1.6rem;
+}
     
     #barcode-input {
     font-size: 1.6rem;
