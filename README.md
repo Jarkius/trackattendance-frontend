@@ -53,5 +53,12 @@ python main.py
 
 ## UI/UX Notes
 
- 
- 
+## Testing & Diagnostics
+
+- `python tests\simulate_scans.py` spins up an off-screen `QWebEngineView` and submits a small set of barcodes against `web/index.html` to sanity-check the JavaScript handlers without launching the desktop shell.
+- `python tests\stress_full_app.py --iterations 200 --delay-ms 75 --disable-fade` boots the real PyQt window and drives 200 scans (full employee roster plus special-character test cases) to watch for freezes or focus issues.
+  - Omit `--disable-fade` to keep the production fade-in animation.
+  - Add `--windowed` to avoid fullscreen or `--no-show-window` for fully headless runs.
+
+These utilities are optional; they do not change application behaviour when you launch the app with `python main.py`.
+
