@@ -1,9 +1,13 @@
-import sys
 import os
+import sys
+from typing import Callable, Optional, Sequence, Tuple
+
+from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, QUrl
+from PyQt6.QtCore import QObject, Qt, pyqtSlot
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
-from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebChannel import QWebChannel
-from PyQt6.QtCore import QObject, pyqtSlot, QUrl, QPropertyAnimation, QEasingCurve, Qt
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,70 +55,105 @@ FALLBACK_ERROR_HTML = """<!DOCTYPE html>
 
 
 class Api(QObject):
-    @pyqtSlot()
-    def close_window(self):
-        """Shut down the QApplication when the web UI requests a close via QWebChannel."""
-        app.quit()
+    """Expose desktop controls to the embedded web UI."""
 
-def main():
-    global app
-    app = QApplication(sys.argv)
+    def __init__(self, quit_callback: Callable[[], None]):
+        super().__init__()
+        self._quit_callback = quit_callback
+
+    @pyqtSlot()
+    def close_window(self) -> None:
+        """Shut down the QApplication when the web UI requests a close via QWebChannel."""
+        if self._quit_callback:
+            self._quit_callback()
+
+
+def initialize_app(
+    argv: Optional[Sequence[str]] = None,
+    *,
+    show_window: bool = True,
+    show_full_screen: bool = True,
+    enable_fade: bool = True,
+    on_load_finished: Optional[Callable[[bool], None]] = None,
+) -> Tuple[QApplication, QMainWindow, QWebEngineView, QPropertyAnimation]:
+    """Prepare the PyQt application and interface without starting the event loop."""
+    app = QApplication.instance()
+    if app is None:
+        args = list(argv) if argv is not None else sys.argv
+        app = QApplication(args)
 
     window = QMainWindow()
     window.setWindowTitle('Deloitte Staff Attendance')
-    
-    # Set window attributes for transparency and hide frame for a cleaner look
     window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     window.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-    window.setWindowOpacity(0.0) # Start fully transparent
+    window.setWindowOpacity(0.0 if enable_fade and show_window else 1.0)
 
     view = QWebEngineView()
-    # Make the web view background transparent to see the window's fade-in
     view.page().setBackgroundColor(Qt.GlobalColor.transparent)
 
-    # --- Animation Setup ---
     animation = QPropertyAnimation(window, b"windowOpacity")
-    animation.setDuration(400) # A slightly faster fade
+    animation.setDuration(400)
     animation.setStartValue(0.0)
     animation.setEndValue(1.0)
     animation.setEasingCurve(QEasingCurve.Type.InOutQuad)
-    # -----------------------
 
-    # Set up the web channel
     channel = QWebChannel()
-    api = Api()
+    api = Api(app.quit)
     channel.registerObject('api', api)
     view.page().setWebChannel(channel)
 
-    # --- Wait for page to load before showing window ---
-    def on_load_finished(ok):
+    file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'web', 'index.html'))
+    window.setCentralWidget(view)
+
+    def handle_load_finished(ok: bool) -> None:
         if ok:
-            window.showFullScreen()
-            animation.start()
+            if not show_window:
+                window.setWindowOpacity(1.0)
+            else:
+                if not enable_fade:
+                    window.setWindowOpacity(1.0)
+                if show_full_screen:
+                    window.showFullScreen()
+                else:
+                    window.show()
+                if enable_fade:
+                    animation.start()
+            if on_load_finished:
+                on_load_finished(ok)
             return
 
-        view.loadFinished.disconnect(on_load_finished)
+        view.loadFinished.disconnect(handle_load_finished)
         print('Failed to load web interface from:', file=sys.stderr)
         print(file_path, file=sys.stderr)
         window.setWindowOpacity(1.0)
-        window.showFullScreen()
+        if show_window:
+            if show_full_screen:
+                window.showFullScreen()
+            else:
+                window.show()
         view.setHtml(FALLBACK_ERROR_HTML)
-        QMessageBox.critical(
-            window,
-            'Load Error',
-            'Unable to load the attendance interface. Please check the local assets and try again.'
-        )
+        if show_window:
+            QMessageBox.critical(
+                window,
+                'Load Error',
+                'Unable to load the attendance interface. Please check the local assets and try again.'
+            )
+        if on_load_finished:
+            on_load_finished(ok)
 
-    view.loadFinished.connect(on_load_finished)
-    # ----------------------------------------------------
-
-    # Load the HTML file
-    file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "web", "index.html"))
+    view.loadFinished.connect(handle_load_finished)
     view.setUrl(QUrl.fromLocalFile(file_path))
-    
-    window.setCentralWidget(view)
 
+    window._web_channel = channel  # type: ignore[attr-defined]
+    window._api = api  # type: ignore[attr-defined]
+
+    return app, window, view, animation
+
+
+def main() -> None:
+    app, _, _, _ = initialize_app()
     sys.exit(app.exec())
+
 
 if __name__ == '__main__':
     main()
