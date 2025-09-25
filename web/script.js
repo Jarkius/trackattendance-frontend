@@ -1,54 +1,106 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Mock Data --- //
-    const MOCKED_EMPLOYEES = [
-        { barcode: '12345', fullName: 'John Smith' },
-        { barcode: '67890', fullName: 'Jane Doe' },
-        { barcode: '54321', fullName: 'Peter Jones' },
-        { barcode: '09876', fullName: 'Mary Williams' },
-        { barcode: '11223', fullName: 'David Brown' },
-        { barcode: '101117', fullName: 'Juckrit Sanitareephon' },
-        { barcode: '101118', fullName: 'Pawaputanon Na Mahasarakham' },
-        { barcode: '101119', fullName: 'Natthanichaphat Saosungkhongcharoen' },
-        { barcode: '101120', fullName: 'Thanawatphattarakun, Naphattrarath' },
-        { barcode: '101121', fullName: 'Sasithorn Srisuk' },
-        { barcode: '101122', fullName: 'Kittipong Charoensuk' },
-        { barcode: '101123', fullName: 'Anusorn Charoensuk' },
-        { barcode: '101124', fullName: 'Nassaya Sitthichokvarodom' }
-    ];
-    const MOCKED_HISTORY = [];
-    const TOTAL_EMPLOYEES = 1500;
-    let totalScannedCount = 0;
-    // --- DOM Elements --- //
+    const state = {
+        totalEmployees: 0,
+        totalScansToday: 0,
+        totalScansOverall: 0,
+        history: [],
+        stationName: '--',
+    };
+
     const barcodeInput = document.getElementById('barcode-input');
     const liveFeedbackName = document.getElementById('live-feedback-name');
+    const stationNameLabel = document.getElementById('station-name');
     const totalEmployeesCounter = document.getElementById('total-employees');
     const totalScannedCounter = document.getElementById('total-scanned');
     const scanHistoryList = document.getElementById('scan-history-list');
     const closeBtn = document.getElementById('close-btn');
     const exportBtn = document.getElementById('export-data-btn');
+    const exportOverlay = document.getElementById('export-overlay');
+    const exportOverlayTitle = document.getElementById('export-overlay-title');
+    const exportOverlayMessage = document.getElementById('export-overlay-message');
+    const exportOverlayConfirm = document.getElementById('export-overlay-confirm');
+
     if (!barcodeInput || !liveFeedbackName || !totalEmployeesCounter || !totalScannedCounter) {
         console.warn('Attendance UI missing required elements; event wiring skipped.');
         return;
     }
-    // --- PyQt6 WebChannel --- //
+
     let api;
+    const apiQueue = [];
+
+    const flushApiQueue = () => {
+        if (!api) {
+            return;
+        }
+        apiQueue.splice(0).forEach((callback) => callback(api));
+    };
+
     if (window.qt && window.qt.webChannelTransport) {
         new QWebChannel(window.qt.webChannelTransport, (channel) => {
             api = channel.objects.api;
+            flushApiQueue();
+            loadInitialData();
         });
     } else {
         console.warn('Qt WebChannel transport not available; desktop integration disabled.');
+        setLiveFeedback('Desktop bridge unavailable', 'red');
     }
-    // --- Helper Functions --- //
+
+    const queueOrRun = (callback) => {
+        if (api) {
+            callback(api);
+            return;
+        }
+        apiQueue.push(callback);
+    };
+
+    const hideExportOverlay = () => {
+        if (!exportOverlay) {
+            return;
+        }
+        exportOverlay.classList.remove('export-overlay--visible', 'export-overlay--error');
+        exportOverlay.setAttribute('aria-hidden', 'true');
+    };
+
+    const showExportOverlay = ({ ok, message, destination }) => {
+        if (!exportOverlay) {
+            if (!ok && message) {
+                console.warn('Export overlay container missing; message:', message);
+            }
+            return;
+        }
+        const normalizedMessage = destination ? `${message}
+${destination}` : message;
+        exportOverlayMessage.textContent = normalizedMessage;
+        if (exportOverlayTitle) {
+            exportOverlayTitle.textContent = ok ? 'Export Complete' : 'Export Failed';
+        }
+        exportOverlay.classList.toggle('export-overlay--error', !ok);
+        exportOverlay.classList.add('export-overlay--visible');
+        exportOverlay.setAttribute('aria-hidden', 'false');
+        if (exportOverlayConfirm) {
+            exportOverlayConfirm.focus();
+        }
+    };
+
+    window.__handleExportShutdown = (payload) => {
+        const data = payload || {};
+        const ok = Boolean(data.ok);
+        const baseMessage = typeof data.message === 'string' ? data.message.trim() : '';
+        const destination = typeof data.destination === 'string' ? data.destination : '';
+        const message = baseMessage || (ok ? 'Attendance report exported successfully.' : 'Unable to export attendance report.');
+        showExportOverlay({ ok, message, destination });
+    };
+
     const returnFocusToInput = () => {
         window.setTimeout(() => {
             if (document.body.contains(barcodeInput)) {
                 barcodeInput.focus();
             }
-        }, 100);
+        }, 80);
     };
 
-    const adjustFeedbackSizing = (content) => {
+    function adjustFeedbackSizing(content) {
         const message = typeof content === 'string' ? content : '';
         liveFeedbackName.classList.remove('feedback-name--compact', 'feedback-name--condensed');
         if (message.length > 32) {
@@ -56,91 +108,151 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (message.length > 22) {
             liveFeedbackName.classList.add('feedback-name--compact');
         }
-    };
-    function updateLiveFeedback(name) {
-        adjustFeedbackSizing(name);
-        liveFeedbackName.textContent = name;
-        window.setTimeout(() => {
-            const defaultMessage = 'Ready to scan...';
-            liveFeedbackName.textContent = defaultMessage;
-            adjustFeedbackSizing(defaultMessage);
-            liveFeedbackName.style.color = 'var(--deloitte-green)';
-        }, 2000);
     }
-    function updateScanHistory(employeeName) {
-        const timestamp = new Date().toLocaleTimeString();
-        MOCKED_HISTORY.unshift({ name: employeeName, time: timestamp });
+
+    function setLiveFeedback(message, color = 'var(--deloitte-green)', resetDelayMs = 2000) {
+        adjustFeedbackSizing(message);
+        liveFeedbackName.textContent = message;
+        liveFeedbackName.style.color = color;
+        if (resetDelayMs > 0) {
+            window.setTimeout(() => {
+                const defaultMessage = 'Ready to scan...';
+                liveFeedbackName.textContent = defaultMessage;
+                adjustFeedbackSizing(defaultMessage);
+                liveFeedbackName.style.color = 'var(--deloitte-green)';
+            }, resetDelayMs);
+        }
+    }
+
+    const formatTimestamp = (isoValue) => {
+        if (!isoValue) {
+            return '';
+        }
+        const parsed = new Date(isoValue);
+        if (Number.isNaN(parsed.getTime())) {
+            return isoValue;
+        }
+        return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    };
+
+    const renderHistory = (entries) => {
         if (!scanHistoryList) {
             return;
         }
-        const listItem = document.createElement('li');
-        listItem.className = 'collection-item';
-        listItem.innerHTML = `<span class="name">${employeeName}</span><span class="timestamp">${timestamp}</span>`;
-        scanHistoryList.prepend(listItem);
-    }
-    function updateDashboard() {
-        totalScannedCount += 1;
-        totalScannedCounter.textContent = totalScannedCount;
-    }
-    function initializeApp() {
-        totalEmployeesCounter.textContent = TOTAL_EMPLOYEES.toLocaleString();
-        totalScannedCounter.textContent = totalScannedCount;
-        adjustFeedbackSizing(liveFeedbackName.textContent);
-        returnFocusToInput();
-    }
-    function handleExportSuccess(originalText, originalColor) {
-        const successMessage = 'Data exported successfully!';
-        liveFeedbackName.textContent = successMessage;
-        liveFeedbackName.style.color = 'var(--deloitte-green)';
-        adjustFeedbackSizing(successMessage);
-        window.setTimeout(() => {
-            const fallbackMessage = originalText || 'Ready to scan...';
-            liveFeedbackName.textContent = fallbackMessage;
-            adjustFeedbackSizing(fallbackMessage);
-            liveFeedbackName.style.color = originalColor || 'var(--deloitte-green)';
-        }, 3000);
-    }
-    // --- Event Listeners --- //
+        scanHistoryList.innerHTML = '';
+        entries.forEach((entry) => {
+            const listItem = document.createElement('li');
+            listItem.className = 'collection-item';
+            listItem.innerHTML = `<span class="name">${entry.fullName}</span><span class="timestamp">${formatTimestamp(entry.timestamp)}</span>`;
+            scanHistoryList.appendChild(listItem);
+        });
+    };
+
+    const applyDashboardState = () => {
+        if (stationNameLabel) {
+            stationNameLabel.textContent = state.stationName || '--';
+        }
+        totalEmployeesCounter.textContent = Number(state.totalEmployees).toLocaleString();
+        totalScannedCounter.textContent = Number(state.totalScansToday).toLocaleString();
+        renderHistory(state.history);
+    };
+
+    const loadInitialData = () => {
+        queueOrRun((bridge) => {
+            bridge.get_initial_data((payload) => {
+                state.totalEmployees = payload?.totalEmployees ?? 0;
+                state.totalScansToday = payload?.totalScansToday ?? 0;
+                state.totalScansOverall = payload?.totalScansOverall ?? 0;
+                state.stationName = payload?.stationName ?? '--';
+                state.history = Array.isArray(payload?.scanHistory) ? payload.scanHistory : [];
+                applyDashboardState();
+                returnFocusToInput();
+            });
+        });
+    };
+
+    const handleScanResponse = (response) => {
+        if (!response || response.ok === false) {
+            const message = response?.message || 'Scan failed';
+            setLiveFeedback(message, 'red', 3000);
+            return;
+        }
+        state.totalScansToday = response.totalScansToday ?? state.totalScansToday;
+        state.totalScansOverall = response.totalScansOverall ?? state.totalScansOverall;
+        state.history = Array.isArray(response.scanHistory) ? response.scanHistory : state.history;
+        applyDashboardState();
+
+        const found = Boolean(response.matched);
+        const nameToShow = response.fullName || 'Unknown';
+        setLiveFeedback(nameToShow, found ? 'var(--deloitte-black)' : 'red');
+    };
+
+    const submitScan = (badgeValue) => {
+        const badge = badgeValue.trim();
+        if (!badge) {
+            return;
+        }
+        queueOrRun((bridge) => {
+            bridge.submit_scan(badge, (response) => {
+                handleScanResponse(response);
+                barcodeInput.value = '';
+                returnFocusToInput();
+            });
+        });
+    };
+
+    const handleExport = () => {
+        queueOrRun((bridge) => {
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>Exporting...';
+            bridge.export_scans((result) => {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="material-icons">file_download</i>Export Data';
+                if (!result || result.ok === false) {
+                    const message = result?.message || 'Export failed';
+                    setLiveFeedback(message, 'red', 3000);
+                } else {
+                    const successMessage = `Exported ${result.fileName || 'Checkins.xlsx'}`;
+                    setLiveFeedback(successMessage, 'var(--deloitte-green)', 4000);
+                }
+                returnFocusToInput();
+            });
+        });
+    };
+
     barcodeInput.addEventListener('keyup', (event) => {
         if (event.key === 'Enter') {
-            const barcode = barcodeInput.value.trim();
-            if (!barcode) {
-                return;
-            }
-            const employee = MOCKED_EMPLOYEES.find((emp) => emp.barcode === barcode);
-            if (employee) {
-                updateLiveFeedback(employee.fullName);
-                liveFeedbackName.style.color = 'var(--deloitte-black)';
-                updateScanHistory(employee.fullName);
-                updateDashboard();
-            } else {
-                updateLiveFeedback('Not Found !');
-                liveFeedbackName.style.color = 'red';
-            }
-            barcodeInput.value = '';
-            returnFocusToInput();
+            submitScan(barcodeInput.value);
         }
     });
+
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
-            if (api) {
-                api.close_window();
-            }
+            queueOrRun((bridge) => bridge.close_window());
         });
     }
+
+    if (exportOverlayConfirm) {
+        exportOverlayConfirm.addEventListener('click', (event) => {
+            event.preventDefault();
+            hideExportOverlay();
+            queueOrRun((bridge) => {
+                if (bridge.finalize_export_close) {
+                    bridge.finalize_export_close();
+                    return;
+                }
+                bridge.close_window();
+            });
+        });
+    }
+
     if (exportBtn) {
         exportBtn.addEventListener('click', (event) => {
             event.preventDefault();
-            exportBtn.disabled = true;
-            exportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>Exporting...';
-            window.setTimeout(() => {
-                exportBtn.disabled = false;
-                exportBtn.innerHTML = '<i class="material-icons">file_download</i>Export Data';
-                handleExportSuccess(liveFeedbackName.textContent, liveFeedbackName.style.color);
-                returnFocusToInput();
-            }, 1500);
+            handleExport();
         });
     }
+
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
             returnFocusToInput();
@@ -152,9 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-            if (api) {
-                api.close_window();
-            }
+            queueOrRun((bridge) => bridge.close_window());
             return;
         }
         if (event.target !== barcodeInput && event.key.length === 1) {
@@ -169,6 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.addEventListener('mouseup', returnFocusToInput);
     document.addEventListener('touchend', returnFocusToInput);
-    // --- Start the app --- //
-    initializeApp();
+
+    applyDashboardState();
+    returnFocusToInput();
 });

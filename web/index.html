@@ -18,7 +18,7 @@
 
 <body>
     <header>
-        <h1>Station : 1</h1>
+        <h1>Station : <span id="station-name">--</span></h1>
     </header>
     <i id="close-btn" class="material-icons">close</i>
 
@@ -29,6 +29,13 @@
                 <div id="main-panel">
                     <div class="main-content-wrapper">
                         <div class="feedback-section">
+                            <div class="export-overlay" id="export-overlay" aria-hidden="true">
+                                <div class="export-overlay__dialog">
+                                    <h5 class="export-overlay__title" id="export-overlay-title">Export Complete</h5>
+                                    <p class="export-overlay__message" id="export-overlay-message"></p>
+                                    <button type="button" class="export-overlay__button export-btn" id="export-overlay-confirm">Close Application</button>
+                                </div>
+                            </div>
                             <h5>Welcome</h5>
                             <p id="live-feedback-name">Ready to scan...</p>
                             <div class="scan-section">
@@ -98,5 +105,3 @@
 
 </body>
 </html>
-
-

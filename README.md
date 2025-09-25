@@ -1,4 +1,4 @@
-# Staff Attendance
+﻿# Staff Attendance
 
 ## Project Overview
 
@@ -11,6 +11,7 @@ This application is designed to facilitate efficient staff attendance tracking u
 *   **Attendance Dashboard:** Displays key metrics such as total employees and scanned count.
 *   **Scan History:** A chronological list of recent attendance records.
 *   **Modern UI/UX:** Clean and intuitive interface built with Materialize CSS and custom styling.
+*   **Exports Directory:** Barcode history exports are written to `exports/` with filenames like `Checkins_Station1_20250922_171536.xlsx`, matching the employee workbook column order and auto-sized for readability.
 
 ## Setup Instructions
 
@@ -55,10 +56,24 @@ python main.py
 
 ## Testing & Diagnostics
 
-- `python tests\simulate_scans.py` spins up an off-screen `QWebEngineView` and submits a small set of barcodes against `web/index.html` to sanity-check the JavaScript handlers without launching the desktop shell.
-- `python tests\stress_full_app.py --iterations 200 --delay-ms 75 --disable-fade` boots the real PyQt window and drives 200 scans (full employee roster plus special-character test cases) to watch for freezes or focus issues.
-  - Omit `--disable-fade` to keep the production fade-in animation.
-  - Add `--windowed` to avoid fullscreen or `--no-show-window` for fully headless runs.
+- `python tests\simulate_scans.py` spins up an off-screen `QWebEngineView` and submits a small set of barcodes against `web/index.html` to confirm the front-end wiring still works without the PyQt bridge. Expect the console message `Qt WebChannel transport not available; desktop integration disabled.` and `[ok]` log lines such as `feedback='Desktop bridge unavailable' total_scanned=0`; this means the DOM handlers ran successfully even though counters stay at zero.
+- `python tests\stress_full_app.py` drives the full PyQt window using employee barcodes sampled from `employee.xlsx` plus optional synthetic edge cases. Useful flags:
+  - `--sample-size N` limits how many employees are sampled (defaults to 50).
+  - `--no-specials` skips the synthetic invalid barcodes.
+  - `--iterations N` and `--delay-ms N` control run length and pacing.
+  - `--windowed`, `--no-show-window`, and `--disable-fade` tweak window presentation.
+  - Provide explicit barcodes as positional arguments to bypass sampling entirely.
+
+Example runs:
+```bash
+# Fast, headless smoke test
+python tests\stress_full_app.py --iterations 50 --delay-ms 0 --no-show-window --disable-fade
+
+# Window visible with sampled employees only
+python tests\stress_full_app.py --iterations 100 --sample-size 40 --no-specials --windowed --delay-ms 30
+
+# Explicit barcode list (no sampling)
+python tests\stress_full_app.py 101117 101118 101119 --iterations 30 --delay-ms 10
+```
 
 These utilities are optional; they do not change application behaviour when you launch the app with `python main.py`.
-
