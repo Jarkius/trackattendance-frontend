@@ -57,14 +57,21 @@ FALLBACK_ERROR_HTML = """<!DOCTYPE html>
 </body>
 </html>"""
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIRECTORY = BASE_DIR / "data"
+if getattr(sys, 'frozen', False):
+    EXEC_ROOT = Path(sys.executable).resolve().parent
+    RESOURCE_ROOT = Path(getattr(sys, '_MEIPASS', EXEC_ROOT))
+else:
+    RESOURCE_ROOT = Path(__file__).resolve().parent
+    EXEC_ROOT = RESOURCE_ROOT
+
+DATA_DIRECTORY = EXEC_ROOT / "data"
+EXPORT_DIRECTORY = EXEC_ROOT / "exports"
 DATABASE_PATH = DATA_DIRECTORY / "database.db"
 EMPLOYEE_WORKBOOK_PATH = DATA_DIRECTORY / "employee.xlsx"
-EXPORT_DIRECTORY = BASE_DIR / "exports"
-UI_INDEX_HTML = BASE_DIR / "web" / "index.html"
+UI_INDEX_HTML = RESOURCE_ROOT / "web" / "index.html"
 
 DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
+EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 
 class Api(QObject):
@@ -215,6 +222,13 @@ def main() -> None:
         return Api(service=service, quit_callback=quit_callback)
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)
+
+    if not service.employees_loaded():
+        QMessageBox.warning(
+            window,
+            'Employee roster missing',
+            f'Unable to locate the employee roster at {EMPLOYEE_WORKBOOK_PATH}.\n\nThe application will continue, but unmatched scans will be flagged for follow-up.',
+        )
 
     service.ensure_station_configured(window)
 

@@ -41,6 +41,9 @@ class AttendanceService:
         self._bootstrap_employee_directory()
         self._employee_cache = self._db.load_employee_cache()
 
+    def employees_loaded(self) -> bool:
+        return self._db.employees_loaded()
+
     def _bootstrap_employee_directory(self) -> None:
         if self._db.employees_loaded():
             return

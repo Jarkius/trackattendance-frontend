@@ -2,54 +2,58 @@
 
 ## 1. Overview
 
-The Track Attendance application is a desktop application built using Python and PyQt6, leveraging web technologies (HTML, CSS, JavaScript) for its user interface. This hybrid approach allows for rich UI development with web standards while maintaining desktop application capabilities and system integration through Python.
+Track Attendance ships as a PyQt6 desktop shell that hosts a single-page web interface. Python owns process orchestration, scanners, persistence, and exporting, while the embedded web UI handles rendering and operator interactions.
 
 ## 2. Components
 
-The application is primarily composed of the following architectural components:
+### 2.1 Desktop Shell (Python / PyQt6)
+- **Entry point:** `main.py`
+- **Responsibilities:**
+  - Initialises `QApplication`, `QMainWindow`, and `QWebEngineView`.
+  - Ensures operational data exists (`data/database.db`, station name prompt, employee bootstrap).
+  - Registers the `Api` object on a `QWebChannel` so JavaScript can call back-end slots (`submit_scan`, `export_scans`, `get_initial_data`, `close_window`).
+  - Applies window chrome (frameless, fade-in animation) and handles close events, including auto-export logic.
 
-### 2.1. Frontend (Web UI)
-*   **Technologies:** HTML5, CSS3 (Materialize CSS framework, custom `style.css`), JavaScript.
-*   **Purpose:** Renders the user interface, handles user interactions (e.g., barcode input), displays feedback, and presents attendance data (dashboard, history).
-*   **Files:** `web/index.html`, `web/css/*.css`, `web/js/script.js`.
+### 2.2 Web Interface (HTML/CSS/JavaScript)
+- **Location:** `web/index.html`, `web/css/style.css`, `web/script.js`
+- **Responsibilities:**
+  - Renders counters, live feedback banner, recent scan history, export overlay, and placeholder states.
+  - Queues channel calls until the bridge is ready and updates the DOM using the payloads returned from Python.
+  - Provides accessibility cues (focus management, aria attributes) and keyboard affordances for scanners.
 
-### 2.2. Backend (Python/PyQt6 Application)
-*   **Technologies:** Python, PyQt6, PyQt6-WebEngine.
-*   **Purpose:** Manages the desktop application window, embeds the web UI, handles communication between the web UI and the Python backend, and performs core application logic (e.g., processing barcode scans, interacting with a database or external systems for attendance records).
-*   **Files:** `main.py`.
+### 2.3 Data Layer
+- **Location:** `attendance.py`, `database.py`, `data/`
+- **Responsibilities:**
+  - Manages SQLite persistence for stations, employees, and scan history (`DatabaseManager`).
+  - Coordinates workbook imports, scan registration, and XLSX export formatting (`AttendanceService`).
+  - Ensures unmatched scans are captured with flags for follow-up, and exposes aggregate counts.
 
-### 2.3. Communication Layer (QWebChannel)
-*   **Technology:** PyQt6's QWebChannel.
-*   **Purpose:** Facilitates seamless, asynchronous communication between the JavaScript frontend and the Python backend. This allows JavaScript to call Python methods and Python to emit signals that JavaScript can listen to.
-*   **Implementation:** An `Api` QObject in Python registers methods (`close_window` in this case) that are exposed to the JavaScript context via the `QWebChannel`.
+## 3. Communication Flow
 
-## 3. Data Flow
+1. **Startup**
+   - `main.py` builds the window, registers `Api`, loads `web/index.html`, and blocks until the page is ready.
+   - JavaScript initialises, waits for the channel, requests initial payload (`api.get_initial_data()`), and renders the dashboard.
 
-1.  **Application Startup:**
-    *   `main.py` initializes the PyQt6 application and `QMainWindow`.
-    *   A `QWebEngineView` is created and configured to load `web/index.html`.
-    *   A `QWebChannel` is set up, and a Python `Api` object is registered, making its methods available to the JavaScript frontend.
-    *   The window fades in upon successful page load.
+2. **Scanning**
+   - A scanner sends keystrokes to the hidden input. JavaScript captures the Enter event and calls `api.submit_scan(badgeId)`.
+   - Python sanitises the badge, looks up the employee, records the entry, and returns a dictionary with match flag, history, and updated totals.
+   - JavaScript refreshes counters, recent history, and the live feedback banner. Unknown entries show `Not matched` but are still stored.
 
-2.  **User Interaction (e.g., Barcode Scan):**
-    *   User inputs a barcode into the `<input id="barcode-input">` element in the HTML UI.
-    *   JavaScript (`script.js`) captures this input.
-    *   JavaScript uses the `QWebChannel` to call a corresponding Python method (e.g., `api.processBarcode(barcode_value)` - *hypothetical, not yet implemented*).
+3. **Exporting**
+   - From the UI, `export_scans` is invoked via the channel, prompting Python to gather all scans and write an XLSX file under `exports/`.
+   - When the operator closes the window, the PyQt close handler can run an export and surface the result through the overlay.
 
-3.  **Backend Processing:**
-    *   The Python backend receives the barcode value.
-    *   It processes the barcode (e.g., validates, records attendance, fetches employee details).
-    *   Python prepares feedback data (e.g., employee name, status).
+## 4. Packaging & Runtime Assets
 
-4.  **Feedback to UI:**
-    *   Python emits a signal or calls a JavaScript function via `QWebChannel` to update the UI.
-    *   JavaScript (`script.js`) receives this update and displays the feedback (e.g., updates `#live-feedback-name`, `#total-scanned`, `#scan-history-list`).
+- **Icon & Spec:** `assets/track_attendance.ico`, `TrackAttendance.spec` configure PyInstaller builds.
+- **Embedded assets:** `web/` and `assets/` are bundled so the executable can run without network access.
+- **Operational data:** `data/` and `exports/` stay outside the bundle; they are created/ignored at runtime to protect sensitive information.
 
-## 4. Key Technologies
+## 5. External Dependencies
 
-*   **Python:** Core application logic and desktop integration.
-*   **PyQt6:** Python bindings for the Qt application framework, providing GUI widgets and web engine integration.
-*   **PyQt6-WebEngine:** Enables embedding a Chromium-based web engine (`QWebEngineView`) for rendering the web UI.
-*   **QWebChannel:** Facilitates communication between the Python backend and the JavaScript frontend.
-*   **HTML/CSS/JavaScript:** Standard web technologies for building the interactive user interface.
-*   **Materialize CSS:** A modern responsive front-end framework for faster and easier web development.
+- **PyQt6 / PyQt6-WebEngine:** windowing, web engine, and Qt channels.
+- **openpyxl:** workbook import/export support.
+- **Pillow:** utility helpers (icon generation, optional future imaging needs).
+- **PyInstaller:** Windows packaging.
+
+These dependencies are pinned in `requirements.txt` to keep builds reproducible.

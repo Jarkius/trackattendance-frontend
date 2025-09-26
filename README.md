@@ -1,74 +1,79 @@
-# Staff Attendance
+﻿# Track Attendance
 
 ## Project Overview
 
-This application is designed to facilitate efficient staff attendance tracking using QR code scanning. It provides a user-friendly interface for scanning badges, displaying real-time feedback, and maintaining a historical log of scans. The application also features a dashboard to summarize attendance data.
+Track Attendance is a desktop companion for scanning QR or 1D barcodes, logging attendance instantly, and echoing results to a modern web UI hosted inside PyQt6. Operators get immediate feedback, supervisors get working exports, and the whole flow runs locally with no external services.
 
-## Features
+## Feature Highlights
 
-*   **QR Code Scanning:** Quickly scan staff badges to record attendance.
-*   **Real-time Feedback:** Instant visual feedback on successful scans or errors.
-*   **Attendance Dashboard:** Displays key metrics such as total employees and scanned count.
-*   **Scan History:** A chronological list of recent attendance records.
-*   **Modern UI/UX:** Clean and intuitive interface built with Materialize CSS and custom styling.
-*   **Exports Directory:** Barcode history exports are written to `exports/` with filenames like `Checkins_Station1_20250922_171536.xlsx`, matching the employee workbook column order, auto-sized for readability, and now include `Submitted Value` and `Matched` columns so manual entries remain traceable.
+- **Barcode-first workflow:** Accepts keyboard wedge scanners or manual entry and normalises every submission before it hits the database.
+- **Instant feedback:** Live banner, dashboard counters, and recent-history list update with each scan so problems are spotted in seconds.
+- **Auto-captured unknowns:** Mistyped or unrecognised IDs are stored with a “Not matched” flag for later reconciliation.
+- **One-click exports:** XLSX reports land in `exports/` with columns for submitted value, match status, and station metadata.
+- **Graceful shutdown:** Closing the window can trigger an export overlay, while stress tools can bypass the UI and export directly.
 
-## Setup Instructions
+## Setup
 
-To set up and run this project, follow these steps:
+1. **Clone the repository**
+   ```bash
+   git clone <repository_url>
+   cd QR
+   ```
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository_url>
-    cd QR
-    ```
+2. **Create a virtual environment**
+   ```bash
+   python -m venv .venv
+   ```
 
-2.  **Create a Python Virtual Environment (recommended):**
-    ```bash
-    python -m venv .venv
-    ```
+3. **Activate the environment**
+   - Windows
+     ```bash
+     .venv\Scripts\activate
+     ```
+   - macOS/Linux
+     ```bash
+     source .venv/bin/activate
+     ```
 
-3.  **Activate the Virtual Environment:**
-    *   **Windows:**
-        ```bash
-        .venv\Scripts\activate
-        ```
-    *   **macOS/Linux:**
-        ```bash
-        source .venv/bin/activate
-        ```
+4. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+   The PyQt6 + WebEngine stack is required; other libraries support reporting (openpyxl) and testing utilities.
 
-4.  **Install Dependencies:**
-    ```bash
-    pip install PyQt6 PyQt6-WebEngine
-    ```
-    *(Note: Other dependencies like `bottle`, `eel`, etc., might be present in the environment but `PyQt6` and `PyQt6-WebEngine` are crucial for the application's core functionality.)*
+5. **Prepare operational data**
+   - Place the employee roster at `data/employee.xlsx` (columns: Legacy ID, Full Name, SL L1 Desc, Position Desc).
+   - Move any existing `database.db` into `data/` or let the app bootstrap a fresh file on first run.
+   - For packaged builds, keep the `data/` folder alongside `TrackAttendance.exe` so edits persist between runs.
 
-5.  **Prepare the data directory:**
-    - Place your employee roster at `data/employee.xlsx`.
-    - If you have an existing `database.db`, move it to `data/database.db` (the app will create one if missing).
-
-## How to Run
-
-After setting up the environment and installing dependencies, you can run the application:
+## Running the App
 
 ```bash
 python main.py
 ```
 
-## UI/UX Notes
+A placeholder “Awaiting first scan” row appears in the history list until the first badge is recorded.
+
+## Building a Windows Executable
+
+PyInstaller is already configured via `TrackAttendance.spec`. Run:
+
+```bash
+pyinstaller TrackAttendance.spec
+```
+
+The packaged app (with custom icon and bundled web assets) is produced in `dist/TrackAttendance/TrackAttendance.exe`. Distribute the entire folder so relative assets stay intact.
 
 ## Testing & Diagnostics
 
-- `python tests\simulate_scans.py` spins up an off-screen `QWebEngineView` and submits a small set of barcodes against `web/index.html` to confirm the front-end wiring still works without the PyQt bridge. Expect the console message `Qt WebChannel transport not available; desktop integration disabled.` and `[ok]` log lines such as `feedback='Desktop bridge unavailable' total_scanned=0`; this means the DOM handlers ran successfully even though counters stay at zero.
-- `python tests\stress_full_app.py` drives the full PyQt window using employee barcodes sampled from `data/employee.xlsx` plus optional synthetic edge cases. Useful flags:
-  - `--sample-size N` limits how many employees are sampled (defaults to 50).
-  - `--no-specials` skips the synthetic invalid barcodes.
-  - `--iterations N` and `--delay-ms N` control run length and pacing.
-  - `--windowed`, `--no-show-window`, and `--disable-fade` tweak window presentation.
-  - Provide explicit barcodes as positional arguments to bypass sampling entirely.
+- `python tests\simulate_scans.py` — Exercises the web interface in an off-screen `QWebEngineView`. Expect `[ok]` log lines even when the PyQt bridge is unavailable.
+- `python tests\stress_full_app.py` — Drives the full PyQt window using samples from `data/employee.xlsx` plus synthetic invalid barcodes. Key flags:
+  - `--sample-size N` — how many employee IDs to draw from the workbook (default 50).
+  - `--iterations N` / `--delay-ms N` — control run length and pacing.
+  - `--no-specials` — skip synthetic invalid inputs (`999999`, `DROP TABLE;`, etc.).
+  - `--windowed`, `--no-show-window`, `--disable-fade` — adjust presentation for CI or demos.
 
-Example runs:
+Example runs
 ```bash
 # Fast, headless smoke test
 python tests\stress_full_app.py --iterations 50 --delay-ms 0 --no-show-window --disable-fade
@@ -80,4 +85,8 @@ python tests\stress_full_app.py --iterations 100 --sample-size 40 --no-specials 
 python tests\stress_full_app.py 101117 101118 101119 --iterations 30 --delay-ms 10
 ```
 
-These utilities are optional; they do not change application behaviour when you launch the app with `python main.py`.
+Exports from the stress harness are saved in `exports/` so results can be inspected after automated runs.
+
+## Data Privacy
+
+The repository intentionally ignores `data/database.db`, `data/employee.xlsx`, and generated exports. Keep those files local—they frequently contain sensitive roster information.

@@ -1,57 +1,48 @@
-# Product Requirements Document: UI/UX Enhancements and Technical Fixes
+# Product Requirements: Track Attendance UI/UX Refresh
 
-## 1. Introduction
+## 1. Goal
 
-This document outlines the recent user interface (UI), user experience (UX) enhancements, and a critical technical fix implemented in the Track Attendance application. The primary goal of these changes is to improve the visual appeal and layout of the main scanning interface and ensure the application's core functionality is operational.
+Deliver an operator-friendly scanning console that stays informative even when idle, handles unmatched scans gracefully, and communicates export status without blocking automation.
 
 ## 2. Scope
 
-This PRD covers the following key areas:
-*   Adjustments to the main content area layout.
-*   Repositioning of the footer image.
-*   Resolution of a critical application startup issue.
+- Refresh the visual state of the recent history module (placeholder row, metadata line, timestamp alignment).
+- Simplify branding and remove any personal/demo data from the shipped assets.
+- Introduce a reusable export overlay with auto-hide behaviour.
+- Ensure the stress-harness workflow can trigger exports without human interaction.
 
-## 3. User Stories / Features
+## 3. User Stories
 
-### 3.1. Main Content Area Layout Improvement
+### 3.1 Clean initial state
+**As an operator** I want the recent history list to show a clear “Awaiting first scan” message so the UI looks intentional before the first attendee arrives.
+- Placeholder should disappear as soon as the first scan is recorded.
+- Placeholder must carry no personally identifiable information.
 
-**User Story:** As a user, I want the main content area (where I scan badges and see feedback) to appear well-designed and appropriately sized, so that the application looks professional and is easy to use.
+### 3.2 Consolidated history metadata
+**As a supervisor** I need each history row to display legacy ID, SL L1, position, and timestamp on a compact line, so the most relevant attributes are visible without opening the export.
+- When the scan is unmatched, show a clear follow-up note instead of those fields.
 
-**Details:**
-*   The `main-content-wrapper` should provide adequate spacing around its content.
-*   The `feedback-section` within the main content area should dynamically adjust its width to fill the available space, ensuring a prominent display for feedback messages.
+### 3.3 Export overlay behaviour
+**As an operator** I want a consistent overlay when exports run (either manually or during shutdown) so I know whether the report succeeded.
+- Overlay should display success/failure messaging, file path when available, and auto-dismiss after a short delay.
+- Automation paths (stress harness) must be able to bypass the overlay and still capture an export.
 
-**Acceptance Criteria:**
-*   The `main-content-wrapper` maintains its original padding for overall content spacing.
-*   The `feedback-section` within the `main-content-wrapper` utilizes `width: 100%;` and `max-width: 100%;` to occupy the full available horizontal space.
+### 3.4 Branding and packaging
+**As a maintainer** I need a neutral application name and icon, plus a ready-to-run Windows bundle, so the tool can be distributed without manual tweaks.
+- All references to legacy branding are removed.
+- PyInstaller spec generates `dist/TrackAttendance/TrackAttendance.exe` with the custom icon.
 
-### 3.2. Footer Image Repositioning
+## 4. Non-Goals
 
-**User Story:** As a user, I want the footer image to be positioned on the right side of the main panel, so that it aligns with modern design aesthetics and provides a balanced visual layout.
+- Backend refactors beyond what is required for the UX updates.
+- Replacing the existing SQLite or XLSX stack.
+- Web-based deployment.
 
-**Details:**
-*   The footer image, previously stacked vertically, needs to be moved to the right within its containing panel.
-*   This change should be implemented without negatively impacting the layout of other elements in the main panel.
+## 5. Acceptance Checklist
 
-**Acceptance Criteria:**
-*   The `footer-image` element is visually rendered on the right side of the left content panel.
-*   The layout of the `main-content-wrapper` and other elements remains stable and functional.
-*   The implementation utilizes a dedicated CSS class (`left-panel-content`) for styling to avoid conflicts with existing Materialize CSS grid classes.
-
-### 3.3. Application Startup Fix
-
-**User Story:** As a developer/user, I want the application to start successfully without encountering import errors, so that I can reliably use and develop the application.
-
-**Details:**
-*   The application previously failed to launch due to a missing dependency related to `PyQt6.QtWebEngineWidgets`.
-*   This issue needs to be resolved to ensure the application can be run on a standard development environment.
-
-**Acceptance Criteria:**
-*   The `main.py` script executes successfully without `ImportError` related to `QWebEngineView`.
-*   The `PyQt6-WebEngine` package is correctly installed as a dependency.
-
-## 4. Technical Considerations
-
-*   **Frameworks:** PyQt6 for desktop application, HTML/CSS/JavaScript for UI.
-*   **Styling:** Custom CSS (`style.css`) is used for specific layout and aesthetic adjustments, prioritizing non-invasive changes to Materialize CSS.
-*   **Dependencies:** Ensure `PyQt6-WebEngine` is listed and installed as a required dependency for the Python application.
+- [ ] Placeholder history row renders on first load and disappears after a scan.
+- [ ] Metadata row shows `legacyId . SL L1 . Position` or the unmatched note, and timestamp aligns with the name.
+- [ ] Export overlay appears for manual exports and during window close (when not suppressed), then auto-hides.
+- [ ] Stress harness saves an export to `exports/` with no manual intervention.
+- [ ] `TrackAttendance.spec` builds a working executable with the custom icon.
+- [ ] README documents console setup, packaging, and privacy expectations.
