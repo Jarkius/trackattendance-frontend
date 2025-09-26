@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sys
 import json
@@ -130,7 +130,7 @@ def initialize_app(
         app = QApplication(args)
 
     window = QMainWindow()
-    window.setWindowTitle('Deloitte Staff Attendance')
+    window.setWindowTitle('Track Attendance')
     window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     window.setWindowFlags(Qt.WindowType.FramelessWindowHint)
     window.setWindowOpacity(0.0 if enable_fade and show_window else 1.0)

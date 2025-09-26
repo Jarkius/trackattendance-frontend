@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
-    <title>Deloitte Staff Attendance</title>
+    <title>Track Attendance</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><circle cx=%2250%22 cy=%2250%22 r=%2250%22 fill=%22%2386bc25%22></circle></svg>">
 
     <!-- Materialize CSS -->
@@ -74,11 +74,12 @@
                             <span class="card-title">Recent Scans</span>
                             <ul class="collection" id="scan-history-list">
                                 <!-- History items will be added here -->
-                                <li class="collection-item">
-                                        <span class="name">Juckrit Sanitareephon</span><span class="timestamp">2 minutes ago</span>
-                                </li>
-                                <li class="collection-item">
-                                        <span class="name">Jane Smith</span><span class="timestamp">5 minutes ago</span>
+                                <li class="collection-item collection-item--placeholder">
+                                    <span class="history-header">
+                                        <span class="history-label">Awaiting first scan</span>
+                                        <span class="history-timestamp">--:--:--</span>
+                                    </span>
+                                    <span class="history-meta">Scan a badge to populate recent history.</span>
                                 </li>
                             </ul>
                         </div>

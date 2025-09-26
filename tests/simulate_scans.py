@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -85,7 +85,7 @@ def simulate_scans(barcodes: Iterable[str], html_path: Path) -> List[Dict[str, A
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Simulate barcode scans against the Deloitte attendance UI."
+        description="Simulate barcode scans against the Track Attendance UI."
     )
     parser.add_argument(
         "barcodes",

@@ -2,7 +2,7 @@
 
 ## 1. Introduction
 
-This document outlines the recent user interface (UI), user experience (UX) enhancements, and a critical technical fix implemented in the Deloitte Staff Attendance application. The primary goal of these changes is to improve the visual appeal and layout of the main scanning interface and ensure the application's core functionality is operational.
+This document outlines the recent user interface (UI), user experience (UX) enhancements, and a critical technical fix implemented in the Track Attendance application. The primary goal of these changes is to improve the visual appeal and layout of the main scanning interface and ensure the application's core functionality is operational.
 
 ## 2. Scope
 

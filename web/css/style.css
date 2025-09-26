@@ -268,38 +268,45 @@ header h1 {
 }
 
 .collection-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    display: block;
     border-bottom: 1px solid var(--border) !important;
-    padding: 8px 5px !important; 
+    padding: 6px 5px !important;
 }
-    
 
 .collection-item:last-child {
     border-bottom: none !important;
 }
 
-.collection-item .name {
-    font-weight: 500;
-    font-size: 0.8rem;
-    color: var(--deloitte-grey-dark);
-}
 
-.collection-item .timestamp {
-    font-size: 0.8rem;
-    color: var(--deloitte-grey-medium);
-}
 
 .collection-item .history-label {
     display: block;
+    font-weight: 500;
+    font-size: 0.8rem;
+    color: var(--deloitte-grey-dark);
+    line-height: 1.2;
 }
 
-.collection-item .history-note {
+.collection-item .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 1px;
+}
+
+.collection-item .history-timestamp {
+    font-size: 0.75rem;
+    color: var(--deloitte-grey-medium);
+    white-space: nowrap;
+}
+
+.collection-item .history-meta {
     display: block;
     font-size: 0.7rem;
     color: var(--deloitte-grey-medium);
-    margin-top: 2px;
+    margin-top: 1px;
+    line-height: 1.2;
 }
 
 .collection-item--unmatched {
@@ -310,10 +317,28 @@ header h1 {
     color: #b23b3b;
 }
 
-.collection-item--unmatched .timestamp {
+.collection-item--unmatched .history-meta {
     color: #b23b3b;
 }
 
+
+.collection-item--unmatched .history-timestamp {
+    color: #b23b3b;
+}
+
+.collection-item--placeholder {
+    background-color: transparent;
+    opacity: 0.75;
+}
+
+.collection-item--placeholder .history-label,
+.collection-item--placeholder .history-meta {
+    font-style: italic;
+}
+
+.collection-item--placeholder .history-timestamp {
+    color: var(--deloitte-grey-medium);
+}
 /* Export Button */
 .export-section {
     flex-shrink: 0;

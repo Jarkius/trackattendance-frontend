@@ -1,8 +1,8 @@
-# Architecture Document: Deloitte Staff Attendance
+# Architecture Document: Track Attendance
 
 ## 1. Overview
 
-The Deloitte Staff Attendance application is a desktop application built using Python and PyQt6, leveraging web technologies (HTML, CSS, JavaScript) for its user interface. This hybrid approach allows for rich UI development with web standards while maintaining desktop application capabilities and system integration through Python.
+The Track Attendance application is a desktop application built using Python and PyQt6, leveraging web technologies (HTML, CSS, JavaScript) for its user interface. This hybrid approach allows for rich UI development with web standards while maintaining desktop application capabilities and system integration through Python.
 
 ## 2. Components
 

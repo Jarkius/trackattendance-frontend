@@ -1,4 +1,4 @@
-﻿# Repository Guidelines
+# Repository Guidelines
 
 ## Project Structure & Module Organization
 - `main.py` hosts the PyQt6 wrapper that loads the web UI from `web/index.html`; keep desktop-facing logic here.

@@ -233,7 +233,7 @@ def run_stress_test(
             if status != 'ok':
                 failures.append(result)
             else:
-                if feedback.lower().startswith('not found'):
+                if feedback.lower().startswith('not matched'):
                     invalid += 1
                 else:
                     successful += 1
@@ -250,6 +250,19 @@ def run_stress_test(
 
         duration = time.perf_counter() - start
         snapshot = _collect_snapshot(view)
+
+        export_info = None
+        try:
+            export_info = service.export_scans()
+        except Exception as exc:
+            if verbose:
+                print(f'[warn] export failed: {exc}')
+        else:
+            if export_info and verbose:
+                dest = export_info.get('absolutePath') or export_info.get('fileName')
+                if dest:
+                    print(f'[info] export written to {dest}')
+            window.setProperty('export_notification_triggered', True)
 
         window.close()
         for _ in range(3):

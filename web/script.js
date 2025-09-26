@@ -194,33 +194,78 @@ ${destination}` : message;
                 listItem.classList.add('collection-item--unmatched');
             }
 
-            const nameContainer = document.createElement('span');
-            nameContainer.className = 'name';
+            const headerRow = document.createElement('span');
+            headerRow.className = 'history-header';
 
-            const primaryLabel = document.createElement('span');
-            primaryLabel.className = 'history-label';
-            primaryLabel.textContent = isMatched
+            const nameText = document.createElement('span');
+            nameText.className = 'history-label';
+            nameText.textContent = isMatched
                 ? (entry.fullName || entry.badgeId || 'Unknown')
                 : (entry.badgeId || 'Unknown entry');
-            nameContainer.appendChild(primaryLabel);
+            headerRow.appendChild(nameText);
 
-            if (isMatched ? Boolean(entry.legacyId) : true) {
-                const note = document.createElement('span');
-                note.className = 'history-note';
-                note.textContent = isMatched
-                    ? `ID: ${entry.legacyId}`
-                    : 'Not matched - recorded for follow-up';
-                nameContainer.appendChild(note);
+            const timestampText = formatTimestamp(entry.timestamp);
+            if (timestampText) {
+                const timestampNode = document.createElement('span');
+                timestampNode.className = 'history-timestamp';
+                timestampNode.textContent = timestampText;
+                headerRow.appendChild(timestampNode);
             }
 
-            const timestamp = document.createElement('span');
-            timestamp.className = 'timestamp';
-            timestamp.textContent = formatTimestamp(entry.timestamp);
+            listItem.appendChild(headerRow);
 
-            listItem.appendChild(nameContainer);
-            listItem.appendChild(timestamp);
+            const metaParts = [];
+
+            if (isMatched) {
+                if (entry.legacyId) {
+                    metaParts.push(entry.legacyId);
+                }
+                if (entry.slL1Desc) {
+                    metaParts.push(entry.slL1Desc);
+                }
+                if (entry.positionDesc) {
+                    metaParts.push(entry.positionDesc);
+                }
+            } else {
+                metaParts.push('Not matched - recorded for follow-up');
+            }
+
+            if (metaParts.length > 0) {
+                const metaLine = document.createElement('span');
+                metaLine.className = 'history-meta';
+                metaLine.textContent = metaParts.join(' . ');
+                listItem.appendChild(metaLine);
+            }
+
             scanHistoryList.appendChild(listItem);
         });
+
+        if (entries.length === 0) {
+            const placeholder = document.createElement('li');
+            placeholder.className = 'collection-item collection-item--placeholder';
+
+            const placeholderHeader = document.createElement('span');
+            placeholderHeader.className = 'history-header';
+
+            const placeholderLabel = document.createElement('span');
+            placeholderLabel.className = 'history-label';
+            placeholderLabel.textContent = 'Awaiting first scan';
+            placeholderHeader.appendChild(placeholderLabel);
+
+            const placeholderTimestamp = document.createElement('span');
+            placeholderTimestamp.className = 'history-timestamp';
+            placeholderTimestamp.textContent = '--:--:--';
+            placeholderHeader.appendChild(placeholderTimestamp);
+
+            placeholder.appendChild(placeholderHeader);
+
+            const placeholderMeta = document.createElement('span');
+            placeholderMeta.className = 'history-meta';
+            placeholderMeta.textContent = 'Scan a badge to populate recent history.';
+            placeholder.appendChild(placeholderMeta);
+
+            scanHistoryList.appendChild(placeholder);
+        }
     };
 
     const applyDashboardState = () => {
@@ -261,7 +306,7 @@ ${destination}` : message;
         const badgeValue = response.badgeId || '';
         const message = found
             ? (response.fullName || badgeValue || 'Unknown')
-            : `Not matched (saved): ${badgeValue || 'Unknown entry'}`;
+            : 'Not matched';
         setLiveFeedback(message, found ? 'var(--deloitte-black)' : 'red');
     };
 
