@@ -291,6 +291,29 @@ header h1 {
     color: var(--deloitte-grey-medium);
 }
 
+.collection-item .history-label {
+    display: block;
+}
+
+.collection-item .history-note {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--deloitte-grey-medium);
+    margin-top: 2px;
+}
+
+.collection-item--unmatched {
+    background-color: #fff4f4;
+}
+
+.collection-item--unmatched .history-label {
+    color: #b23b3b;
+}
+
+.collection-item--unmatched .timestamp {
+    color: #b23b3b;
+}
+
 /* Export Button */
 .export-section {
     flex-shrink: 0;
@@ -532,6 +555,7 @@ header h1 {
 .export-overlay__title {
     font-size: 1.6rem;
     margin-bottom: 12px;
+    padding-bottom: 25px;
     color: var(--deloitte-black);
 }
 
@@ -544,9 +568,15 @@ header h1 {
     white-space: pre-wrap;
     line-height: 1.5;
     color: var(--deloitte-grey-dark);
+    font-size: 0.8rem;
 }
 
 .export-overlay__button {
     width: 100%;
     justify-content: center;
 }
+
+.export-overlay__button--hidden {
+    display: none;
+}
+

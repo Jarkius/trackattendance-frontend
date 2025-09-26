@@ -177,7 +177,7 @@ class AttendanceService:
         if not employee_columns:
             employee_columns = list(REQUIRED_COLUMNS)
 
-        export_headers = employee_columns + ["Station ID", "Timestamp"]
+        export_headers = ["Submitted Value", "Matched"] + employee_columns + ["Station ID", "Timestamp"]
         sheet.append(export_headers)
 
         for record in scans:
@@ -187,7 +187,12 @@ class AttendanceService:
                 "SL L1 Desc": record.sl_l1_desc or "",
                 "Position Desc": record.position_desc or "",
             }
-            row = [values_by_header.get(header, "") for header in employee_columns]
+            matched = record.legacy_id is not None
+            row = [
+                record.badge_id or "",
+                "Yes" if matched else "No",
+            ]
+            row.extend(values_by_header.get(header, "") for header in employee_columns)
             row.extend([record.station_name or "", _format_timestamp(record.scanned_at)])
             sheet.append(row)
 
@@ -248,6 +253,7 @@ def _scan_to_dict(record: ScanRecord) -> Dict[str, object]:
         "legacyId": record.legacy_id,
         "slL1Desc": record.sl_l1_desc,
         "positionDesc": record.position_desc,
+        "matched": record.legacy_id is not None,
     }
 
 

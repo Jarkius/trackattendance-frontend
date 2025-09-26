@@ -27,6 +27,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let api;
     const apiQueue = [];
+    let overlayHideTimer = null;
+    const overlayIntent = {
+        shouldClose: false,
+    };
 
     const flushApiQueue = () => {
         if (!api) {
@@ -54,42 +58,84 @@ document.addEventListener('DOMContentLoaded', () => {
         apiQueue.push(callback);
     };
 
+
+
     const hideExportOverlay = () => {
         if (!exportOverlay) {
             return;
         }
+        if (overlayHideTimer) {
+            window.clearTimeout(overlayHideTimer);
+            overlayHideTimer = null;
+        }
         exportOverlay.classList.remove('export-overlay--visible', 'export-overlay--error');
         exportOverlay.setAttribute('aria-hidden', 'true');
+        if (exportOverlayConfirm) {
+            exportOverlayConfirm.classList.add('export-overlay__button--hidden');
+        }
     };
 
-    const showExportOverlay = ({ ok, message, destination }) => {
+    const showExportOverlay = ({ ok, message, destination, autoHideMs = 0, showConfirm = true, title }) => {
         if (!exportOverlay) {
             if (!ok && message) {
                 console.warn('Export overlay container missing; message:', message);
             }
             return;
         }
+        if (overlayHideTimer) {
+            window.clearTimeout(overlayHideTimer);
+            overlayHideTimer = null;
+        }
         const normalizedMessage = destination ? `${message}
 ${destination}` : message;
-        exportOverlayMessage.textContent = normalizedMessage;
-        if (exportOverlayTitle) {
-            exportOverlayTitle.textContent = ok ? 'Export Complete' : 'Export Failed';
+        if (exportOverlayMessage) {
+            exportOverlayMessage.textContent = normalizedMessage;
         }
-        exportOverlay.classList.toggle('export-overlay--error', !ok);
+        if (exportOverlayTitle) {
+            const heading = typeof title === 'string' && title.trim() ? title : (ok ? 'Export Complete' : 'Export Failed');
+            exportOverlayTitle.textContent = heading;
+        }
         exportOverlay.classList.add('export-overlay--visible');
+        exportOverlay.classList.toggle('export-overlay--error', !ok);
         exportOverlay.setAttribute('aria-hidden', 'false');
         if (exportOverlayConfirm) {
-            exportOverlayConfirm.focus();
+            exportOverlayConfirm.classList.toggle('export-overlay__button--hidden', !showConfirm);
+            if (showConfirm) {
+                exportOverlayConfirm.focus();
+            }
+        }
+        if (autoHideMs > 0) {
+            overlayHideTimer = window.setTimeout(() => {
+                overlayHideTimer = null;
+                hideExportOverlay();
+            }, autoHideMs);
         }
     };
 
-    window.__handleExportShutdown = (payload) => {
-        const data = payload || {};
-        const ok = Boolean(data.ok);
-        const baseMessage = typeof data.message === 'string' ? data.message.trim() : '';
-        const destination = typeof data.destination === 'string' ? data.destination : '';
+    window.__handleExportShutdown = (payload = {}) => {
+        const ok = Boolean(payload.ok);
+        const baseMessage = typeof payload.message === 'string' ? payload.message.trim() : '';
+        const destination = typeof payload.destination === 'string' ? payload.destination : '';
+        const showConfirm = payload.showConfirm !== undefined ? Boolean(payload.showConfirm) : !ok;
+        const titleText = typeof payload.title === 'string' ? payload.title : undefined;
+        const autoHideMsRaw = typeof payload.autoHideMs === 'number' ? payload.autoHideMs : 0;
+        const autoHideMs = Number.isNaN(autoHideMsRaw) ? 0 : Math.max(0, autoHideMsRaw);
+        const shouldClose = Boolean(payload.shouldClose);
+        overlayIntent.shouldClose = shouldClose;
         const message = baseMessage || (ok ? 'Attendance report exported successfully.' : 'Unable to export attendance report.');
-        showExportOverlay({ ok, message, destination });
+        showExportOverlay({ ok, message, destination, autoHideMs, showConfirm, title: titleText });
+        if (shouldClose) {
+            const closeDelay = autoHideMs > 0 ? autoHideMs : 1500;
+            window.setTimeout(() => {
+                queueOrRun((bridge) => {
+                    if (bridge.finalize_export_close) {
+                        bridge.finalize_export_close();
+                        return;
+                    }
+                    bridge.close_window();
+                });
+            }, closeDelay);
+        }
     };
 
     const returnFocusToInput = () => {
@@ -139,11 +185,40 @@ ${destination}` : message;
         if (!scanHistoryList) {
             return;
         }
-        scanHistoryList.innerHTML = '';
+        scanHistoryList.innerHTML = "";
         entries.forEach((entry) => {
             const listItem = document.createElement('li');
             listItem.className = 'collection-item';
-            listItem.innerHTML = `<span class="name">${entry.fullName}</span><span class="timestamp">${formatTimestamp(entry.timestamp)}</span>`;
+            const isMatched = Boolean(entry.matched);
+            if (!isMatched) {
+                listItem.classList.add('collection-item--unmatched');
+            }
+
+            const nameContainer = document.createElement('span');
+            nameContainer.className = 'name';
+
+            const primaryLabel = document.createElement('span');
+            primaryLabel.className = 'history-label';
+            primaryLabel.textContent = isMatched
+                ? (entry.fullName || entry.badgeId || 'Unknown')
+                : (entry.badgeId || 'Unknown entry');
+            nameContainer.appendChild(primaryLabel);
+
+            if (isMatched ? Boolean(entry.legacyId) : true) {
+                const note = document.createElement('span');
+                note.className = 'history-note';
+                note.textContent = isMatched
+                    ? `ID: ${entry.legacyId}`
+                    : 'Not matched - recorded for follow-up';
+                nameContainer.appendChild(note);
+            }
+
+            const timestamp = document.createElement('span');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = formatTimestamp(entry.timestamp);
+
+            listItem.appendChild(nameContainer);
+            listItem.appendChild(timestamp);
             scanHistoryList.appendChild(listItem);
         });
     };
@@ -183,8 +258,11 @@ ${destination}` : message;
         applyDashboardState();
 
         const found = Boolean(response.matched);
-        const nameToShow = response.fullName || 'Unknown';
-        setLiveFeedback(nameToShow, found ? 'var(--deloitte-black)' : 'red');
+        const badgeValue = response.badgeId || '';
+        const message = found
+            ? (response.fullName || badgeValue || 'Unknown')
+            : `Not matched (saved): ${badgeValue || 'Unknown entry'}`;
+        setLiveFeedback(message, found ? 'var(--deloitte-black)' : 'red');
     };
 
     const submitScan = (badgeValue) => {
@@ -201,20 +279,39 @@ ${destination}` : message;
         });
     };
 
+
     const handleExport = () => {
         queueOrRun((bridge) => {
             exportBtn.disabled = true;
             exportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>Exporting...';
+
+            showExportOverlay({
+                ok: true,
+                message: 'Generating attendance report...',
+                title: 'Exporting attendance report...',
+                destination: '',
+                showConfirm: false,
+                autoHideMs: 0,
+            });
+
             bridge.export_scans((result) => {
                 exportBtn.disabled = false;
                 exportBtn.innerHTML = '<i class="material-icons">file_download</i>Export Data';
-                if (!result || result.ok === false) {
-                    const message = result?.message || 'Export failed';
-                    setLiveFeedback(message, 'red', 3000);
-                } else {
-                    const successMessage = `Exported ${result.fileName || 'Checkins.xlsx'}`;
-                    setLiveFeedback(successMessage, 'var(--deloitte-green)', 4000);
-                }
+
+                const success = Boolean(result && result.ok);
+                const destination = typeof result?.absolutePath === 'string'
+                    ? result.absolutePath
+                    : (typeof result?.fileName === 'string' ? result.fileName : '');
+                const payload = {
+                    ok: success,
+                    message: success ? (result?.message || '') : (result?.message || 'Unable to export attendance report.'),
+                    destination,
+                    showConfirm: success ? false : true,
+                    autoHideMs: success ? 2500 : 0,
+                    shouldClose: false,
+                };
+
+                window.__handleExportShutdown(payload);
                 returnFocusToInput();
             });
         });
@@ -236,13 +333,16 @@ ${destination}` : message;
         exportOverlayConfirm.addEventListener('click', (event) => {
             event.preventDefault();
             hideExportOverlay();
-            queueOrRun((bridge) => {
-                if (bridge.finalize_export_close) {
-                    bridge.finalize_export_close();
-                    return;
-                }
-                bridge.close_window();
-            });
+            if (overlayIntent.shouldClose) {
+                overlayIntent.shouldClose = false;
+                queueOrRun((bridge) => {
+                    if (bridge.finalize_export_close) {
+                        bridge.finalize_export_close();
+                        return;
+                    }
+                    bridge.close_window();
+                });
+            }
         });
     }
 

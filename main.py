@@ -58,10 +58,13 @@ FALLBACK_ERROR_HTML = """<!DOCTYPE html>
 </html>"""
 
 BASE_DIR = Path(__file__).resolve().parent
-DATABASE_PATH = BASE_DIR / "database.db"
-EMPLOYEE_WORKBOOK_PATH = BASE_DIR / "employee.xlsx"
+DATA_DIRECTORY = BASE_DIR / "data"
+DATABASE_PATH = DATA_DIRECTORY / "database.db"
+EMPLOYEE_WORKBOOK_PATH = DATA_DIRECTORY / "employee.xlsx"
 EXPORT_DIRECTORY = BASE_DIR / "exports"
-UI_INDEX_HTML = BASE_DIR / 'web' / 'index.html'
+UI_INDEX_HTML = BASE_DIR / "web" / "index.html"
+
+DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 
 class Api(QObject):
@@ -250,6 +253,9 @@ def main() -> None:
                 'ok': False,
                 'message': f'Unable to export attendance report: {exc}',
                 'destination': '',
+                'showConfirm': True,
+                'autoHideMs': 0,
+                'shouldClose': False,
             }
         else:
             if export_result.get('ok'):
@@ -258,14 +264,19 @@ def main() -> None:
                     'ok': True,
                     'message': 'Attendance report exported successfully.',
                     'destination': destination,
+                    'showConfirm': False,
+                    'autoHideMs': 0,
+                    'shouldClose': True,
                 }
             else:
                 payload = {
                     'ok': False,
                     'message': export_result.get('message', 'Unable to export attendance report.'),
                     'destination': export_result.get('absolutePath') or export_result.get('fileName') or '',
+                    'showConfirm': True,
+                    'autoHideMs': 0,
+                    'shouldClose': False,
                 }
-
         payload_js = json.dumps(payload)
         view.page().runJavaScript(f"window.__handleExportShutdown({payload_js});")
 

@@ -11,7 +11,7 @@ This application is designed to facilitate efficient staff attendance tracking u
 *   **Attendance Dashboard:** Displays key metrics such as total employees and scanned count.
 *   **Scan History:** A chronological list of recent attendance records.
 *   **Modern UI/UX:** Clean and intuitive interface built with Materialize CSS and custom styling.
-*   **Exports Directory:** Barcode history exports are written to `exports/` with filenames like `Checkins_Station1_20250922_171536.xlsx`, matching the employee workbook column order and auto-sized for readability.
+*   **Exports Directory:** Barcode history exports are written to `exports/` with filenames like `Checkins_Station1_20250922_171536.xlsx`, matching the employee workbook column order, auto-sized for readability, and now include `Submitted Value` and `Matched` columns so manual entries remain traceable.
 
 ## Setup Instructions
 
@@ -44,6 +44,10 @@ To set up and run this project, follow these steps:
     ```
     *(Note: Other dependencies like `bottle`, `eel`, etc., might be present in the environment but `PyQt6` and `PyQt6-WebEngine` are crucial for the application's core functionality.)*
 
+5.  **Prepare the data directory:**
+    - Place your employee roster at `data/employee.xlsx`.
+    - If you have an existing `database.db`, move it to `data/database.db` (the app will create one if missing).
+
 ## How to Run
 
 After setting up the environment and installing dependencies, you can run the application:
@@ -57,7 +61,7 @@ python main.py
 ## Testing & Diagnostics
 
 - `python tests\simulate_scans.py` spins up an off-screen `QWebEngineView` and submits a small set of barcodes against `web/index.html` to confirm the front-end wiring still works without the PyQt bridge. Expect the console message `Qt WebChannel transport not available; desktop integration disabled.` and `[ok]` log lines such as `feedback='Desktop bridge unavailable' total_scanned=0`; this means the DOM handlers ran successfully even though counters stay at zero.
-- `python tests\stress_full_app.py` drives the full PyQt window using employee barcodes sampled from `employee.xlsx` plus optional synthetic edge cases. Useful flags:
+- `python tests\stress_full_app.py` drives the full PyQt window using employee barcodes sampled from `data/employee.xlsx` plus optional synthetic edge cases. Useful flags:
   - `--sample-size N` limits how many employees are sampled (defaults to 50).
   - `--no-specials` skips the synthetic invalid barcodes.
   - `--iterations N` and `--delay-ms N` control run length and pacing.
