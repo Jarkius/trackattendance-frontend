@@ -218,19 +218,58 @@ def main() -> None:
         export_directory=EXPORT_DIRECTORY,
     )
 
+    roster_missing = not service.employees_loaded()
+    example_workbook_path: Optional[Path] = None
+    if roster_missing:
+        example_workbook_path = service.ensure_example_employee_workbook()
+
     def api_factory(quit_callback: Callable[[], None]) -> Api:
         return Api(service=service, quit_callback=quit_callback)
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)
 
-    if not service.employees_loaded():
+    if roster_missing:
+        sample_path_display = str((example_workbook_path or service.ensure_example_employee_workbook()).resolve())
         QMessageBox.warning(
             window,
             'Employee roster missing',
-            f'Unable to locate the employee roster at {EMPLOYEE_WORKBOOK_PATH}.\n\nThe application will continue, but unmatched scans will be flagged for follow-up.',
+            (
+                f'Unable to locate the employee roster at {EMPLOYEE_WORKBOOK_PATH}.\n\n'
+                f'A sample workbook was created at {sample_path_display}.\n'
+                'Update the sample and save it as employee.xlsx to enable attendee matching.\n\n'
+                'The application will continue, but unmatched scans will be flagged for follow-up.'
+            ),
         )
 
     service.ensure_station_configured(window)
+
+    if roster_missing:
+        overlay_payload = {
+            'ok': False,
+            'message': (
+                'Employee roster not found. A sample workbook was created. '
+                'Update the sample and save it as employee.xlsx to enable matching.'
+            ),
+            'destination': str((example_workbook_path or service.ensure_example_employee_workbook()).resolve()),
+            'showConfirm': False,
+            'autoHideMs': 7000,
+            'shouldClose': False,
+            'title': 'Employee Roster Missing',
+        }
+
+        def _show_missing_roster_overlay(ok: bool) -> None:
+            if not ok:
+                return
+            payload_js = json.dumps(overlay_payload)
+            view.page().runJavaScript(
+                f"if (window.__handleExportShutdown) {{ window.__handleExportShutdown({payload_js}); }}"
+            )
+            try:
+                view.loadFinished.disconnect(_show_missing_roster_overlay)
+            except TypeError:
+                pass
+
+        view.loadFinished.connect(_show_missing_roster_overlay)
 
     view.setUrl(QUrl.fromLocalFile(str(UI_INDEX_HTML)))
 

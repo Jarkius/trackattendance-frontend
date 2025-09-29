@@ -17,6 +17,7 @@ from database import DatabaseManager, EmployeeRecord, ScanRecord
 
 LOGGER = logging.getLogger(__name__)
 REQUIRED_COLUMNS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
+EXAMPLE_WORKBOOK_NAME = "exampleof_employee.xlsx"
 
 
 DISPLAY_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -32,6 +33,7 @@ class AttendanceService:
     ) -> None:
         self._db = DatabaseManager(database_path)
         self._employee_workbook_path = employee_workbook_path
+        self._example_employee_workbook_path = self._employee_workbook_path.with_name(EXAMPLE_WORKBOOK_NAME)
         self._export_directory = export_directory
         self._export_directory.mkdir(parents=True, exist_ok=True)
         self._employee_headers: List[str] = list(REQUIRED_COLUMNS)
@@ -49,6 +51,7 @@ class AttendanceService:
             return
         if not self._employee_workbook_path.exists():
             LOGGER.warning("Employee workbook not found at %s", self._employee_workbook_path)
+            self.ensure_example_employee_workbook()
             return
         workbook = load_workbook(self._employee_workbook_path, read_only=True)
         try:
@@ -93,6 +96,30 @@ class AttendanceService:
                 LOGGER.info("Imported %s employees from workbook", inserted)
         finally:
             workbook.close()
+
+    def ensure_example_employee_workbook(self) -> Path:
+        """Ensure a sample employee roster workbook exists for onboarding."""
+        path = self._example_employee_workbook_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            return path
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Employees"
+        sheet.append(REQUIRED_COLUMNS)
+
+        sample_rows = [
+            ("100001", "Ada Lovelace", "Consulting", "Analyst"),
+            ("100002", "Grace Hopper", "Technology", "Engineer"),
+        ]
+        for row in sample_rows:
+            sheet.append(row)
+
+        workbook.save(path)
+        workbook.close()
+        return path
+
 
     def ensure_station_configured(self, parent: Optional[QWidget] = None) -> str:
         station = self._station_name or self._db.get_station_name()
