@@ -148,17 +148,33 @@ ${destination}` : message;
 
     function adjustFeedbackSizing(content) {
         const message = typeof content === 'string' ? content : '';
-        liveFeedbackName.classList.remove('feedback-name--compact', 'feedback-name--condensed');
-        if (message.length > 32) {
+        liveFeedbackName.style.fontSize = '';
+        liveFeedbackName.classList.remove('feedback-name--compact', 'feedback-name--condensed', 'feedback-name--mini');
+        if (message.length > 44) {
+            liveFeedbackName.classList.add('feedback-name--mini');
+        } else if (message.length > 32) {
             liveFeedbackName.classList.add('feedback-name--condensed');
         } else if (message.length > 22) {
             liveFeedbackName.classList.add('feedback-name--compact');
         }
+
+        const container = liveFeedbackName.parentElement;
+        const maxWidth = container ? container.clientWidth : liveFeedbackName.clientWidth;
+        if (maxWidth > 0 && liveFeedbackName.scrollWidth > maxWidth) {
+            const computed = window.getComputedStyle(liveFeedbackName);
+            let currentSize = parseFloat(computed.fontSize) || 22;
+            const minSize = 14;
+            while (liveFeedbackName.scrollWidth > maxWidth && currentSize > minSize) {
+                currentSize -= 1;
+                liveFeedbackName.style.fontSize = `${currentSize}px`;
+            }
+        }
     }
 
     function setLiveFeedback(message, color = 'var(--deloitte-green)', resetDelayMs = 2000) {
-        adjustFeedbackSizing(message);
-        liveFeedbackName.textContent = message;
+        const normalizedMessage = typeof message === 'string' ? message : String(message ?? '');
+        liveFeedbackName.textContent = normalizedMessage;
+        adjustFeedbackSizing(normalizedMessage);
         liveFeedbackName.style.color = color;
         if (resetDelayMs > 0) {
             window.setTimeout(() => {

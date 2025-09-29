@@ -166,10 +166,8 @@ header h1 {
     font-size: 2.2rem;
     font-weight: 600;
     color: var(--deloitte-green);
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    margin: 16px auto 15px;
+    display: block;
     text-align: center;
     line-height: 1.2;
     max-width: 100%;
@@ -185,6 +183,18 @@ header h1 {
 
 #live-feedback-name.feedback-name--condensed {
     font-size: 1.6rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+}
+
+#live-feedback-name.feedback-name--mini {
+    font-size: 1.4rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
 }
 
 .left-panel-content {
@@ -397,10 +407,8 @@ header h1 {
     font-size: 2.2rem;
     font-weight: 600;
     color: var(--deloitte-green);
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    margin: 16px auto 10px;
+    display: block;
     text-align: center;
     line-height: 1.2;
     max-width: 100%;
@@ -416,6 +424,18 @@ header h1 {
 
 #live-feedback-name.feedback-name--condensed {
     font-size: 1.6rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+}
+
+#live-feedback-name.feedback-name--mini {
+    font-size: 1.4rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
 }
 
     #barcode-input {
@@ -466,10 +486,8 @@ header h1 {
     font-size: 2.2rem;
     font-weight: 600;
     color: var(--deloitte-green);
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    margin: 16px auto 10px;
+    display: block;
     text-align: center;
     line-height: 1.2;
     max-width: 100%;
@@ -485,6 +503,18 @@ header h1 {
 
 #live-feedback-name.feedback-name--condensed {
     font-size: 1.6rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+}
+
+#live-feedback-name.feedback-name--mini {
+    font-size: 1.4rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
 }
     
     #barcode-input {
