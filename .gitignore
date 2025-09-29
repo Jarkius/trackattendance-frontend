@@ -10,10 +10,24 @@ __pycache__/
 .venv/
 env/
 venv/
+
+# Archives / Legacy
 Backup/
+
 # IDEs
 .vscode/
 .idea/
 *.swp
+
+# Data
 data/*
 !data/.gitkeep
+
+# Build Artifacts
+build/
+dist/
+exports/
+*.spec
+
+# Tooling
+tools/
