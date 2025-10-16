@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -177,7 +177,7 @@ class AttendanceService:
                 "message": "Badge ID is required.",
             }
         employee = self._employee_cache.get(sanitized)
-        timestamp = datetime.now().replace(microsecond=0).isoformat()
+        timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         self._db.record_scan(sanitized, self.station_name, employee, timestamp)
         history = self._db.get_recent_scans()
         payload = {

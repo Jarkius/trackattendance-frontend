@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-ISO_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%S"
+ISO_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # UTC format with Z suffix
 
 
 @dataclass(frozen=True)
@@ -125,7 +125,7 @@ class DatabaseManager:
         employee: Optional[EmployeeRecord],
         scanned_at: Optional[str] = None,
     ) -> None:
-        timestamp = scanned_at or datetime.now().strftime(ISO_TIMESTAMP_FORMAT)
+        timestamp = scanned_at or datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         with self._connection:
             self._connection.execute(
                 """
