@@ -1,16 +1,28 @@
-﻿# Track Attendance
+﻿﻿# Track Attendance
+
+<!-- Add a screenshot of the application UI here -->
+<!-- ![Track Attendance UI](path/to/screenshot.png) -->
 
 ## Project Overview
 
-Track Attendance is a desktop companion for scanning QR or 1D barcodes, logging attendance instantly, and echoing results to a modern web UI hosted inside PyQt6. Operators get immediate feedback, supervisors get working exports, and the whole flow runs locally with no external services.
+Track Attendance is a standalone desktop application for scanning QR or 1D barcodes, logging attendance instantly, and displaying results on a modern, real-time dashboard. Built with Python and a PyQt6-hosted web UI, it provides a seamless "kiosk-style" experience for operators.
+
+The entire system runs locally with no external services required, ensuring data privacy and operational resilience.
+
+## System Requirements
+
+- **Operating System:** Primarily designed and packaged for **Windows 10/11**.
+- **Python:** Python 3.8+
+- **Hardware:** A keyboard-emulating barcode scanner (QR or 1D) is recommended for the intended workflow.
 
 ## Feature Highlights
 
 - **Barcode-first workflow:** Accepts keyboard wedge scanners or manual entry and normalises every submission before it hits the database.
 - **Instant feedback:** Live banner, dashboard counters, and recent-history list update with each scan so problems are spotted in seconds.
 - **Auto-captured unknowns:** Mistyped or unrecognised IDs are stored with a “Not matched” flag for later reconciliation.
-- **One-click exports:** XLSX reports land in `exports/` with columns for submitted value, match status, and station metadata.
+- **One-click & Auto Exports:** Manually export the attendance log to an XLSX file at any time. The application also performs a final export automatically on shutdown.
 - **Graceful shutdown:** Closing the window can trigger an export overlay, while stress tools can bypass the UI and export directly.
+- **Offline First:** All assets and logic are bundled. The application runs entirely offline without any network access.
 
 ## Setup
 
@@ -32,7 +44,7 @@ Track Attendance is a desktop companion for scanning QR or 1D barcodes, logging 
      ```
    - macOS/Linux
      ```bash
-     source .venv/bin/activate
+     source .venv/bin/activate  # For development; packaging is Windows-focused
      ```
 
 4. **Install dependencies**
@@ -43,7 +55,7 @@ Track Attendance is a desktop companion for scanning QR or 1D barcodes, logging 
 
 5. **Prepare operational data**
    - Place the employee roster at `data/employee.xlsx` (columns: Legacy ID, Full Name, SL L1 Desc, Position Desc).
-   - Move any existing `database.db` into `data/` or let the app bootstrap a fresh file on first run.
+   - Place any existing `database.db` into `data/` or let the app bootstrap a fresh file on first run.
    - For packaged builds, keep the `data/` folder alongside `TrackAttendance.exe` so edits persist between runs.
 
 ## Running the App
