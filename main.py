@@ -11,6 +11,7 @@ from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 from attendance import AttendanceService
+from sync import SyncService
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -77,10 +78,16 @@ EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 class Api(QObject):
     """Expose desktop controls to the embedded web UI."""
 
-    def __init__(self, service: AttendanceService, quit_callback: Callable[[], None]):
+    def __init__(
+        self,
+        service: AttendanceService,
+        quit_callback: Callable[[], None],
+        sync_service: Optional[SyncService] = None,
+    ):
         super().__init__()
         self._service = service
         self._quit_callback = quit_callback
+        self._sync_service = sync_service
         self._window = None
 
     def attach_window(self, window: QMainWindow) -> None:
@@ -107,6 +114,71 @@ class Api(QObject):
         if self._quit_callback:
             self._quit_callback()
 
+    @pyqtSlot(result="QVariant")
+    def test_cloud_connection(self) -> dict:
+        """Test connection to cloud API and return status."""
+        if not self._sync_service:
+            return {
+                "ok": False,
+                "message": "Sync service not configured",
+            }
+        success, message = self._sync_service.test_connection()
+        return {
+            "ok": success,
+            "message": message,
+        }
+
+    @pyqtSlot(result="QVariant")
+    def sync_now(self) -> dict:
+        """Manually trigger sync and return results."""
+        if not self._sync_service:
+            return {
+                "ok": False,
+                "message": "Sync service not configured",
+                "synced": 0,
+                "failed": 0,
+                "pending": 0,
+            }
+
+        # First test connection
+        success, message = self._sync_service.test_connection()
+        if not success:
+            return {
+                "ok": False,
+                "message": f"Cannot connect: {message}",
+                "synced": 0,
+                "failed": 0,
+                "pending": 0,
+            }
+
+        # Perform sync
+        result = self._sync_service.sync_pending_scans()
+        return {
+            "ok": True,
+            "message": f"Synced {result['synced']} scans successfully",
+            "synced": result["synced"],
+            "failed": result["failed"],
+            "pending": result["pending"],
+        }
+
+    @pyqtSlot(result="QVariant")
+    def get_sync_status(self) -> dict:
+        """Get current sync statistics."""
+        if not self._sync_service:
+            return {
+                "pending": 0,
+                "synced": 0,
+                "failed": 0,
+                "lastSyncAt": None,
+            }
+
+        stats = self._sync_service.db.get_sync_statistics()
+        return {
+            "pending": stats["pending"],
+            "synced": stats["synced"],
+            "failed": stats["failed"],
+            "lastSyncAt": stats["last_sync_time"],
+        }
 
     @pyqtSlot()
     def finalize_export_close(self) -> None:
@@ -218,13 +290,25 @@ def main() -> None:
         export_directory=EXPORT_DIRECTORY,
     )
 
+    # Initialize sync service for cloud integration
+    # TODO: Move these to configuration file or environment variables
+    CLOUD_API_URL = "http://localhost:5000"
+    CLOUD_API_KEY = "6541f2c7892b4e5287d50c2414d179f8"
+
+    sync_service = SyncService(
+        db=service._db,
+        api_url=CLOUD_API_URL,
+        api_key=CLOUD_API_KEY,
+        batch_size=100,
+    )
+
     roster_missing = not service.employees_loaded()
     example_workbook_path: Optional[Path] = None
     if roster_missing:
         example_workbook_path = service.ensure_example_employee_workbook()
 
     def api_factory(quit_callback: Callable[[], None]) -> Api:
-        return Api(service=service, quit_callback=quit_callback)
+        return Api(service=service, quit_callback=quit_callback, sync_service=sync_service)
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)
 

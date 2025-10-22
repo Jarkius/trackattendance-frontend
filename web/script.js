@@ -19,6 +19,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportOverlayTitle = document.getElementById('export-overlay-title');
     const exportOverlayMessage = document.getElementById('export-overlay-message');
     const exportOverlayConfirm = document.getElementById('export-overlay-confirm');
+    const syncNowBtn = document.getElementById('sync-now-btn');
+    const syncPendingCounter = document.getElementById('sync-pending');
+    const syncSyncedCounter = document.getElementById('sync-synced');
+    const syncFailedCounter = document.getElementById('sync-failed');
+    const syncStatusMessage = document.getElementById('sync-status-message');
 
     if (!barcodeInput || !liveFeedbackName || !totalEmployeesCounter || !totalScannedCounter) {
         console.warn('Attendance UI missing required elements; event wiring skipped.');
@@ -302,6 +307,7 @@ ${destination}` : message;
                 state.stationName = payload?.stationName ?? '--';
                 state.history = Array.isArray(payload?.scanHistory) ? payload.scanHistory : [];
                 applyDashboardState();
+                updateSyncStatus();  // Load sync status on startup
                 returnFocusToInput();
             });
         });
@@ -378,6 +384,64 @@ ${destination}` : message;
         });
     };
 
+    const updateSyncStatus = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.get_sync_status) {
+                return;
+            }
+            bridge.get_sync_status((stats) => {
+                if (syncPendingCounter) {
+                    syncPendingCounter.textContent = Number(stats?.pending ?? 0).toLocaleString();
+                }
+                if (syncSyncedCounter) {
+                    syncSyncedCounter.textContent = Number(stats?.synced ?? 0).toLocaleString();
+                }
+                if (syncFailedCounter) {
+                    syncFailedCounter.textContent = Number(stats?.failed ?? 0).toLocaleString();
+                }
+            });
+        });
+    };
+
+    const handleSyncNow = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.sync_now) {
+                if (syncStatusMessage) {
+                    syncStatusMessage.textContent = 'Sync service not available';
+                    syncStatusMessage.style.color = 'red';
+                }
+                return;
+            }
+
+            syncNowBtn.disabled = true;
+            syncNowBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>Syncing...';
+            if (syncStatusMessage) {
+                syncStatusMessage.textContent = 'Testing connection...';
+                syncStatusMessage.style.color = 'var(--deloitte-green)';
+            }
+
+            bridge.sync_now((result) => {
+                syncNowBtn.disabled = false;
+                syncNowBtn.innerHTML = '<i class="material-icons">cloud_upload</i>Sync Now';
+
+                const success = Boolean(result && result.ok);
+                if (syncStatusMessage) {
+                    syncStatusMessage.textContent = result?.message || (success ? 'Sync complete!' : 'Sync failed');
+                    syncStatusMessage.style.color = success ? 'var(--deloitte-green)' : 'red';
+
+                    // Clear message after 5 seconds
+                    window.setTimeout(() => {
+                        syncStatusMessage.textContent = '';
+                    }, 5000);
+                }
+
+                // Update sync statistics
+                updateSyncStatus();
+                returnFocusToInput();
+            });
+        });
+    };
+
     barcodeInput.addEventListener('keyup', (event) => {
         if (event.key === 'Enter') {
             submitScan(barcodeInput.value);
@@ -411,6 +475,13 @@ ${destination}` : message;
         exportBtn.addEventListener('click', (event) => {
             event.preventDefault();
             handleExport();
+        });
+    }
+
+    if (syncNowBtn) {
+        syncNowBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            handleSyncNow();
         });
     }
 

@@ -85,6 +85,32 @@
                         </div>
                     </div>
 
+                    <!-- Sync Status Section -->
+                    <div class="sync-status-section card">
+                        <div class="card-content">
+                            <span class="card-title">Cloud Sync</span>
+                            <div class="sync-info">
+                                <div class="sync-stat">
+                                    <span class="sync-label">Pending:</span>
+                                    <span class="sync-value" id="sync-pending">-</span>
+                                </div>
+                                <div class="sync-stat">
+                                    <span class="sync-label">Synced:</span>
+                                    <span class="sync-value" id="sync-synced">-</span>
+                                </div>
+                                <div class="sync-stat">
+                                    <span class="sync-label">Failed:</span>
+                                    <span class="sync-value" id="sync-failed">-</span>
+                                </div>
+                            </div>
+                            <button class="export-btn" id="sync-now-btn">
+                                <i class="material-icons">cloud_upload</i>
+                                Sync Now
+                            </button>
+                            <p class="sync-status-message" id="sync-status-message"></p>
+                        </div>
+                    </div>
+
                     <!-- Export Button Section -->
                     <div class="export-section">
                         <button class="export-btn" id="export-data-btn">

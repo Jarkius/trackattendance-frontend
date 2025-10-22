@@ -395,6 +395,46 @@ header h1 {
     margin-right: 8px;
 }
 
+/* Sync Status Section */
+.sync-status-section {
+    flex-shrink: 0;
+    margin-top: 20px;
+}
+
+.sync-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    gap: 10px;
+}
+
+.sync-stat {
+    text-align: center;
+    flex: 1;
+}
+
+.sync-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--deloitte-grey-medium);
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.sync-value {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--deloitte-green);
+}
+
+.sync-status-message {
+    font-size: 0.85rem;
+    margin: 10px 0 0;
+    min-height: 20px;
+    text-align: center;
+}
+
 /* Responsive Design */
 @media (max-width: 992px) {
     .feedback-section {
