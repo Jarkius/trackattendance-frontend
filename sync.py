@@ -79,11 +79,16 @@ class SyncService:
         # Build batch payload
         events = []
         for scan in pending_scans:
+            # Ensure timestamp has Z suffix for UTC format
+            scanned_at = scan.scanned_at
+            if not scanned_at.endswith('Z'):
+                scanned_at = scanned_at + 'Z'
+
             events.append({
                 "idempotency_key": self._generate_idempotency_key(scan),
                 "badge_id": scan.badge_id,
                 "station_name": scan.station_name,
-                "scanned_at": scan.scanned_at,
+                "scanned_at": scanned_at,
                 "meta": {
                     "matched": scan.legacy_id is not None,
                     "local_id": scan.id,
