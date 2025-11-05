@@ -82,7 +82,11 @@ class SyncService:
             # Ensure timestamp has Z suffix for UTC format
             scanned_at = scan.scanned_at
             if not scanned_at.endswith('Z'):
-                scanned_at = scanned_at + 'Z'
+                # Handle timezone offset format (e.g., "2025-11-05T08:39:24+00:00")
+                if '+00:00' in scanned_at:
+                    scanned_at = scanned_at.replace('+00:00', 'Z')
+                else:
+                    scanned_at = scanned_at + 'Z'
 
             events.append({
                 "idempotency_key": self._generate_idempotency_key(scan),
