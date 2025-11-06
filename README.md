@@ -78,8 +78,9 @@ A placeholder "Awaiting first scan" row appears in the history list until the fi
 ### Production Cloud API Status
 - **✅ Live URL**: https://trackattendance-api-969370105809.asia-southeast1.run.app
 - **🗄️ Database**: Neon PostgreSQL (production)
-- **📊 Synced Records**: 119+ scans successfully synced
-- **🔄 Sync Status**: Fully operational and tested
+- **📊 Synced Records**: 120+ scans successfully synced
+- **🔄 Sync Status**: Fully operational and tested across multiple networks
+- **⚡ Performance**: Optimized sync with ~1-2 second response times
 
 ### Cloud Sync Features
 - **Manual Sync**: Click "Sync Now" button in the dashboard to upload pending scans
@@ -107,6 +108,9 @@ python test_batch_sync.py
 
 # Test network connection scenarios
 python test_connection_scenarios.py
+
+# Analyze sync performance
+python debug_sync_performance.py
 ```
 
 ### Sync Workflow
