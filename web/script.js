@@ -324,6 +324,9 @@ ${destination}` : message;
         state.history = Array.isArray(response.scanHistory) ? response.scanHistory : state.history;
         applyDashboardState();
 
+        // Update sync status counters after new scan
+        updateSyncStatus();
+
         const found = Boolean(response.matched);
         const badgeValue = response.badgeId || '';
         const message = found
@@ -435,8 +438,8 @@ ${destination}` : message;
                     }, 5000);
                 }
 
-                // Update sync statistics
-                updateSyncStatus();
+                // Update sync statistics (with small delay to ensure DB is updated)
+                setTimeout(updateSyncStatus, 100);
                 returnFocusToInput();
             });
         });

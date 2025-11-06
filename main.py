@@ -292,7 +292,7 @@ def main() -> None:
 
     # Initialize sync service for cloud integration
     # TODO: Move these to configuration file or environment variables
-    CLOUD_API_URL = "http://localhost:5000"
+    CLOUD_API_URL = "https://trackattendance-api-969370105809.asia-southeast1.run.app"
     CLOUD_API_KEY = "6541f2c7892b4e5287d50c2414d179f8"
 
     sync_service = SyncService(

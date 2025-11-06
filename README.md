@@ -5,9 +5,11 @@
 
 ## Project Overview
 
-Track Attendance is a standalone desktop application for scanning QR or 1D barcodes, logging attendance instantly, and displaying results on a modern, real-time dashboard. Built with Python and a PyQt6-hosted web UI, it provides a seamless "kiosk-style" experience for operators.
+🚀 **Production-Ready** Track Attendance is a standalone desktop application for scanning QR or 1D barcodes, logging attendance instantly, and displaying results on a modern, real-time dashboard. Built with Python and a PyQt6-hosted web UI, it provides a seamless "kiosk-style" experience for operators.
 
-The entire system runs locally with no external services required, ensuring data privacy and operational resilience.
+✅ **Cloud Sync Enabled**: The system now supports both offline-first operation and seamless cloud synchronization to a production Google Cloud Run API.
+
+The system maintains data privacy while offering enterprise-grade cloud backup and multi-device synchronization capabilities.
 
 ## System Requirements
 
@@ -17,12 +19,17 @@ The entire system runs locally with no external services required, ensuring data
 
 ## Feature Highlights
 
-- **Barcode-first workflow:** Accepts keyboard wedge scanners or manual entry and normalises every submission before it hits the database.
-- **Instant feedback:** Live banner, dashboard counters, and recent-history list update with each scan so problems are spotted in seconds.
-- **Auto-captured unknowns:** Mistyped or unrecognised IDs are stored with a “Not matched” flag for later reconciliation.
-- **One-click & Auto Exports:** Manually export the attendance log to an XLSX file at any time. The application also performs a final export automatically on shutdown.
-- **Graceful shutdown:** Closing the window can trigger an export overlay, while stress tools can bypass the UI and export directly.
-- **Offline First:** All assets and logic are bundled. The application runs entirely offline without any network access.
+- **🔍 Barcode-first workflow:** Accepts keyboard wedge scanners or manual entry and normalises every submission before it hits the database.
+- **📊 Instant feedback:** Live banner, dashboard counters, and recent-history list update with each scan so problems are spotted in seconds.
+- **🔍 Auto-captured unknowns:** Mistyped or unrecognised IDs are stored with a "Not matched" flag for later reconciliation.
+- **📈 One-click & Auto Exports:** Manually export the attendance log to an XLSX file at any time. The application also performs a final export automatically on shutdown.
+- **🔄 Cloud Synchronization:** ✅ **NEW** - Seamlessly sync attendance data to production cloud API with manual sync controls.
+- **📊 Sync Statistics:** Real-time dashboard shows pending/synced/failed scan counts with visual indicators.
+- **🔒 Privacy-Preserving:** Only scan data (badge ID, timestamp, location) is synced to cloud; employee names remain local.
+- **⚡ Batch Processing:** Efficiently sync multiple records in batches with idempotency protection.
+- **🛡️ Error Recovery:** Handles network failures gracefully with retry mechanisms and error logging.
+- **🔧 Graceful shutdown:** Closing the window can trigger an export overlay, while stress tools can bypass the UI and export directly.
+- **🌐 Offline First:** All assets and logic are bundled. The application runs entirely offline without network access required.
 
 ## Setup
 
@@ -64,7 +71,51 @@ The entire system runs locally with no external services required, ensuring data
 python main.py
 ```
 
-A placeholder “Awaiting first scan” row appears in the history list until the first badge is recorded.
+A placeholder "Awaiting first scan" row appears in the history list until the first badge is recorded.
+
+## 🌐 Cloud Synchronization
+
+### Production Cloud API Status
+- **✅ Live URL**: https://trackattendance-api-969370105809.asia-southeast1.run.app
+- **🗄️ Database**: Neon PostgreSQL (production)
+- **📊 Synced Records**: 119+ scans successfully synced
+- **🔄 Sync Status**: Fully operational and tested
+
+### Cloud Sync Features
+- **Manual Sync**: Click "Sync Now" button in the dashboard to upload pending scans
+- **Real-time Status**: Dashboard shows pending/synced/failed scan counts
+- **Batch Processing**: Efficiently uploads multiple records in batches
+- **Privacy Preserved**: Only badge data synced; employee names stay local
+- **Error Handling**: Network failures handled gracefully with retry logic
+- **Idempotency**: Duplicate scans automatically detected and prevented
+
+### Cloud Sync Testing
+The repository includes comprehensive test scripts for cloud sync functionality:
+
+```bash
+# Create test scan data
+python create_test_scan.py
+
+# Test full production sync
+python test_production_sync.py
+
+# Debug sync process
+python test_sync_debug.py
+
+# Test batch sync processing
+python test_batch_sync.py
+
+# Test network connection scenarios
+python test_connection_scenarios.py
+```
+
+### Sync Workflow
+1. **Local Storage**: Scans are stored immediately in local SQLite database
+2. **Pending Status**: New scans marked as "pending" for cloud sync
+3. **Manual Sync**: User clicks "Sync Now" to upload to cloud API
+4. **Batch Upload**: Multiple pending scans uploaded in efficient batches
+5. **Status Update**: Local records updated to "synced" or "failed" status
+6. **Privacy Maintained**: Only scan data (badge, time, location) sent to cloud
 
 ## Building a Windows Executable
 

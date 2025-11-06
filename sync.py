@@ -35,7 +35,6 @@ class SyncService:
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key
         self.batch_size = batch_size
-        self.station_name = db.get_station_name()
 
     def test_connection(self) -> Tuple[bool, str]:
         """
@@ -46,9 +45,10 @@ class SyncService:
         """
         try:
             response = requests.get(
-                f"{self.api_url}/healthz",
-                timeout=5,
+                f"{self.api_url}/",
+                timeout=3,  # Reduced from 5 to 3 seconds
             )
+            response.encoding = 'utf-8'  # Force UTF-8 encoding
             if response.status_code == 200:
                 return True, "Connected to cloud API"
             else:
@@ -101,15 +101,18 @@ class SyncService:
 
         # Upload to cloud API
         try:
+            LOGGER.info(f"Syncing {len(events)} scans to cloud API...")
             response = requests.post(
                 f"{self.api_url}/v1/scans/batch",
                 json={"events": events},
                 headers={
-                    "Content-Type": "application/json",
+                    "Content-Type": "application/json; charset=utf-8",
                     "Authorization": f"Bearer {self.api_key}",
                 },
-                timeout=30,
+                timeout=10,  # Reduced from 30 to 10 seconds
             )
+            response.encoding = 'utf-8'  # Force UTF-8 encoding
+            LOGGER.info(f"Cloud API response received in {response.elapsed.total_seconds():.2f}s")
 
             if response.status_code == 200:
                 result = response.json()
@@ -167,8 +170,12 @@ class SyncService:
         Format: {station_name}-{badge_id}-{local_id}
         Example: MainGate-101117-1234
         """
+        # Get station name dynamically from database (cached for performance)
+        if not hasattr(self, '_cached_station_name'):
+            self._cached_station_name = self.db.get_station_name() or "UnknownStation"
+        station = self._cached_station_name
         # Sanitize station name (remove spaces and special chars)
-        safe_station = self.station_name.replace(" ", "").replace("-", "")
+        safe_station = station.replace(" ", "").replace("-", "")
         return f"{safe_station}-{scan.badge_id}-{scan.id}"
 
 
