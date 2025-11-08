@@ -417,7 +417,8 @@ ${destination}` : message;
             }
 
             syncNowBtn.disabled = true;
-            syncNowBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>Syncing...';
+            syncNowBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>';
+            syncNowBtn.title = 'Syncing...';
             if (syncStatusMessage) {
                 syncStatusMessage.textContent = 'Testing connection...';
                 syncStatusMessage.style.color = 'var(--deloitte-green)';
@@ -425,7 +426,8 @@ ${destination}` : message;
 
             bridge.sync_now((result) => {
                 syncNowBtn.disabled = false;
-                syncNowBtn.innerHTML = '<i class="material-icons">cloud_upload</i>Sync Now';
+                syncNowBtn.innerHTML = '<i class="material-icons">cloud_upload</i>';
+                syncNowBtn.title = 'Sync Now';
 
                 const success = Boolean(result && result.ok);
                 if (syncStatusMessage) {

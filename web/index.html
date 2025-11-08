@@ -51,7 +51,12 @@
                 <div class="sidebar">
                     <div class="dashboard-section card">
                         <div class="card-content">
-                            <span class="card-title">Dashboard</span>
+                            <div class="dashboard-header">
+                                <span class="card-title">Dashboard</span>
+                                <button class="sync-icon-btn" id="sync-now-btn" title="Sync Now">
+                                    <i class="material-icons">cloud_upload</i>
+                                </button>
+                            </div>
                             <div class="row">
                                 <div class="col s6">
                                     <div class="counter">
@@ -65,6 +70,24 @@
                                         <span class="label">Scanned Today</span>
                                     </div>
                                 </div>
+                            </div>
+                            <!-- Compact Sync Status -->
+                            <div class="sync-status-compact">
+                                <div class="sync-stats-row">
+                                    <span class="sync-stat-inline">
+                                        <span class="sync-label-inline">Pending:</span>
+                                        <span class="sync-value-inline" id="sync-pending">-</span>
+                                    </span>
+                                    <span class="sync-stat-inline">
+                                        <span class="sync-label-inline">Synced:</span>
+                                        <span class="sync-value-inline" id="sync-synced">-</span>
+                                    </span>
+                                    <span class="sync-stat-inline">
+                                        <span class="sync-label-inline">Failed:</span>
+                                        <span class="sync-value-inline" id="sync-failed">-</span>
+                                    </span>
+                                </div>
+                                <p class="sync-status-message" id="sync-status-message"></p>
                             </div>
                         </div>
                     </div>
@@ -82,32 +105,6 @@
                                     <span class="history-meta">Scan a badge to populate recent history.</span>
                                 </li>
                             </ul>
-                        </div>
-                    </div>
-
-                    <!-- Sync Status Section -->
-                    <div class="sync-status-section card">
-                        <div class="card-content">
-                            <span class="card-title">Cloud Sync</span>
-                            <div class="sync-info">
-                                <div class="sync-stat">
-                                    <span class="sync-label">Pending:</span>
-                                    <span class="sync-value" id="sync-pending">-</span>
-                                </div>
-                                <div class="sync-stat">
-                                    <span class="sync-label">Synced:</span>
-                                    <span class="sync-value" id="sync-synced">-</span>
-                                </div>
-                                <div class="sync-stat">
-                                    <span class="sync-label">Failed:</span>
-                                    <span class="sync-value" id="sync-failed">-</span>
-                                </div>
-                            </div>
-                            <button class="export-btn" id="sync-now-btn">
-                                <i class="material-icons">cloud_upload</i>
-                                Sync Now
-                            </button>
-                            <p class="sync-status-message" id="sync-status-message"></p>
                         </div>
                     </div>
 

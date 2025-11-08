@@ -241,6 +241,59 @@ header h1 {
     margin-bottom: 20px;
 }
 
+/* Dashboard Header with Sync Icon */
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+}
+
+.dashboard-header .card-title {
+    margin-bottom: 20px;
+    flex-grow: 1;
+}
+
+.sync-icon-btn {
+    background-color: var(--deloitte-green);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(134, 188, 37, 0.3);
+    padding: 0;
+    flex-shrink: 0;
+    margin-left: 10px;
+}
+
+.sync-icon-btn:hover {
+    background-color: #7aa722;
+    transform: translateY(-2px) rotate(180deg);
+    box-shadow: 0 4px 10px rgba(134, 188, 37, 0.4);
+}
+
+.sync-icon-btn:active {
+    transform: translateY(0) rotate(180deg);
+    box-shadow: 0 2px 6px rgba(134, 188, 37, 0.3);
+}
+
+.sync-icon-btn:disabled {
+    background-color: var(--deloitte-grey-medium);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.sync-icon-btn i {
+    font-size: 1.2rem;
+}
+
 .dashboard-section {
     flex-shrink: 0;
 }
@@ -272,7 +325,7 @@ header h1 {
 
 .collection {
     border: none;
-    max-height: calc(100vh - 440px); /* Allow slightly taller history list */
+    max-height: calc(100vh - 380px); /* Increased from 440px - more space now that sync is in dashboard */
     overflow-y: auto;
     margin: 0;
 }
@@ -395,44 +448,45 @@ header h1 {
     margin-right: 8px;
 }
 
-/* Sync Status Section */
-.sync-status-section {
-    flex-shrink: 0;
-    margin-top: 20px;
+/* Compact Sync Status in Dashboard */
+.sync-status-compact {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border);
 }
 
-.sync-info {
+.sync-stats-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 15px;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
 }
 
-.sync-stat {
-    text-align: center;
-    flex: 1;
-}
-
-.sync-label {
-    display: block;
+.sync-stat-inline {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
     font-size: 0.75rem;
+}
+
+.sync-label-inline {
     color: var(--deloitte-grey-medium);
     font-weight: 500;
-    margin-bottom: 4px;
 }
 
-.sync-value {
-    display: block;
-    font-size: 1.4rem;
+.sync-value-inline {
     font-weight: 700;
     color: var(--deloitte-green);
+    font-size: 0.9rem;
 }
 
 .sync-status-message {
-    font-size: 0.85rem;
-    margin: 10px 0 0;
-    min-height: 20px;
+    font-size: 0.75rem;
+    margin: 0;
+    min-height: 18px;
     text-align: center;
+    color: var(--deloitte-grey-medium);
 }
 
 /* Responsive Design */
