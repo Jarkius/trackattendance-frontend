@@ -325,7 +325,7 @@ header h1 {
 
 .collection {
     border: none;
-    max-height: calc(100vh - 380px); /* Increased from 440px - more space now that sync is in dashboard */
+    max-height: calc(100vh - 340px); /* Maximized space - sync moved to compact dashboard layout */
     overflow-y: auto;
     margin: 0;
 }
