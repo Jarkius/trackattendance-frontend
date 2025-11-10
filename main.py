@@ -215,8 +215,8 @@ class AutoSyncManager(QObject):
                 elif failed_count > 0:
                     self.show_status_message(f"Auto-sync: {failed_count} scan(s) failed", "error")
 
-            # Update UI stats
-            self.update_sync_stats()
+            # Update UI stats directly with the result we got
+            self.update_sync_stats(result)
 
             print(f"[AutoSync] Completed: synced={result.get('synced', 0)}, failed={result.get('failed', 0)}, pending={result.get('pending', 0)}")
 
@@ -267,41 +267,41 @@ class AutoSyncManager(QObject):
         print(f"[AutoSync] Injecting status message JS: {message}")
         self.web_view.page().runJavaScript(script)
 
-    def update_sync_stats(self) -> None:
-        """Update sync statistics in the UI."""
-        script = """
-        (function() {
-            console.log('[AutoSync UI] Updating sync statistics...');
-            if (window.qt && window.qt.webChannelTransport) {
-                new QWebChannel(window.qt.webChannelTransport, function(channel) {
-                    var api = channel.objects.api;
-                    if (api && api.get_sync_status) {
-                        api.get_sync_status(function(stats) {
-                            var pendingEl = document.getElementById('sync-pending');
-                            var syncedEl = document.getElementById('sync-synced');
-                            var failedEl = document.getElementById('sync-failed');
-
-                            if (pendingEl) {
-                                pendingEl.textContent = Number(stats.pending || 0).toLocaleString();
-                            }
-                            if (syncedEl) {
-                                syncedEl.textContent = Number(stats.synced || 0).toLocaleString();
-                            }
-                            if (failedEl) {
-                                failedEl.textContent = Number(stats.failed || 0).toLocaleString();
-                            }
-                            console.log('[AutoSync UI] Sync stats updated successfully');
-                        });
-                    } else {
-                        console.error('[AutoSync UI] API or get_sync_status not available');
-                    }
-                });
-            } else {
-                console.error('[AutoSync UI] WebChannel not available');
-            }
-        })();
+    def update_sync_stats(self, result: dict) -> None:
         """
-        print("[AutoSync] Injecting sync stats update JS")
+        Update sync statistics in the UI directly with provided stats.
+
+        Args:
+            result: Dictionary containing 'pending', 'synced', 'failed' counts
+        """
+        # Get current total stats from database
+        stats = self.sync_service.db.get_sync_statistics()
+
+        pending = stats.get('pending', 0)
+        synced = stats.get('synced', 0)
+        failed = stats.get('failed', 0)
+
+        # Update DOM directly without creating new QWebChannel (avoids conflicts)
+        script = f"""
+        (function() {{
+            console.log('[AutoSync UI] Updating sync statistics...');
+            var pendingEl = document.getElementById('sync-pending');
+            var syncedEl = document.getElementById('sync-synced');
+            var failedEl = document.getElementById('sync-failed');
+
+            if (pendingEl) {{
+                pendingEl.textContent = Number({pending}).toLocaleString();
+            }}
+            if (syncedEl) {{
+                syncedEl.textContent = Number({synced}).toLocaleString();
+            }}
+            if (failedEl) {{
+                failedEl.textContent = Number({failed}).toLocaleString();
+            }}
+            console.log('[AutoSync UI] Sync stats updated successfully');
+        }})();
+        """
+        print(f"[AutoSync] Updating UI stats: pending={pending}, synced={synced}, failed={failed}")
         self.web_view.page().runJavaScript(script)
 
 
