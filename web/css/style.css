@@ -460,7 +460,7 @@ header h1 {
 
 .sync-stats-inline {
     display: flex;
-    gap: 16px;
+    gap: 20px;
     flex-wrap: wrap;
     align-items: center;
 }
