@@ -27,6 +27,7 @@ The system maintains data privacy while offering enterprise-grade cloud backup a
 - **🔍 Auto-captured unknowns:** Mistyped or unrecognised IDs are stored with a "Not matched" flag for later reconciliation.
 - **📈 One-click & Auto Exports:** Manually export the attendance log to an XLSX file at any time. The application also performs a final export automatically on shutdown.
 - **🔄 Cloud Synchronization:** ✅ **PRODUCTION READY** - Seamlessly sync attendance data to production cloud API with manual sync controls.
+- **⚡ Auto-Sync Intelligence:** ✅ **NEW** - Automatic background synchronization during idle periods with smart network detection.
 - **📊 Real-time Sync Statistics:** Dashboard shows pending/synced/failed scan counts with 20px spacing for optimal readability.
 - **🔒 Privacy-Preserving:** Only scan data (badge ID, timestamp, location) is synced to cloud; employee names remain local.
 - **⚡ Batch Processing:** Efficiently sync multiple records in batches with idempotency protection.
@@ -96,6 +97,37 @@ A placeholder "Awaiting first scan" row appears in the history list until the fi
 - **🛡️ Error Handling**: Network failures handled gracefully with retry logic
 - **🔄 Idempotency**: Duplicate scans automatically detected and prevented
 
+### ⚡ Auto-Sync Intelligence (v1.2.0)
+
+The application now features intelligent automatic synchronization that operates seamlessly in the background without disrupting active scanning workflows.
+
+#### How Auto-Sync Works
+- **Idle Detection**: Monitors user activity and only syncs when scanning has been idle for 30 seconds
+- **Network Checking**: Tests actual API connectivity before attempting sync operations
+- **Smart Timing**: Checks conditions every 60 seconds to balance responsiveness and efficiency
+- **Non-Blocking**: Uses Qt's event loop for async operations - UI remains fully responsive
+- **Visual Feedback**: Displays status messages in dashboard with color-coded indicators
+
+#### Auto-Sync Status Messages
+- **Blue** (Info): "Auto-syncing pending scans..." - sync operation started
+- **Green** (Success): "Auto-sync complete: N scan(s) synced" - successful completion
+- **Red** (Error): "Auto-sync failed: [reason]" - error occurred
+- Messages auto-clear after 3 seconds to avoid UI clutter
+
+#### Sync Conditions
+Auto-sync triggers only when ALL conditions are met:
+1. ✅ System has been idle for 30+ seconds (no recent scans)
+2. ✅ At least 1 pending scan exists in local database
+3. ✅ Internet connection is available (API endpoint reachable)
+4. ✅ No sync operation currently in progress
+
+#### Benefits
+- **Zero User Intervention**: Scans sync automatically without manual action
+- **Workflow Preservation**: Never interrupts active scanning sessions
+- **Data Safety**: Ensures scans are backed up to cloud regularly
+- **Network Aware**: Skips sync when offline, resumes when connected
+- **Resource Efficient**: Minimal overhead, only active during idle periods
+
 ### Cloud Sync Testing
 The repository includes comprehensive test scripts for cloud sync functionality:
 
@@ -122,10 +154,90 @@ python debug_sync_performance.py
 ### Sync Workflow
 1. **Local Storage**: Scans are stored immediately in local SQLite database
 2. **Pending Status**: New scans marked as "pending" for cloud sync
-3. **Manual Sync**: User clicks "Sync Now" to upload to cloud API
-4. **Batch Upload**: Multiple pending scans uploaded in efficient batches
-5. **Status Update**: Local records updated to "synced" or "failed" status
-6. **Privacy Maintained**: Only scan data (badge, time, location) sent to cloud
+3. **Auto-Sync** (NEW): Automatic sync triggers during idle periods if network available
+4. **Manual Sync**: User can also click "Sync Now" to upload immediately
+5. **Batch Upload**: Multiple pending scans uploaded in efficient batches
+6. **Status Update**: Local records updated to "synced" or "failed" status
+7. **Privacy Maintained**: Only scan data (badge, time, location) sent to cloud
+
+## ⚙️ Configuration (config.py)
+
+The application uses a centralized configuration file for all settings. This file is created automatically on first run.
+
+### Cloud API Configuration
+```python
+# Cloud API endpoint (Production)
+CLOUD_API_URL = "https://trackattendance-api-969370105809.asia-southeast1.run.app"
+
+# API authentication key
+CLOUD_API_KEY = "your-api-key-here"
+
+# Number of scans to upload per batch
+CLOUD_SYNC_BATCH_SIZE = 100
+```
+
+### Auto-Sync Configuration
+
+All auto-sync behavior can be customized through `config.py`:
+
+```python
+# Enable/disable automatic synchronization
+AUTO_SYNC_ENABLED = True
+
+# Idle time (seconds) before auto-sync can trigger
+# Default: 30 seconds after last scan
+AUTO_SYNC_IDLE_SECONDS = 30
+
+# How often to check if sync conditions are met
+# Default: Every 60 seconds
+AUTO_SYNC_CHECK_INTERVAL_SECONDS = 60
+
+# Minimum number of pending scans required to trigger sync
+# Default: 1 (sync even single scans)
+AUTO_SYNC_MIN_PENDING_SCANS = 1
+
+# Show "Auto-syncing pending scans..." message
+AUTO_SYNC_SHOW_START_MESSAGE = True
+
+# Show "Auto-sync complete: N scan(s) synced" message
+AUTO_SYNC_SHOW_COMPLETE_MESSAGE = True
+
+# How long status messages display (milliseconds)
+# Default: 3000ms (3 seconds)
+AUTO_SYNC_MESSAGE_DURATION_MS = 3000
+
+# Network connection test timeout (seconds)
+AUTO_SYNC_CONNECTION_TIMEOUT = 5
+```
+
+### Configuration Examples
+
+**Disable Auto-Sync Completely:**
+```python
+AUTO_SYNC_ENABLED = False
+```
+
+**More Aggressive Sync (check every 30s, sync after 10s idle):**
+```python
+AUTO_SYNC_CHECK_INTERVAL_SECONDS = 30
+AUTO_SYNC_IDLE_SECONDS = 10
+```
+
+**Only Sync When 5+ Scans Pending:**
+```python
+AUTO_SYNC_MIN_PENDING_SCANS = 5
+```
+
+**Silent Auto-Sync (no status messages):**
+```python
+AUTO_SYNC_SHOW_START_MESSAGE = False
+AUTO_SYNC_SHOW_COMPLETE_MESSAGE = False
+```
+
+**Longer Message Display (5 seconds):**
+```python
+AUTO_SYNC_MESSAGE_DURATION_MS = 5000
+```
 
 ## 🎨 UI/UX Design (v1.1.0)
 
@@ -215,7 +327,43 @@ Exports from the stress harness are saved in `exports/` so results can be inspec
 
 ## 📋 Version History
 
-### v1.1.0 - Sync Status UI Redesign (Latest)
+### v1.2.0 - Auto-Sync Intelligence (Latest)
+**Release Date**: 2025-11-10
+
+Major feature release adding intelligent automatic synchronization with idle detection and smart network checking.
+
+**New Features:**
+- ⚡ **Automatic Synchronization**: Background sync during idle periods (30s threshold)
+- 🌐 **Smart Network Detection**: Tests API connectivity before sync operations
+- 🎯 **Idle Detection**: Only syncs when no scanning activity for 30+ seconds
+- 📊 **Visual Feedback**: Color-coded status messages (blue/green/red) in dashboard
+- ⚙️ **Configurable Behavior**: All settings customizable via `config.py`
+- 🔄 **Non-Blocking**: Uses Qt event loop - UI remains responsive
+- 📈 **Automatic Stats Updates**: Sync counters update after auto-sync completes
+
+**Technical Implementation:**
+- New `AutoSyncManager` class (200+ lines) in `main.py`
+- New `config.py` file with centralized configuration
+- QTimer-based periodic checks (every 60 seconds)
+- Direct DOM updates for UI changes (avoids QWebChannel conflicts)
+- No threading to prevent SQLite cross-thread issues
+
+**Configuration Added:**
+- `AUTO_SYNC_ENABLED` - Enable/disable auto-sync
+- `AUTO_SYNC_IDLE_SECONDS` - Idle threshold (default: 30s)
+- `AUTO_SYNC_CHECK_INTERVAL_SECONDS` - Check frequency (default: 60s)
+- `AUTO_SYNC_MIN_PENDING_SCANS` - Minimum scans to trigger (default: 1)
+- Message display and timeout settings
+
+**Files Modified:**
+- `config.py` (NEW) - 77 lines of configuration
+- `main.py` - Added 283 lines (AutoSyncManager class + integration)
+
+**Commits:** 10 commits from initial implementation to final bug fixes
+
+See [PR #5](../../pull/5) for implementation details and testing notes.
+
+### v1.1.0 - Sync Status UI Redesign
 **Release Date**: 2025-11-10
 
 Major UI improvements focused on sync status interface redesign with space optimization.
