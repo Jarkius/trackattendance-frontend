@@ -321,11 +321,19 @@ header h1 {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden; /* Prevent overflow from this section */
+}
+
+.history-section .card-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
 .collection {
     border: none;
-    max-height: calc(100vh - 340px); /* Maximized space - sync moved to compact dashboard layout */
+    flex-grow: 1;
     overflow-y: auto;
     margin: 0;
 }
