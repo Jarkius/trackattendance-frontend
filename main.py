@@ -138,13 +138,9 @@ class AutoSyncManager(QObject):
     def check_internet_connection(self) -> bool:
         """Test actual API connectivity by hitting the health endpoint."""
         try:
-            # Try to connect to the API health endpoint with authentication
-            headers = {
-                "X-API-Key": config.CLOUD_API_KEY
-            }
+            # Health endpoint is public, no authentication required
             response = requests.get(
                 f"{config.CLOUD_API_URL}/health",
-                headers=headers,
                 timeout=config.AUTO_SYNC_CONNECTION_TIMEOUT
             )
             is_connected = response.status_code == 200
