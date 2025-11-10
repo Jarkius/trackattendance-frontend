@@ -136,26 +136,18 @@ class AutoSyncManager(QObject):
         return idle_time >= config.AUTO_SYNC_IDLE_SECONDS
 
     def check_internet_connection(self) -> bool:
-        """Test actual API connectivity by hitting the health endpoint."""
+        """Test actual API connectivity by hitting the root endpoint."""
         try:
-            # Health endpoint is public, no authentication required
-            url = f"{config.CLOUD_API_URL}/health"
-            print(f"[AutoSync] Testing connectivity to: {url}")
+            # Use root endpoint like sync.py test_connection() does
+            # Root endpoint is public and doesn't require authentication
             response = requests.get(
-                url,
+                f"{config.CLOUD_API_URL}/",
                 timeout=config.AUTO_SYNC_CONNECTION_TIMEOUT
             )
-            print(f"[AutoSync] Response status: {response.status_code}")
-            if response.status_code != 200:
-                print(f"[AutoSync] Response headers: {dict(response.headers)}")
-                print(f"[AutoSync] Response body: {response.text[:200]}")
-            is_connected = response.status_code == 200
-            return is_connected
-        except requests.RequestException as e:
-            print(f"[AutoSync] Connection check failed: {type(e).__name__}: {e}")
+            return response.status_code == 200
+        except requests.RequestException:
             return False
-        except Exception as e:
-            print(f"[AutoSync] Unexpected error in connection check: {type(e).__name__}: {e}")
+        except Exception:
             return False
 
     def check_and_sync(self) -> None:
