@@ -236,9 +236,9 @@ class AutoSyncManager(QObject):
             message_type: Type of message ("info", "success", "error")
         """
         color_map = {
-            "info": "#00A3E0",  # Bright blue (sync button color)
-            "success": "var(--deloitte-green)",  # Green
-            "error": "red",  # Red
+            "info": "#00A3E0",  # Bright blue (starting auto-sync)
+            "success": "var(--deloitte-green)",  # Green (auto-sync success)
+            "error": "red",  # Red (errors)
         }
 
         color = color_map.get(message_type, "#00A3E0")
