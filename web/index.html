@@ -51,12 +51,7 @@
                 <div class="sidebar">
                     <div class="dashboard-section card">
                         <div class="card-content">
-                            <div class="dashboard-header">
-                                <span class="card-title">Dashboard</span>
-                                <button class="sync-icon-btn" id="sync-now-btn" title="Sync Now">
-                                    <i class="material-icons">cloud_upload</i>
-                                </button>
-                            </div>
+                            <span class="card-title">Dashboard</span>
                             <div class="row">
                                 <div class="col s6">
                                     <div class="counter">
@@ -74,18 +69,23 @@
                             <!-- Compact Sync Status -->
                             <div class="sync-status-compact">
                                 <div class="sync-stats-row">
-                                    <span class="sync-stat-inline">
-                                        <span class="sync-label-inline">Pending:</span>
-                                        <span class="sync-value-inline" id="sync-pending">-</span>
-                                    </span>
-                                    <span class="sync-stat-inline">
-                                        <span class="sync-label-inline">Synced:</span>
-                                        <span class="sync-value-inline" id="sync-synced">-</span>
-                                    </span>
-                                    <span class="sync-stat-inline">
-                                        <span class="sync-label-inline">Failed:</span>
-                                        <span class="sync-value-inline" id="sync-failed">-</span>
-                                    </span>
+                                    <div class="sync-stats-inline">
+                                        <span class="sync-stat-inline">
+                                            <span class="sync-label-inline">Pending:</span>
+                                            <span class="sync-value-inline" id="sync-pending">-</span>
+                                        </span>
+                                        <span class="sync-stat-inline">
+                                            <span class="sync-label-inline">Synced:</span>
+                                            <span class="sync-value-inline" id="sync-synced">-</span>
+                                        </span>
+                                        <span class="sync-stat-inline">
+                                            <span class="sync-label-inline">Failed:</span>
+                                            <span class="sync-value-inline" id="sync-failed">-</span>
+                                        </span>
+                                    </div>
+                                    <button class="sync-icon-btn" id="sync-now-btn" title="Sync Now">
+                                        <i class="material-icons">cloud_upload</i>
+                                    </button>
                                 </div>
                                 <p class="sync-status-message" id="sync-status-message"></p>
                             </div>
