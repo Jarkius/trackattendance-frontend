@@ -410,8 +410,8 @@ header h1 {
     background-color: var(--deloitte-green);
     border: none;
     color: white;
-    padding: 10px 24px;
-    font-size: 0.95rem;
+    padding: 8px 24px;
+    font-size: 0.9rem;
     font-weight: 500;
     border-radius: 4px;
     cursor: pointer;
@@ -419,6 +419,10 @@ header h1 {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     box-shadow: 0 2px 8px rgba(134, 188, 37, 0.3);
+    line-height: 1.4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .export-btn:hover {
@@ -440,7 +444,9 @@ header h1 {
 }
 
 .export-btn i {
-    margin-right: 8px;
+    margin-right: 6px;
+    font-size: 1.1rem;
+    vertical-align: middle;
 }
 
 /* Compact Sync Status in Dashboard */
@@ -634,8 +640,8 @@ header h1 {
     }
 
     .export-btn {
-        padding: 10px 20px;
-        font-size: 0.9rem;
+        padding: 8px 20px;
+        font-size: 0.85rem;
     }
 }
 
