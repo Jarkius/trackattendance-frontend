@@ -139,13 +139,17 @@ class AutoSyncManager(QObject):
         """Test actual API connectivity by hitting the health endpoint."""
         try:
             # Health endpoint is public, no authentication required
+            url = f"{config.CLOUD_API_URL}/health"
+            print(f"[AutoSync] Testing connectivity to: {url}")
             response = requests.get(
-                f"{config.CLOUD_API_URL}/health",
+                url,
                 timeout=config.AUTO_SYNC_CONNECTION_TIMEOUT
             )
+            print(f"[AutoSync] Response status: {response.status_code}")
+            if response.status_code != 200:
+                print(f"[AutoSync] Response headers: {dict(response.headers)}")
+                print(f"[AutoSync] Response body: {response.text[:200]}")
             is_connected = response.status_code == 200
-            if not is_connected:
-                print(f"[AutoSync] Health check returned status code: {response.status_code}")
             return is_connected
         except requests.RequestException as e:
             print(f"[AutoSync] Connection check failed: {type(e).__name__}: {e}")
