@@ -303,7 +303,7 @@ header h1 {
 }
 
 .history-section {
-    margin-top: 10px;
+    margin-top: 5px;
     flex-grow: 1;
     display: flex;
     flex-direction: column;
@@ -400,8 +400,8 @@ header h1 {
 /* Export Button */
 .export-section {
     flex-shrink: 0;
-    margin-top: 14px;
-    padding-top: 24px;
+    margin-top: 10px;
+    padding-top: 16px;
     border-top: 1px solid var(--border);
 }
 
@@ -410,8 +410,8 @@ header h1 {
     background-color: var(--deloitte-green);
     border: none;
     color: white;
-    padding: 12px 24px;
-    font-size: 1rem;
+    padding: 10px 24px;
+    font-size: 0.95rem;
     font-weight: 500;
     border-radius: 4px;
     cursor: pointer;
@@ -460,7 +460,7 @@ header h1 {
 
 .sync-stats-inline {
     display: flex;
-    gap: 12px;
+    gap: 16px;
     flex-wrap: wrap;
     align-items: center;
 }
