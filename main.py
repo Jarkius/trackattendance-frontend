@@ -143,8 +143,15 @@ class AutoSyncManager(QObject):
                 f"{config.CLOUD_API_URL}/health",
                 timeout=config.AUTO_SYNC_CONNECTION_TIMEOUT
             )
-            return response.status_code == 200
-        except (requests.RequestException, Exception):
+            is_connected = response.status_code == 200
+            if not is_connected:
+                print(f"[AutoSync] Health check returned status code: {response.status_code}")
+            return is_connected
+        except requests.RequestException as e:
+            print(f"[AutoSync] Connection check failed: {type(e).__name__}: {e}")
+            return False
+        except Exception as e:
+            print(f"[AutoSync] Unexpected error in connection check: {type(e).__name__}: {e}")
             return False
 
     def check_and_sync(self) -> None:
