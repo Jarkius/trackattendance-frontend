@@ -242,7 +242,7 @@ header h1 {
 }
 
 .sync-icon-btn {
-    background-color: #00BCD4;
+    background-color: #00A3E0;
     border: none;
     color: white;
     width: 30px;
@@ -253,21 +253,21 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 6px rgba(0, 188, 212, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 163, 224, 0.3);
     padding: 0;
     flex-shrink: 0;
     margin-left: 8px;
 }
 
 .sync-icon-btn:hover {
-    background-color: #0097A7;
-    transform: translateY(-2px) rotate(180deg);
-    box-shadow: 0 4px 10px rgba(0, 188, 212, 0.4);
+    background-color: #0082B3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 163, 224, 0.4);
 }
 
 .sync-icon-btn:active {
-    transform: translateY(0) rotate(180deg);
-    box-shadow: 0 2px 6px rgba(0, 188, 212, 0.3);
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 163, 224, 0.3);
 }
 
 .sync-icon-btn:disabled {
@@ -279,6 +279,20 @@ header h1 {
 
 .sync-icon-btn i {
     font-size: 0.95rem;
+}
+
+/* Sync spinning animation */
+@keyframes sync-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.sync-spinning {
+    animation: sync-spin 1s linear infinite;
 }
 
 .dashboard-section {

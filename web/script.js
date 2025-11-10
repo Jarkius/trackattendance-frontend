@@ -417,7 +417,7 @@ ${destination}` : message;
             }
 
             syncNowBtn.disabled = true;
-            syncNowBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>';
+            syncNowBtn.innerHTML = '<i class="material-icons sync-spinning">sync</i>';
             syncNowBtn.title = 'Syncing...';
             if (syncStatusMessage) {
                 syncStatusMessage.textContent = 'Testing connection...';
@@ -426,7 +426,7 @@ ${destination}` : message;
 
             bridge.sync_now((result) => {
                 syncNowBtn.disabled = false;
-                syncNowBtn.innerHTML = '<i class="material-icons">cloud_upload</i>';
+                syncNowBtn.innerHTML = '<i class="material-icons">sync</i>';
                 syncNowBtn.title = 'Sync Now';
 
                 const success = Boolean(result && result.ok);
