@@ -272,11 +272,32 @@ class AutoSyncManager(QObject):
         script = """
         (function() {
             console.log('[AutoSync UI] Updating sync statistics...');
-            if (typeof updateSyncStatus === 'function') {
-                updateSyncStatus();
-                console.log('[AutoSync UI] updateSyncStatus() called successfully');
+            if (window.qt && window.qt.webChannelTransport) {
+                new QWebChannel(window.qt.webChannelTransport, function(channel) {
+                    var api = channel.objects.api;
+                    if (api && api.get_sync_status) {
+                        api.get_sync_status(function(stats) {
+                            var pendingEl = document.getElementById('sync-pending');
+                            var syncedEl = document.getElementById('sync-synced');
+                            var failedEl = document.getElementById('sync-failed');
+
+                            if (pendingEl) {
+                                pendingEl.textContent = Number(stats.pending || 0).toLocaleString();
+                            }
+                            if (syncedEl) {
+                                syncedEl.textContent = Number(stats.synced || 0).toLocaleString();
+                            }
+                            if (failedEl) {
+                                failedEl.textContent = Number(stats.failed || 0).toLocaleString();
+                            }
+                            console.log('[AutoSync UI] Sync stats updated successfully');
+                        });
+                    } else {
+                        console.error('[AutoSync UI] API or get_sync_status not available');
+                    }
+                });
             } else {
-                console.error('[AutoSync UI] updateSyncStatus function not found!');
+                console.error('[AutoSync UI] WebChannel not available');
             }
         })();
         """
