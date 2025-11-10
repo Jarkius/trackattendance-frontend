@@ -108,11 +108,21 @@ The application now features intelligent automatic synchronization that operates
 - **Non-Blocking**: Uses Qt's event loop for async operations - UI remains fully responsive
 - **Visual Feedback**: Displays status messages in dashboard with color-coded indicators
 
-#### Auto-Sync Status Messages
-- **Blue** (Info): "Auto-syncing pending scans..." - sync operation started
-- **Green** (Success): "Auto-sync complete: N scan(s) synced" - successful completion
-- **Red** (Error): "Auto-sync failed: [reason]" - error occurred
-- Messages auto-clear after 3 seconds to avoid UI clutter
+#### Sync Status Messages
+
+**Auto-Sync Messages** (automatic background operations):
+- **Blue** (#00A3E0): "Auto-syncing pending scans..." - sync operation started
+- **Green** (Deloitte green): "Auto-sync complete: N scan(s) synced" - successful completion
+- **Red**: "Auto-sync failed: [reason]" - error occurred
+
+**Manual Sync Messages** (user-triggered via sync button):
+- **Blue** (#00A3E0): All manual sync messages match the sync button color
+- Includes: "Testing connection...", "Sync complete!", error messages
+
+**Message Behavior**:
+- Auto-sync messages auto-clear after 3 seconds
+- Manual sync messages auto-clear after 5 seconds
+- Color differentiation helps users distinguish automatic vs manual operations
 
 #### Sync Conditions
 Auto-sync triggers only when ALL conditions are met:
@@ -279,12 +289,18 @@ The UI has been meticulously optimized to maximize scan history visibility:
 - ✅ **Responsiveness**: Adaptive layout for different screen sizes
 
 #### Color Palette
-- **Primary Green**: #86bc25 (Deloitte brand, export button)
-- **Sync Blue**: #00A3E0 (bright, intuitive for cloud sync)
+- **Primary Green**: #86bc25 (Deloitte brand, export button, auto-sync success messages)
+- **Sync Blue**: #00A3E0 (sync button, manual sync messages, auto-sync start messages)
+- **Error Red**: red (all error messages, both manual and auto-sync)
 - **Text Dark**: #333333 (high contrast for readability)
 - **Text Medium**: #8c8c8c (secondary information)
 - **Border**: #e5e5e5 (subtle separation)
 - **Background**: #ffffff (clean, professional)
+
+**Color Usage Philosophy:**
+- **Blue** (#00A3E0): Manual/user-triggered sync operations (matches sync button)
+- **Green** (#86bc25): Automatic/background operations (distinguishes from manual actions)
+- **Red**: Errors and failures (universal warning color)
 
 #### Typography & Spacing
 - **Card Titles**: 1.25rem, 700 weight, 8px padding-bottom
