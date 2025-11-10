@@ -21,15 +21,19 @@ The system maintains data privacy while offering enterprise-grade cloud backup a
 
 - **🔍 Barcode-first workflow:** Accepts keyboard wedge scanners or manual entry and normalises every submission before it hits the database.
 - **📊 Instant feedback:** Live banner, dashboard counters, and recent-history list update with each scan so problems are spotted in seconds.
+- **🎨 Modern UI Design:** Compact, intuitive interface with optimized spacing for maximum scan history visibility.
+- **🔄 Intuitive Sync Button:** Universal sync icon (🔄) with bright blue (#00A3E0) color and spinning animation during sync operations.
+- **📊 Compact Dashboard:** Integrated sync status with inline statistics display in dashboard section.
 - **🔍 Auto-captured unknowns:** Mistyped or unrecognised IDs are stored with a "Not matched" flag for later reconciliation.
 - **📈 One-click & Auto Exports:** Manually export the attendance log to an XLSX file at any time. The application also performs a final export automatically on shutdown.
-- **🔄 Cloud Synchronization:** ✅ **NEW** - Seamlessly sync attendance data to production cloud API with manual sync controls.
-- **📊 Sync Statistics:** Real-time dashboard shows pending/synced/failed scan counts with visual indicators.
+- **🔄 Cloud Synchronization:** ✅ **PRODUCTION READY** - Seamlessly sync attendance data to production cloud API with manual sync controls.
+- **📊 Real-time Sync Statistics:** Dashboard shows pending/synced/failed scan counts with 20px spacing for optimal readability.
 - **🔒 Privacy-Preserving:** Only scan data (badge ID, timestamp, location) is synced to cloud; employee names remain local.
 - **⚡ Batch Processing:** Efficiently sync multiple records in batches with idempotency protection.
 - **🛡️ Error Recovery:** Handles network failures gracefully with retry mechanisms and error logging.
 - **🔧 Graceful shutdown:** Closing the window can trigger an export overlay, while stress tools can bypass the UI and export directly.
 - **🌐 Offline First:** All assets and logic are bundled. The application runs entirely offline without network access required.
+- **📱 Responsive Design:** Optimized layout across different screen sizes with adaptive spacing and controls.
 
 ## Setup
 
@@ -83,12 +87,14 @@ A placeholder "Awaiting first scan" row appears in the history list until the fi
 - **⚡ Performance**: Optimized sync with ~1-2 second response times
 
 ### Cloud Sync Features
-- **Manual Sync**: Click "Sync Now" button in the dashboard to upload pending scans
-- **Real-time Status**: Dashboard shows pending/synced/failed scan counts
-- **Batch Processing**: Efficiently uploads multiple records in batches
-- **Privacy Preserved**: Only badge data synced; employee names stay local
-- **Error Handling**: Network failures handled gracefully with retry logic
-- **Idempotency**: Duplicate scans automatically detected and prevented
+- **🎯 Intuitive Sync Button**: Circular sync icon (🔄) with bright blue (#00A3E0) color for instant recognition
+- **⚙️ Visual Feedback**: Button spins during sync operation showing real-time progress
+- **📊 Compact Layout**: Sync button positioned inline with statistics for better UX
+- **📈 Real-time Status**: Dashboard shows pending/synced/failed scan counts with optimized 20px spacing
+- **⚡ Batch Processing**: Efficiently uploads multiple records in batches
+- **🔒 Privacy Preserved**: Only badge data synced; employee names stay local
+- **🛡️ Error Handling**: Network failures handled gracefully with retry logic
+- **🔄 Idempotency**: Duplicate scans automatically detected and prevented
 
 ### Cloud Sync Testing
 The repository includes comprehensive test scripts for cloud sync functionality:
@@ -120,6 +126,59 @@ python debug_sync_performance.py
 4. **Batch Upload**: Multiple pending scans uploaded in efficient batches
 5. **Status Update**: Local records updated to "synced" or "failed" status
 6. **Privacy Maintained**: Only scan data (badge, time, location) sent to cloud
+
+## 🎨 UI/UX Design (v1.1.0)
+
+### Dashboard Redesign
+The application features a modern, space-optimized dashboard design focused on maximizing scan history visibility while maintaining clean aesthetics.
+
+#### Sync Status Integration
+- **Compact Layout**: Sync controls integrated directly into dashboard section
+- **Inline Statistics**: Pending/Synced/Failed counts displayed horizontally with 20px spacing
+- **Smart Button Placement**: 30px circular sync button positioned inline with statistics
+- **Visual Hierarchy**: Clear separation between sections with optimized padding
+
+#### Sync Button Design
+- **Icon**: Universal sync symbol (🔄 circular arrows) for instant recognition
+- **Color**: Bright blue (#00A3E0) for excellent visibility and modern appearance
+- **Size**: 30px circular button - compact yet easily clickable
+- **Animation**: Smooth spinning animation during sync operations
+- **States**:
+  - Normal: Bright blue (#00A3E0)
+  - Hover: Darker blue (#0082B3) with lift effect
+  - Syncing: Spinning animation with visual feedback
+  - Disabled: Grey with no-drop cursor
+
+#### Space Optimization
+The UI has been meticulously optimized to maximize scan history visibility:
+
+- **Dashboard Title**: Reduced padding (15px → 8px) and margin (20px → 12px)
+- **Sync Section**: Optimized spacing with minimal waste (~23px saved)
+- **Export Button**: Compact height with 8px padding and 0.9rem font
+- **Sidebar Padding**: Reduced to 10px (top/bottom) for maximum content space
+- **History Section**: Minimal 3px margin-top for tight visual connection
+- **Result**: 70-80px additional vertical space = **3-5 more scan entries visible!**
+
+#### Visual Design Principles
+- ✅ **Clarity**: Clean, uncluttered interface with clear visual hierarchy
+- ✅ **Efficiency**: Maximum information density without feeling cramped
+- ✅ **Feedback**: Immediate visual feedback for all user actions
+- ✅ **Recognition**: Universal icons and familiar interaction patterns
+- ✅ **Responsiveness**: Adaptive layout for different screen sizes
+
+#### Color Palette
+- **Primary Green**: #86bc25 (Deloitte brand, export button)
+- **Sync Blue**: #00A3E0 (bright, intuitive for cloud sync)
+- **Text Dark**: #333333 (high contrast for readability)
+- **Text Medium**: #8c8c8c (secondary information)
+- **Border**: #e5e5e5 (subtle separation)
+- **Background**: #ffffff (clean, professional)
+
+#### Typography & Spacing
+- **Card Titles**: 1.25rem, 700 weight, 8px padding-bottom
+- **Sync Stats**: 0.75rem labels, 0.9rem values, 20px gaps
+- **Export Button**: 0.9rem, uppercase, 0.5px letter-spacing
+- **Scan History**: 0.8rem items with 6px vertical padding
 
 ## Building a Windows Executable
 
@@ -153,6 +212,46 @@ python tests\stress_full_app.py 101117 101118 101119 --iterations 30 --delay-ms 
 ```
 
 Exports from the stress harness are saved in `exports/` so results can be inspected after automated runs.
+
+## 📋 Version History
+
+### v1.1.0 - Sync Status UI Redesign (Latest)
+**Release Date**: 2025-11-10
+
+Major UI improvements focused on sync status interface redesign with space optimization.
+
+**New Features:**
+- 🔄 Universal sync icon (circular arrows) replacing cloud_upload
+- 💙 Bright blue color (#00A3E0) for better visibility
+- ⚡ Spinning animation during sync operations
+- 📊 Compact dashboard layout with inline sync statistics
+- 📏 Optimized spacing throughout interface
+- 📈 3-5 more scan entries visible without scrolling
+
+**Technical Changes:**
+- 11 commits in PR #3
+- 3 files modified (HTML, CSS, JavaScript)
+- ~70-80px vertical space optimization
+- Improved responsive design
+
+**Files Modified:**
+- `web/index.html` - Restructured sync status layout
+- `web/css/style.css` - Comprehensive CSS updates
+- `web/script.js` - Enhanced sync button behavior
+
+See [Release v1.1.0](../../releases/tag/v1.1.0) for full details.
+
+### v1.0.0 - Production Cloud Sync
+**Initial Release**
+
+- ✅ Production-ready cloud synchronization
+- ✅ Google Cloud Run API integration
+- ✅ Neon PostgreSQL database
+- ✅ 120+ scans successfully tested
+- ✅ Privacy-preserving sync (badge data only)
+- ✅ Offline-first architecture
+- ✅ Batch processing with idempotency
+- ✅ Comprehensive test suite
 
 ## Data Privacy
 
