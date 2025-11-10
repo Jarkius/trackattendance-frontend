@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import sys
 import json
+import time
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
-from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QUrl, Qt, pyqtSlot
+from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+import requests
 
 from attendance import AttendanceService
 from sync import SyncService
+import config
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -75,6 +78,233 @@ DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 
+class AutoSyncManager(QObject):
+    """
+    Manages automatic synchronization of pending scans to the cloud.
+
+    Features:
+    - Idle detection: Only syncs when user hasn't scanned for a while
+    - Network checking: Verifies actual API connectivity before syncing
+    - Non-blocking: Uses Qt's event loop for async operations
+    - Status updates: Sends status messages to UI for user feedback
+    """
+
+    # Signal emitted when auto-sync completes (for UI updates)
+    sync_completed = pyqtSignal(dict)
+
+    def __init__(self, sync_service: Optional[SyncService], web_view):
+        super().__init__()
+        self.sync_service = sync_service
+        self.web_view = web_view
+        self.last_scan_time: Optional[float] = None
+        self.is_syncing = False
+        self.enabled = config.AUTO_SYNC_ENABLED
+
+        # Create timer for periodic auto-sync checks
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.check_and_sync)
+
+    def start(self) -> None:
+        """Start the auto-sync timer."""
+        if not self.enabled or not self.sync_service:
+            print("[AutoSync] Auto-sync is disabled or sync service not available")
+            return
+
+        print(f"[AutoSync] Starting auto-sync (check interval: {config.AUTO_SYNC_CHECK_INTERVAL_SECONDS}s, idle threshold: {config.AUTO_SYNC_IDLE_SECONDS}s)")
+        self.timer.start(config.AUTO_SYNC_CHECK_INTERVAL_SECONDS * 1000)
+
+    def stop(self) -> None:
+        """Stop the auto-sync timer."""
+        print("[AutoSync] Stopping auto-sync")
+        self.timer.stop()
+
+    def on_scan(self) -> None:
+        """
+        Update last scan time when user scans a badge.
+        This is called from the Api.submit_scan method.
+        """
+        self.last_scan_time = time.time()
+
+    def is_idle(self) -> bool:
+        """Check if system has been idle long enough to trigger auto-sync."""
+        if self.last_scan_time is None:
+            # No scans yet, consider idle
+            return True
+
+        idle_time = time.time() - self.last_scan_time
+        return idle_time >= config.AUTO_SYNC_IDLE_SECONDS
+
+    def check_internet_connection(self) -> bool:
+        """Test actual API connectivity by hitting the root endpoint."""
+        try:
+            # Use root endpoint like sync.py test_connection() does
+            # Root endpoint is public and doesn't require authentication
+            response = requests.get(
+                f"{config.CLOUD_API_URL}/",
+                timeout=config.AUTO_SYNC_CONNECTION_TIMEOUT
+            )
+            return response.status_code == 200
+        except requests.RequestException:
+            return False
+        except Exception:
+            return False
+
+    def check_and_sync(self) -> None:
+        """
+        Main auto-sync logic called by timer.
+        Checks all conditions and triggers sync if appropriate.
+        """
+        # Skip if already syncing
+        if self.is_syncing:
+            return
+
+        # Skip if not idle
+        if not self.is_idle():
+            return
+
+        # Check pending scans
+        if not self.sync_service:
+            return
+
+        try:
+            stats = self.sync_service.db.get_sync_statistics()
+            pending_count = stats.get('pending', 0)
+
+            if pending_count < config.AUTO_SYNC_MIN_PENDING_SCANS:
+                return
+        except Exception as e:
+            print(f"[AutoSync] Error checking pending scans: {e}")
+            return
+
+        # Check internet connection
+        if not self.check_internet_connection():
+            print(f"[AutoSync] No internet connection, skipping auto-sync")
+            return
+
+        # All conditions met - trigger auto-sync
+        print(f"[AutoSync] Conditions met: idle={self.is_idle()}, pending={pending_count}, connected=True")
+        self.trigger_auto_sync()
+
+    def trigger_auto_sync(self) -> None:
+        """Execute auto-sync directly (no threading to avoid SQLite issues)."""
+        self.is_syncing = True
+
+        # Show start message if enabled
+        if config.AUTO_SYNC_SHOW_START_MESSAGE:
+            self.show_status_message("Auto-syncing pending scans...", "info")
+
+        try:
+            print("[AutoSync] Starting sync...")
+
+            # Perform the sync directly (no threading needed - sync is fast)
+            result = self.sync_service.sync_pending_scans()
+
+            # Emit signal with result
+            self.sync_completed.emit(result)
+
+            # Show completion message if enabled
+            if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
+                synced_count = result.get('synced', 0)
+                failed_count = result.get('failed', 0)
+
+                if synced_count > 0:
+                    message = f"Auto-sync complete: {synced_count} scan(s) synced"
+                    if failed_count > 0:
+                        message += f", {failed_count} failed"
+                    self.show_status_message(message, "success")
+                elif failed_count > 0:
+                    self.show_status_message(f"Auto-sync: {failed_count} scan(s) failed", "error")
+
+            # Update UI stats directly with the result we got
+            self.update_sync_stats(result)
+
+            print(f"[AutoSync] Completed: synced={result.get('synced', 0)}, failed={result.get('failed', 0)}, pending={result.get('pending', 0)}")
+
+        except Exception as e:
+            print(f"[AutoSync] Error during sync: {e}")
+            if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
+                self.show_status_message(f"Auto-sync failed: {str(e)}", "error")
+        finally:
+            self.is_syncing = False
+
+    def show_status_message(self, message: str, message_type: str = "info") -> None:
+        """
+        Display status message in the UI.
+
+        Args:
+            message: The message text to display
+            message_type: Type of message ("info", "success", "error")
+        """
+        color_map = {
+            "info": "#00A3E0",  # Bright blue (sync button color)
+            "success": "var(--deloitte-green)",  # Green
+            "error": "red",  # Red
+        }
+
+        color = color_map.get(message_type, "#00A3E0")
+
+        script = f"""
+        (function() {{
+            console.log('[AutoSync UI] Updating status message: {message}');
+            var messageEl = document.getElementById('sync-status-message');
+            if (messageEl) {{
+                messageEl.textContent = "{message}";
+                messageEl.style.color = "{color}";
+                console.log('[AutoSync UI] Message element updated successfully');
+
+                // Auto-clear after duration
+                setTimeout(function() {{
+                    if (messageEl.textContent === "{message}") {{
+                        messageEl.textContent = "";
+                    }}
+                }}, {config.AUTO_SYNC_MESSAGE_DURATION_MS});
+            }} else {{
+                console.error('[AutoSync UI] Message element not found!');
+            }}
+        }})();
+        """
+
+        print(f"[AutoSync] Injecting status message JS: {message}")
+        self.web_view.page().runJavaScript(script)
+
+    def update_sync_stats(self, result: dict) -> None:
+        """
+        Update sync statistics in the UI directly with provided stats.
+
+        Args:
+            result: Dictionary containing 'pending', 'synced', 'failed' counts
+        """
+        # Get current total stats from database
+        stats = self.sync_service.db.get_sync_statistics()
+
+        pending = stats.get('pending', 0)
+        synced = stats.get('synced', 0)
+        failed = stats.get('failed', 0)
+
+        # Update DOM directly without creating new QWebChannel (avoids conflicts)
+        script = f"""
+        (function() {{
+            console.log('[AutoSync UI] Updating sync statistics...');
+            var pendingEl = document.getElementById('sync-pending');
+            var syncedEl = document.getElementById('sync-synced');
+            var failedEl = document.getElementById('sync-failed');
+
+            if (pendingEl) {{
+                pendingEl.textContent = Number({pending}).toLocaleString();
+            }}
+            if (syncedEl) {{
+                syncedEl.textContent = Number({synced}).toLocaleString();
+            }}
+            if (failedEl) {{
+                failedEl.textContent = Number({failed}).toLocaleString();
+            }}
+            console.log('[AutoSync UI] Sync stats updated successfully');
+        }})();
+        """
+        print(f"[AutoSync] Updating UI stats: pending={pending}, synced={synced}, failed={failed}")
+        self.web_view.page().runJavaScript(script)
+
+
 class Api(QObject):
     """Expose desktop controls to the embedded web UI."""
 
@@ -83,11 +313,13 @@ class Api(QObject):
         service: AttendanceService,
         quit_callback: Callable[[], None],
         sync_service: Optional[SyncService] = None,
+        auto_sync_manager: Optional[AutoSyncManager] = None,
     ):
         super().__init__()
         self._service = service
         self._quit_callback = quit_callback
         self._sync_service = sync_service
+        self._auto_sync_manager = auto_sync_manager
         self._window = None
 
     def attach_window(self, window: QMainWindow) -> None:
@@ -101,7 +333,13 @@ class Api(QObject):
     @pyqtSlot(str, result="QVariant")
     def submit_scan(self, badge_id: str) -> dict:
         """Persist a badge scan and return the enriched result for UI feedback."""
-        return self._service.register_scan(badge_id)
+        result = self._service.register_scan(badge_id)
+
+        # Notify auto-sync manager that a scan occurred
+        if self._auto_sync_manager:
+            self._auto_sync_manager.on_scan()
+
+        return result
 
     @pyqtSlot(result="QVariant")
     def export_scans(self) -> dict:
@@ -291,15 +529,11 @@ def main() -> None:
     )
 
     # Initialize sync service for cloud integration
-    # TODO: Move these to configuration file or environment variables
-    CLOUD_API_URL = "https://trackattendance-api-969370105809.asia-southeast1.run.app"
-    CLOUD_API_KEY = "6541f2c7892b4e5287d50c2414d179f8"
-
     sync_service = SyncService(
         db=service._db,
-        api_url=CLOUD_API_URL,
-        api_key=CLOUD_API_KEY,
-        batch_size=100,
+        api_url=config.CLOUD_API_URL,
+        api_key=config.CLOUD_API_KEY,
+        batch_size=config.CLOUD_SYNC_BATCH_SIZE,
     )
 
     roster_missing = not service.employees_loaded()
@@ -307,10 +541,27 @@ def main() -> None:
     if roster_missing:
         example_workbook_path = service.ensure_example_employee_workbook()
 
+    # AutoSyncManager will be created after view is available
+    auto_sync_manager_ref = [None]  # Use list to allow mutation in closure
+
     def api_factory(quit_callback: Callable[[], None]) -> Api:
-        return Api(service=service, quit_callback=quit_callback, sync_service=sync_service)
+        return Api(
+            service=service,
+            quit_callback=quit_callback,
+            sync_service=sync_service,
+            auto_sync_manager=auto_sync_manager_ref[0],
+        )
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)
+
+    # Now that view is created, instantiate AutoSyncManager
+    auto_sync_manager = AutoSyncManager(sync_service=sync_service, web_view=view)
+    auto_sync_manager_ref[0] = auto_sync_manager
+
+    # Update the API object to use the auto_sync_manager
+    api_object = getattr(window, '_api', None)
+    if isinstance(api_object, Api):
+        api_object._auto_sync_manager = auto_sync_manager
 
     if roster_missing:
         sample_path_display = str((example_workbook_path or service.ensure_example_employee_workbook()).resolve())
@@ -356,6 +607,18 @@ def main() -> None:
         view.loadFinished.connect(_show_missing_roster_overlay)
 
     view.setUrl(QUrl.fromLocalFile(str(UI_INDEX_HTML)))
+
+    # Start auto-sync after UI loads
+    def _start_auto_sync_on_load(ok: bool) -> None:
+        if ok and auto_sync_manager:
+            print("[Main] Starting auto-sync manager...")
+            auto_sync_manager.start()
+        try:
+            view.loadFinished.disconnect(_start_auto_sync_on_load)
+        except TypeError:
+            pass
+
+    view.loadFinished.connect(_start_auto_sync_on_load)
 
     api_object = getattr(window, '_api', None)
     if isinstance(api_object, Api):
