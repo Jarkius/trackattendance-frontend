@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 import json
 import time
-import threading
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
@@ -86,7 +85,7 @@ class AutoSyncManager(QObject):
     Features:
     - Idle detection: Only syncs when user hasn't scanned for a while
     - Network checking: Verifies actual API connectivity before syncing
-    - Background processing: Syncs in separate thread without blocking UI
+    - Non-blocking: Uses Qt's event loop for async operations
     - Status updates: Sends status messages to UI for user feedback
     """
 
@@ -187,52 +186,46 @@ class AutoSyncManager(QObject):
         self.trigger_auto_sync()
 
     def trigger_auto_sync(self) -> None:
-        """Execute auto-sync in background thread."""
+        """Execute auto-sync directly (no threading to avoid SQLite issues)."""
         self.is_syncing = True
 
         # Show start message if enabled
         if config.AUTO_SYNC_SHOW_START_MESSAGE:
             self.show_status_message("Auto-syncing pending scans...", "info")
 
-        def sync_worker():
-            """Background thread worker for sync operation."""
-            try:
-                print("[AutoSync] Starting background sync...")
+        try:
+            print("[AutoSync] Starting sync...")
 
-                # Perform the sync
-                result = self.sync_service.sync_pending_scans()
+            # Perform the sync directly (no threading needed - sync is fast)
+            result = self.sync_service.sync_pending_scans()
 
-                # Emit signal with result
-                self.sync_completed.emit(result)
+            # Emit signal with result
+            self.sync_completed.emit(result)
 
-                # Show completion message if enabled
-                if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
-                    synced_count = result.get('synced', 0)
-                    failed_count = result.get('failed', 0)
+            # Show completion message if enabled
+            if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
+                synced_count = result.get('synced', 0)
+                failed_count = result.get('failed', 0)
 
-                    if synced_count > 0:
-                        message = f"Auto-sync complete: {synced_count} scan(s) synced"
-                        if failed_count > 0:
-                            message += f", {failed_count} failed"
-                        self.show_status_message(message, "success")
-                    elif failed_count > 0:
-                        self.show_status_message(f"Auto-sync: {failed_count} scan(s) failed", "error")
+                if synced_count > 0:
+                    message = f"Auto-sync complete: {synced_count} scan(s) synced"
+                    if failed_count > 0:
+                        message += f", {failed_count} failed"
+                    self.show_status_message(message, "success")
+                elif failed_count > 0:
+                    self.show_status_message(f"Auto-sync: {failed_count} scan(s) failed", "error")
 
-                # Update UI stats
-                self.update_sync_stats()
+            # Update UI stats
+            self.update_sync_stats()
 
-                print(f"[AutoSync] Completed: synced={result.get('synced', 0)}, failed={result.get('failed', 0)}, pending={result.get('pending', 0)}")
+            print(f"[AutoSync] Completed: synced={result.get('synced', 0)}, failed={result.get('failed', 0)}, pending={result.get('pending', 0)}")
 
-            except Exception as e:
-                print(f"[AutoSync] Error during sync: {e}")
-                if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
-                    self.show_status_message(f"Auto-sync failed: {str(e)}", "error")
-            finally:
-                self.is_syncing = False
-
-        # Start background thread
-        thread = threading.Thread(target=sync_worker, daemon=True)
-        thread.start()
+        except Exception as e:
+            print(f"[AutoSync] Error during sync: {e}")
+            if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
+                self.show_status_message(f"Auto-sync failed: {str(e)}", "error")
+        finally:
+            self.is_syncing = False
 
     def show_status_message(self, message: str, message_type: str = "info") -> None:
         """
