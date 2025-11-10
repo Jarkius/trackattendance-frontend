@@ -237,7 +237,7 @@ class AutoSyncManager(QObject):
         """
         color_map = {
             "info": "#00A3E0",  # Bright blue (sync button color)
-            "success": "var(--deloitte-green)",  # Green
+            "success": "#00A3E0",  # Bright blue (same as sync button for consistency)
             "error": "red",  # Red
         }
 

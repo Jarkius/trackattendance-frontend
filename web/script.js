@@ -421,7 +421,7 @@ ${destination}` : message;
             syncNowBtn.title = 'Syncing...';
             if (syncStatusMessage) {
                 syncStatusMessage.textContent = 'Testing connection...';
-                syncStatusMessage.style.color = 'var(--deloitte-green)';
+                syncStatusMessage.style.color = '#00A3E0';  // Match sync button color
             }
 
             bridge.sync_now((result) => {
@@ -432,7 +432,7 @@ ${destination}` : message;
                 const success = Boolean(result && result.ok);
                 if (syncStatusMessage) {
                     syncStatusMessage.textContent = result?.message || (success ? 'Sync complete!' : 'Sync failed');
-                    syncStatusMessage.style.color = success ? 'var(--deloitte-green)' : 'red';
+                    syncStatusMessage.style.color = success ? '#00A3E0' : 'red';  // Blue for success, red for error
 
                     // Clear message after 5 seconds
                     window.setTimeout(() => {
