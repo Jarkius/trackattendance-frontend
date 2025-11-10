@@ -245,10 +245,12 @@ class AutoSyncManager(QObject):
 
         script = f"""
         (function() {{
+            console.log('[AutoSync UI] Updating status message: {message}');
             var messageEl = document.getElementById('sync-status-message');
             if (messageEl) {{
                 messageEl.textContent = "{message}";
                 messageEl.style.color = "{color}";
+                console.log('[AutoSync UI] Message element updated successfully');
 
                 // Auto-clear after duration
                 setTimeout(function() {{
@@ -256,21 +258,29 @@ class AutoSyncManager(QObject):
                         messageEl.textContent = "";
                     }}
                 }}, {config.AUTO_SYNC_MESSAGE_DURATION_MS});
+            }} else {{
+                console.error('[AutoSync UI] Message element not found!');
             }}
         }})();
         """
 
+        print(f"[AutoSync] Injecting status message JS: {message}")
         self.web_view.page().runJavaScript(script)
 
     def update_sync_stats(self) -> None:
         """Update sync statistics in the UI."""
         script = """
         (function() {
+            console.log('[AutoSync UI] Updating sync statistics...');
             if (typeof updateSyncStatus === 'function') {
                 updateSyncStatus();
+                console.log('[AutoSync UI] updateSyncStatus() called successfully');
+            } else {
+                console.error('[AutoSync UI] updateSyncStatus function not found!');
             }
         })();
         """
+        print("[AutoSync] Injecting sync stats update JS")
         self.web_view.page().runJavaScript(script)
 
 
