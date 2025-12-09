@@ -274,6 +274,52 @@ AUTO_SYNC_CONNECTION_TIMEOUT = 5
 
 ---
 
+## Deployment: Updating API Key on Cloud Run
+
+When rotating or updating the API key (e.g., when using a new service account), the backend's `API_KEY` environment variable must be updated on Google Cloud Run:
+
+### Update via gcloud CLI
+
+```bash
+gcloud run deploy trackattendance-api \
+  --update-env-vars API_KEY=trackattendance-api-service-ac@trackattendance-20251014.iam.gserviceaccount.com
+```
+
+### Update via Cloud Console
+
+1. Go to https://console.cloud.google.com/run
+2. Click on the "trackattendance-api" service
+3. Click "Edit & Deploy New Revision"
+4. Find the "Environment variables" section
+5. Update the `API_KEY` value
+6. Click "Deploy"
+
+### Verify the Update
+
+```bash
+# Check that the environment variable is set correctly
+gcloud run services describe trackattendance-api \
+  --format='value(spec.template.spec.containers[0].env[name=API_KEY].value)'
+
+# Test with the new key
+curl -X POST https://trackattendance-api-969370105809.asia-southeast1.run.app/v1/scans/batch \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer trackattendance-api-service-ac@trackattendance-20251014.iam.gserviceaccount.com" \
+  -d '{"events":[]}'
+
+# Expected response: 200 OK
+```
+
+### Important Security Notes
+
+- **Never hardcode API keys** in the backend code
+- **Always use environment variables** for credentials (Cloud Run automatically supports this)
+- **Rotate keys periodically** and update both the backend and client configuration
+- **Ensure the old key is revoked** after deploying with the new key
+- Desktop clients will receive `401 Unauthorized` until they are updated with the new key
+
+---
+
 ## Testing
 
 ### Manual API Test
