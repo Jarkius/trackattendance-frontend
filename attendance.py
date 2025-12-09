@@ -46,6 +46,48 @@ class AttendanceService:
     def employees_loaded(self) -> bool:
         return self._db.employees_loaded()
 
+    def validate_roster_headers(self, workbook_path: Path) -> tuple[bool, str]:
+        """
+        Validate that an employee workbook has required columns.
+
+        Returns:
+            (is_valid, error_message)
+        """
+        if not workbook_path.exists():
+            return False, f"Roster file not found: {workbook_path.name}"
+
+        try:
+            workbook = load_workbook(workbook_path, read_only=True)
+            sheet = workbook.active
+            header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
+            workbook.close()
+
+            # Check for header row
+            if not header_row or all(cell is None for cell in header_row):
+                return False, "Roster file has no headers (first row is empty)"
+
+            # Extract non-empty headers
+            actual_headers = {
+                str(name).strip() for name in header_row
+                if name and str(name).strip()
+            }
+
+            # Check for required columns
+            from config import REQUIRED_ROSTER_COLUMNS
+            missing = [col for col in REQUIRED_ROSTER_COLUMNS if col not in actual_headers]
+
+            if missing:
+                msg = f"Roster missing required columns:\n\n"
+                msg += f"Missing: {', '.join(missing)}\n\n"
+                msg += f"Required: {', '.join(REQUIRED_ROSTER_COLUMNS)}\n\n"
+                msg += f"Found: {', '.join(sorted(actual_headers)) if actual_headers else '(none)'}"
+                return False, msg
+
+            return True, "Roster headers valid"
+
+        except Exception as e:
+            return False, f"Error reading roster file: {str(e)}"
+
     def _bootstrap_employee_directory(self) -> None:
         if self._db.employees_loaded():
             return
@@ -53,6 +95,20 @@ class AttendanceService:
             LOGGER.warning("Employee workbook not found at %s", self._employee_workbook_path)
             self.ensure_example_employee_workbook()
             return
+
+        # Validate roster headers before import
+        from config import ROSTER_VALIDATION_ENABLED, ROSTER_STRICT_VALIDATION
+        is_valid, validation_msg = self.validate_roster_headers(self._employee_workbook_path)
+
+        if not is_valid:
+            if ROSTER_VALIDATION_ENABLED:
+                LOGGER.error("Roster validation failed: %s", validation_msg)
+                if ROSTER_STRICT_VALIDATION:
+                    LOGGER.error("Strict validation enabled - skipping import")
+                    return
+            else:
+                LOGGER.warning("Roster validation skipped (disabled): %s", validation_msg)
+
         workbook = load_workbook(self._employee_workbook_path, read_only=True)
         try:
             sheet = workbook.active
