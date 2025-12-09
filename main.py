@@ -518,6 +518,10 @@ def initialize_app(
 
 
 def main() -> None:
+    # Initialize logging first thing
+    from logging_config import setup_logging
+    setup_logging()
+
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
