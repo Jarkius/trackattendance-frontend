@@ -154,3 +154,25 @@ ENABLE_FADE_ANIMATION = os.getenv("ENABLE_FADE_ANIMATION", "True").lower() in ("
 
 # Export behavior
 AUTO_EXPORT_ON_SHUTDOWN = os.getenv("AUTO_EXPORT_ON_SHUTDOWN", "True").lower() in ("true", "1", "yes")
+
+
+# =============================================================================
+# Duplicate Badge Detection Configuration (Issue #20, #21)
+# =============================================================================
+
+# Enable/disable duplicate badge detection
+# Prevents users from scanning the same badge multiple times in quick succession
+DUPLICATE_BADGE_DETECTION_ENABLED = os.getenv("DUPLICATE_BADGE_DETECTION_ENABLED", "True").lower() in ("true", "1", "yes")
+
+# Time window in seconds to consider scans as duplicates
+# Example: If set to 60, scanning same badge within 60s is considered duplicate
+DUPLICATE_BADGE_TIME_WINDOW_SECONDS = int(os.getenv("DUPLICATE_BADGE_TIME_WINDOW_SECONDS", "60"))
+
+# Action to take when duplicate badge is detected
+# 'warn': Accept scan + show yellow warning alert (default)
+# 'block': Reject duplicate scan + show red error alert
+# 'silent': Accept scan + no alert shown (for testing)
+DUPLICATE_BADGE_ACTION = os.getenv("DUPLICATE_BADGE_ACTION", "warn").lower()
+
+# Duration in milliseconds to show duplicate badge alert before auto-dismiss
+DUPLICATE_BADGE_ALERT_DURATION_MS = int(os.getenv("DUPLICATE_BADGE_ALERT_DURATION_MS", "3000"))
