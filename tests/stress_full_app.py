@@ -257,6 +257,16 @@ def run_stress_test(
             elif index % 25 == 0 or index == 1 or index == iterations:
                 print(f"[{index:03d}/{iterations}] status={status} feedback='{feedback}' total={total_scanned}")
 
+            # Update UI sync statistics every 100 scans to show pending count growing
+            if index % 100 == 0 or index == iterations:
+                view.page().runJavaScript("""
+                    (function() {
+                        if (typeof updateSyncStatus === 'function') {
+                            updateSyncStatus();
+                        }
+                    })();
+                """)
+
             if delay_ms > 0:
                 settle_loop = QEventLoop()
                 QTimer.singleShot(delay_ms, settle_loop.quit)
