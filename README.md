@@ -60,7 +60,7 @@ python main.py
   - Conditions: idle, pending scans ≥ `AUTO_SYNC_MIN_PENDING_SCANS`, no active sync.
   - Messages: start/success/fail messages auto-clear after `AUTO_SYNC_MESSAGE_DURATION_MS`.
 - **Sync-all option**: `sync_pending_scans(sync_all=True, max_batches=n)` flushes all pending scans in batches (opt-in; default is one batch) for admin or stress-test scenarios.
-- **Shutdown flow**: On close, attempts a sync for pending scans, then exports; UI overlay shows sync/export status.
+- **Shutdown flow**: On close, attempts a sync for pending scans (skips if offline or errors), then exports; UI overlay shows sync/export status.
 - **Batching**: `sync_pending_scans` uploads batches and marks records `synced`/`failed` in SQLite with stats.
 
 ### Cloud API Configuration (config.py)
@@ -128,7 +128,7 @@ pyinstaller TrackAttendance.spec
 - `data/`, `exports/` — runtime storage (ignored by git); `Backup/` — archived experiments.
 
 ## Version History (high level)
-- **Current (Dec 2025)** — Sync-all option for cloud uploads (`sync_pending_scans(sync_all=True)`), and stress harness improvements (connection test before sync, 3s post-sync hold to view results).
+- **Current (Dec 2025)** — Shutdown sync before export (Issue #8), sync-all option for cloud uploads (`sync_pending_scans(sync_all=True)`), and stress harness improvements (connection test before sync, 3s post-sync hold to view results).
 - **v1.2.0** — Auto-Sync Intelligence: idle detection, connectivity check, inline status updates, configurable via `config.py`.
 - **v1.1.0** — Sync status UI redesign: compact layout, spinning sync icon, space optimization.
 - **v1.0.0** — Initial production cloud sync: batch uploads, idempotency, offline-first.
