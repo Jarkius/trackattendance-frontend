@@ -1,12 +1,32 @@
 # TrackAttendance Cloud API Documentation
 
-**API Repository**: https://github.com/Jarkius/trackattendance-api
+**API Repository**: https://github.com/Jarkius/trackattendance-api (Private Repository)
+**API Status**: Production (Deployed on Google Cloud Run)
 **Endpoint**: `https://trackattendance-api-969370105809.asia-southeast1.run.app`
 **Hosting**: Google Cloud Run (asia-southeast1 region)
+**Access**: Private repository — requires GitHub access permissions to view backend code
 
 ## Overview
 
 The TrackAttendance API is a RESTful backend service that receives and stores attendance scan records from desktop clients. It uses bearer token authentication and provides idempotency guarantees to prevent duplicate processing.
+
+## Security
+
+**Backend Code Access**:
+- Source code is stored in a private GitHub repository
+- Only authorized team members can view/modify backend code
+- Production API is deployed on Google Cloud Run with industry-standard security
+
+**API Endpoint Security**:
+- Health check endpoint (`GET /`) is public (no authentication required)
+- All data upload endpoints (`POST /v1/scans/batch`) require Bearer token authentication
+- Invalid or missing tokens will receive a `401 Unauthorized` response
+- API keys are stored securely in `config.py` and never committed to the desktop client repository
+
+**Data Protection**:
+- Only badge ID, station name, timestamp, and matched flag are synced (no employee names or personal data)
+- All communication uses HTTPS (TLS encryption in transit)
+- Idempotency keys prevent duplicate records even if network requests are retried
 
 ## Authentication
 
@@ -295,5 +315,22 @@ python tests/debug_sync_performance.py
 
 - **Desktop Client**: See [README.md](README.md) — Cloud Synchronization section
 - **Stress Testing**: See [README.md](README.md) — Testing & Utilities section
-- **Backend Code**: https://github.com/Jarkius/trackattendance-api
+- **Backend Repository** (Private): https://github.com/Jarkius/trackattendance-api
+  - To request access, contact the repository owner (@Jarkius)
+  - Contains: API server code, database schema, deployment configuration
 - **Local Development**: Edit `config.py` to point to local API (`http://localhost:5000`)
+
+## Troubleshooting API Access
+
+**Cannot access the backend repository?**
+1. You likely don't have GitHub permissions yet
+2. Contact the repository owner to request access
+3. Once access is granted, you can clone and run locally
+
+**Connecting to a local API instance:**
+```python
+# In config.py, change:
+CLOUD_API_URL = "http://localhost:5000"  # Local development
+# or
+CLOUD_API_URL = "https://trackattendance-api-969370105809.asia-southeast1.run.app"  # Production
+```
