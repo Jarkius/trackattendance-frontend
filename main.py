@@ -675,54 +675,72 @@ def main() -> None:
                 pending_count = stats.get('pending', 0)
 
                 if pending_count > 0:
-                    # Show "syncing" overlay
-                    sync_payload = {
-                        'stage': 'sync',
-                        'ok': True,
-                        'message': f'Syncing {pending_count} pending scan(s)...',
-                        'destination': '',
-                        'showConfirm': False,
-                        'autoHideMs': 0,
-                        'shouldClose': False,
-                    }
-                    payload_js = json.dumps(sync_payload)
-                    view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
-
-                    # Perform sync
-                    sync_result = sync_service.sync_pending_scans()
-
-                    # Determine sync outcome message
-                    synced_count = sync_result.get('synced', 0)
-                    failed_count = sync_result.get('failed', 0)
-
-                    if synced_count > 0 and failed_count == 0:
-                        sync_msg = f'Synced {synced_count} scan(s) successfully. Proceeding with export...'
-                        sync_ok = True
-                    elif synced_count > 0 and failed_count > 0:
-                        sync_msg = f'Synced {synced_count} scan(s), {failed_count} failed. Proceeding with export...'
-                        sync_ok = True
-                    elif failed_count > 0:
-                        sync_msg = f'Sync failed for {failed_count} scan(s). Proceeding with export...'
-                        sync_ok = False
+                    # Check authentication before attempting sync (fail fast)
+                    auth_ok, auth_msg = sync_service.test_authentication()
+                    if not auth_ok:
+                        # Auth failed - show error but proceed with export
+                        auth_error_payload = {
+                            'stage': 'sync',
+                            'ok': False,
+                            'message': f'Sync skipped: {auth_msg}. Proceeding with export...',
+                            'destination': '',
+                            'showConfirm': False,
+                            'autoHideMs': 0,
+                            'shouldClose': False,
+                        }
+                        payload_js = json.dumps(auth_error_payload)
+                        view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
+                        time.sleep(0.5)
                     else:
-                        sync_msg = 'No scans synced. Proceeding with export...'
-                        sync_ok = True
+                        # Show "syncing" overlay
+                        sync_payload = {
+                            'stage': 'sync',
+                            'ok': True,
+                            'message': f'Syncing {pending_count} pending scan(s)...',
+                            'destination': '',
+                            'showConfirm': False,
+                            'autoHideMs': 0,
+                            'shouldClose': False,
+                        }
+                        payload_js = json.dumps(sync_payload)
+                        view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
 
-                    # Show brief sync result (don't wait for user confirmation)
-                    sync_done_payload = {
-                        'stage': 'sync',
-                        'ok': sync_ok,
-                        'message': sync_msg,
-                        'destination': '',
-                        'showConfirm': False,
-                        'autoHideMs': 0,
-                        'shouldClose': False,
-                    }
-                    payload_js = json.dumps(sync_done_payload)
-                    view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
+                        # Perform sync - sync ALL pending scans before closing
+                        # Use sync_all=True to ensure all batches are uploaded (not just first 100)
+                        sync_result = sync_service.sync_pending_scans(sync_all=True)
 
-                    # Brief delay to show sync result (500ms)
-                    time.sleep(0.5)
+                        # Determine sync outcome message
+                        synced_count = sync_result.get('synced', 0)
+                        failed_count = sync_result.get('failed', 0)
+
+                        if synced_count > 0 and failed_count == 0:
+                            sync_msg = f'Synced {synced_count} scan(s) successfully. Proceeding with export...'
+                            sync_ok = True
+                        elif synced_count > 0 and failed_count > 0:
+                            sync_msg = f'Synced {synced_count} scan(s), {failed_count} failed. Proceeding with export...'
+                            sync_ok = True
+                        elif failed_count > 0:
+                            sync_msg = f'Sync failed for {failed_count} scan(s). Proceeding with export...'
+                            sync_ok = False
+                        else:
+                            sync_msg = 'No scans synced. Proceeding with export...'
+                            sync_ok = True
+
+                        # Show brief sync result (don't wait for user confirmation)
+                        sync_done_payload = {
+                            'stage': 'sync',
+                            'ok': sync_ok,
+                            'message': sync_msg,
+                            'destination': '',
+                            'showConfirm': False,
+                            'autoHideMs': 0,
+                            'shouldClose': False,
+                        }
+                        payload_js = json.dumps(sync_done_payload)
+                        view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
+
+                        # Brief delay to show sync result (500ms)
+                        time.sleep(0.5)
             except Exception as exc:
                 # Sync failed - log error but continue with export
                 error_payload = {
