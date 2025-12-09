@@ -300,30 +300,45 @@ def run_stress_test(
                     """)
                     time.sleep(2)  # Give user time to see pending count in UI
 
-                    print(f'[sync] Syncing {pending_before} pending scan(s) now...')
-                    sync_start = time.perf_counter()
+                    # Check connection before attempting sync
+                    print(f'[sync] Testing connection to cloud API...')
+                    connection_ok, connection_msg = sync_service.test_connection()
 
-                    # Sync all pending scans using sync_all=True
-                    sync_result = sync_service.sync_pending_scans(sync_all=True)
-                    sync_duration = time.perf_counter() - sync_start
+                    if not connection_ok:
+                        print(f'[sync] [X] No connection to cloud API: {connection_msg}')
+                        print(f'[sync] Skipping sync - {pending_before} scan(s) will remain pending')
+                        sync_attempted = False
+                        sync_success = False
+                    else:
+                        print(f'[sync] [OK] Connected to cloud API')
+                        print(f'[sync] Syncing {pending_before} pending scan(s) now...')
+                        sync_start = time.perf_counter()
 
-                    synced_count = sync_result.get('synced', 0)
-                    failed_count = sync_result.get('failed', 0)
-                    pending_after = sync_result.get('pending', 0)
-                    batch_count = sync_result.get('batches', 0)
+                        # Sync all pending scans using sync_all=True
+                        sync_result = sync_service.sync_pending_scans(sync_all=True)
+                        sync_duration = time.perf_counter() - sync_start
 
-                    sync_success = synced_count > 0 or failed_count == 0
+                        synced_count = sync_result.get('synced', 0)
+                        failed_count = sync_result.get('failed', 0)
+                        pending_after = sync_result.get('pending', 0)
+                        batch_count = sync_result.get('batches', 0)
 
-                    print(f'[sync] Complete in {sync_duration:.2f}s: {synced_count} synced, {failed_count} failed, {pending_after} pending ({batch_count} batches)')
+                        sync_success = synced_count > 0 or failed_count == 0
 
-                    # Update UI sync statistics after sync completes
-                    view.page().runJavaScript("""
-                        (function() {
-                            if (typeof updateSyncStatus === 'function') {
-                                updateSyncStatus();
-                            }
-                        })();
-                    """)
+                        print(f'[sync] Complete in {sync_duration:.2f}s: {synced_count} synced, {failed_count} failed, {pending_after} pending ({batch_count} batches)')
+
+                        # Update UI sync statistics after sync completes
+                        view.page().runJavaScript("""
+                            (function() {
+                                if (typeof updateSyncStatus === 'function') {
+                                    updateSyncStatus();
+                                }
+                            })();
+                        """)
+
+                        # Keep window open for 3 seconds after sync completes so user can see results
+                        print(f'[sync] Keeping window open for 3 seconds to view results...')
+                        time.sleep(3)
                 else:
                     print('[sync] No pending scans to sync')
             except Exception as exc:
