@@ -14,6 +14,8 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from attendance import AttendanceService
+from sync import SyncService
+import config
 from main import (
     Api,
     DATABASE_PATH,
@@ -192,6 +194,14 @@ def run_stress_test(
     )
     _ensure_station_name(service)
 
+    # Initialize sync service for cloud integration testing
+    sync_service = SyncService(
+        db=service._db,
+        api_url=config.CLOUD_API_URL,
+        api_key=config.CLOUD_API_KEY,
+        batch_size=config.CLOUD_SYNC_BATCH_SIZE,
+    )
+
     def on_load_finished(ok: bool) -> None:
         load_state['ok'] = ok
         if load_loop.isRunning():
@@ -251,6 +261,38 @@ def run_stress_test(
         duration = time.perf_counter() - start
         snapshot = _collect_snapshot(view)
 
+        # Test sync service before export (simulates shutdown sync)
+        sync_attempted = False
+        sync_success = False
+        synced_count = 0
+        failed_count = 0
+
+        if sync_service:
+            try:
+                stats_before = sync_service.db.get_sync_statistics()
+                pending_before = stats_before.get('pending', 0)
+
+                if pending_before > 0:
+                    sync_attempted = True
+                    print(f'[sync] Syncing {pending_before} pending scan(s) before export...')
+                    sync_start = time.perf_counter()
+                    sync_result = sync_service.sync_pending_scans()
+                    sync_duration = time.perf_counter() - sync_start
+
+                    synced_count = sync_result.get('synced', 0)
+                    failed_count = sync_result.get('failed', 0)
+                    pending_after = sync_result.get('pending', 0)
+
+                    sync_success = synced_count > 0 or failed_count == 0
+
+                    print(f'[sync] Complete in {sync_duration:.2f}s: {synced_count} synced, {failed_count} failed, {pending_after} pending')
+                else:
+                    print('[sync] No pending scans to sync')
+            except Exception as exc:
+                print(f'[sync] Sync failed: {exc}')
+                sync_attempted = True
+                sync_success = False
+
         export_info = None
         try:
             export_info = service.export_scans()
@@ -274,6 +316,16 @@ def run_stress_test(
         print(f'Invalid scans   : {invalid}')
         print(f'Failures        : {len(failures)}')
         print(f'Total runtime   : {duration:.2f}s')
+
+        if sync_attempted:
+            print(f'\n--- Cloud Sync Results ---')
+            print(f'Sync attempted  : Yes')
+            print(f'Sync success    : {"Yes" if sync_success else "No"}')
+            print(f'Scans synced    : {synced_count}')
+            print(f'Scans failed    : {failed_count}')
+        else:
+            print(f'\n--- Cloud Sync Results ---')
+            print(f'Sync attempted  : No (no pending scans)')
 
         if failures:
             print("\nFirst failure:")
