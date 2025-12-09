@@ -217,16 +217,28 @@ class SyncService:
                         "pending": stats["pending"],
                     }
                 else:
-                    # Non-retryable API error (4xx except 429) - mark as failed immediately
-                    if 400 <= response.status_code < 500 and response.status_code != 429:
+                    # Classify error as retryable or permanent
+                    if response.status_code == 401:
+                        # 401 Unauthorized - likely temporary (API key update in progress)
+                        # Treat as retryable so scans stay pending and can retry
+                        error_msg = f"API error: {response.status_code} (Unauthorized - retrying)"
+                        last_error = error_msg
+                        if attempt < max_attempts - 1:
+                            wait_time = backoff_seconds * (2 ** attempt)  # Exponential backoff
+                            LOGGER.warning(f"{error_msg}, retrying in {wait_time}s...")
+                            time.sleep(wait_time)
+                        continue
+                    elif 400 <= response.status_code < 500 and response.status_code != 429:
+                        # Other 4xx errors (bad request, etc.) - non-retryable, mark as failed
                         error_msg = f"API error: {response.status_code} (non-retryable)"
                         scan_ids = [scan.id for scan in pending_scans]
                         self.db.mark_scans_as_failed(scan_ids, error_msg)
                         LOGGER.error(f"Sync failed: {error_msg}")
+                        stats = self.db.get_sync_statistics()
                         return {
                             "synced": 0,
                             "failed": len(pending_scans),
-                            "pending": len(pending_scans),
+                            "pending": stats["pending"],
                         }
                     else:
                         # Retryable error (5xx or 429) - will retry
