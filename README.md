@@ -59,6 +59,7 @@ python main.py
   - Timing: checks every `AUTO_SYNC_CHECK_INTERVAL_SECONDS`.
   - Conditions: idle, pending scans ≥ `AUTO_SYNC_MIN_PENDING_SCANS`, no active sync.
   - Messages: start/success/fail messages auto-clear after `AUTO_SYNC_MESSAGE_DURATION_MS`.
+- **Sync-all option**: `sync_pending_scans(sync_all=True, max_batches=n)` flushes all pending scans in batches (opt-in; default is one batch) for admin or stress-test scenarios.
 - **Shutdown flow**: On close, attempts a sync for pending scans, then exports; UI overlay shows sync/export status.
 - **Batching**: `sync_pending_scans` uploads batches and marks records `synced`/`failed` in SQLite with stats.
 
@@ -105,6 +106,7 @@ AUTO_SYNC_CONNECTION_TIMEOUT = 5
     # Explicit barcode list
     python tests/stress_full_app.py 101117 101118 101119 --iterations 30 --delay-ms 10
     ```
+  - Behavior: checks cloud connectivity before bulk sync; if offline, skips sync and proceeds to export. After syncing, holds the window open for 3 seconds so you can view counters.
 - `tests/simulate_scans.py`: submits barcodes to `web/index.html` without the desktop shell.
 - Sync diagnostics: `test_production_sync.py`, `test_batch_sync.py`, `test_connection_scenarios.py`, `debug_sync_performance.py`, `reset_failed_scans.py`, `migrate_sync_schema.py`, `create_test_scan.py`.
 - Timestamp check: `tests/test_utc_timestamps.py` verifies UTC `Z` suffix format.
@@ -126,6 +128,7 @@ pyinstaller TrackAttendance.spec
 - `data/`, `exports/` — runtime storage (ignored by git); `Backup/` — archived experiments.
 
 ## Version History (high level)
+- **Current (Dec 2025)** — Sync-all option for cloud uploads (`sync_pending_scans(sync_all=True)`), and stress harness improvements (connection test before sync, 3s post-sync hold to view results).
 - **v1.2.0** — Auto-Sync Intelligence: idle detection, connectivity check, inline status updates, configurable via `config.py`.
 - **v1.1.0** — Sync status UI redesign: compact layout, spinning sync icon, space optimization.
 - **v1.0.0** — Initial production cloud sync: batch uploads, idempotency, offline-first.
