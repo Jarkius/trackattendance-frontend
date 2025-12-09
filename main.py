@@ -646,10 +646,96 @@ def main() -> None:
         event.ignore()
         window.setProperty('export_notification_triggered', True)
 
+        # === SYNC PHASE ===
+        if sync_service:
+            try:
+                # Check if there are pending scans
+                stats = sync_service.db.get_sync_statistics()
+                pending_count = stats.get('pending', 0)
+
+                if pending_count > 0:
+                    # Show "syncing" overlay
+                    sync_payload = {
+                        'stage': 'sync',
+                        'ok': True,
+                        'message': f'Syncing {pending_count} pending scan(s)...',
+                        'destination': '',
+                        'showConfirm': False,
+                        'autoHideMs': 0,
+                        'shouldClose': False,
+                    }
+                    payload_js = json.dumps(sync_payload)
+                    view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
+
+                    # Perform sync
+                    sync_result = sync_service.sync_pending_scans()
+
+                    # Determine sync outcome message
+                    synced_count = sync_result.get('synced', 0)
+                    failed_count = sync_result.get('failed', 0)
+
+                    if synced_count > 0 and failed_count == 0:
+                        sync_msg = f'Synced {synced_count} scan(s) successfully. Proceeding with export...'
+                        sync_ok = True
+                    elif synced_count > 0 and failed_count > 0:
+                        sync_msg = f'Synced {synced_count} scan(s), {failed_count} failed. Proceeding with export...'
+                        sync_ok = True
+                    elif failed_count > 0:
+                        sync_msg = f'Sync failed for {failed_count} scan(s). Proceeding with export...'
+                        sync_ok = False
+                    else:
+                        sync_msg = 'No scans synced. Proceeding with export...'
+                        sync_ok = True
+
+                    # Show brief sync result (don't wait for user confirmation)
+                    sync_done_payload = {
+                        'stage': 'sync',
+                        'ok': sync_ok,
+                        'message': sync_msg,
+                        'destination': '',
+                        'showConfirm': False,
+                        'autoHideMs': 0,
+                        'shouldClose': False,
+                    }
+                    payload_js = json.dumps(sync_done_payload)
+                    view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
+
+                    # Brief delay to show sync result (500ms)
+                    time.sleep(0.5)
+            except Exception as exc:
+                # Sync failed - log error but continue with export
+                error_payload = {
+                    'stage': 'sync',
+                    'ok': False,
+                    'message': f'Sync error: {str(exc)}. Proceeding with export...',
+                    'destination': '',
+                    'showConfirm': False,
+                    'autoHideMs': 0,
+                    'shouldClose': False,
+                }
+                payload_js = json.dumps(error_payload)
+                view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
+                time.sleep(0.5)
+
+        # === EXPORT PHASE ===
+        # Show "exporting" overlay
+        export_start_payload = {
+            'stage': 'export',
+            'ok': True,
+            'message': 'Generating attendance report...',
+            'destination': '',
+            'showConfirm': False,
+            'autoHideMs': 0,
+            'shouldClose': False,
+        }
+        payload_js = json.dumps(export_start_payload)
+        view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
+
         try:
             export_result = service.export_scans()
         except Exception as exc:
             payload = {
+                'stage': 'export',
                 'ok': False,
                 'message': f'Unable to export attendance report: {exc}',
                 'destination': '',
@@ -661,6 +747,7 @@ def main() -> None:
             if export_result.get('ok'):
                 destination = export_result.get('absolutePath') or export_result.get('fileName') or ''
                 payload = {
+                    'stage': 'complete',
                     'ok': True,
                     'message': 'Attendance report exported successfully.',
                     'destination': destination,
@@ -670,6 +757,7 @@ def main() -> None:
                 }
             else:
                 payload = {
+                    'stage': 'export',
                     'ok': False,
                     'message': export_result.get('message', 'Unable to export attendance report.'),
                     'destination': export_result.get('absolutePath') or export_result.get('fileName') or '',
@@ -678,7 +766,7 @@ def main() -> None:
                     'shouldClose': False,
                 }
         payload_js = json.dumps(payload)
-        view.page().runJavaScript(f"window.__handleExportShutdown({payload_js});")
+        view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
 
     window.closeEvent = _handle_close_event
 

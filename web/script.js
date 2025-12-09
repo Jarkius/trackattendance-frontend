@@ -143,6 +143,44 @@ ${destination}` : message;
         }
     };
 
+    window.__handleSyncExportShutdown = (payload = {}) => {
+        const stage = payload.stage || 'sync';
+        const ok = Boolean(payload.ok);
+        const baseMessage = typeof payload.message === 'string' ? payload.message.trim() : '';
+        const destination = typeof payload.destination === 'string' ? payload.destination : '';
+        const showConfirm = payload.showConfirm !== undefined ? Boolean(payload.showConfirm) : false;
+        const autoHideMsRaw = typeof payload.autoHideMs === 'number' ? payload.autoHideMs : 0;
+        const autoHideMs = Number.isNaN(autoHideMsRaw) ? 0 : Math.max(0, autoHideMsRaw);
+        const shouldClose = Boolean(payload.shouldClose);
+
+        overlayIntent.shouldClose = shouldClose;
+
+        let title = 'Closing Application';
+        if (stage === 'sync') {
+            title = ok ? 'Syncing Scans...' : 'Sync Warning';
+        } else if (stage === 'export') {
+            title = ok ? 'Exporting Data...' : 'Export Failed';
+        } else if (stage === 'complete') {
+            title = ok ? 'Ready to Close' : 'Warning';
+        }
+
+        const message = baseMessage || 'Processing...';
+        showExportOverlay({ ok, message, destination, autoHideMs, showConfirm, title });
+
+        if (shouldClose) {
+            const closeDelay = autoHideMs > 0 ? autoHideMs : 1500;
+            window.setTimeout(() => {
+                queueOrRun((bridge) => {
+                    if (bridge.finalize_export_close) {
+                        bridge.finalize_export_close();
+                        return;
+                    }
+                    bridge.close_window();
+                });
+            }, closeDelay);
+        }
+    };
+
     const returnFocusToInput = () => {
         window.setTimeout(() => {
             if (document.body.contains(barcodeInput)) {
