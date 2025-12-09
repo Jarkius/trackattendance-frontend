@@ -18,7 +18,8 @@ Production-ready desktop application for scanning QR/1D barcodes, matching them 
 - 📊 Instant feedback banner, dashboard counters, and recent-history list.
 - 🎨 Compact UI with optimized spacing; sync controls inline with stats.
 - 🔄 Manual sync button (spinning icon during sync) and idle-triggered auto-sync.
-- 🔍 Unknowns captured as “Not matched” for later reconciliation.
+- 🔍 Unknowns captured as "Not matched" for later reconciliation.
+- 🛑 **Duplicate badge detection** (v1.3.0+): Prevents accidental duplicate scans within configurable time window; configurable actions (warn, block, or silent).
 - 📈 One-click exports plus automatic export on shutdown (after a sync attempt).
 - 🌐 Offline-first assets; runs without network access.
 - 🛡 Graceful error handling and fallback UI if web assets fail to load.
@@ -51,6 +52,69 @@ python main.py
 - Opens frameless and fullscreen by default (controlled by `config.SHOW_FULL_SCREEN = True` and `config.ENABLE_FADE_ANIMATION = True`).
 - Shows "Awaiting first scan" until the first badge is recorded.
 - Press `Escape` to close the application; at shutdown, syncs pending scans (if online) then exports all records to XLSX.
+
+## Duplicate Badge Detection (v1.3.0+)
+
+Prevents accidental duplicate scans within a configurable time window. Useful for high-volume scanning environments where badges may be scanned multiple times in quick succession.
+
+### Configuration
+
+Add these to your `.env` file:
+
+```ini
+# Duplicate Badge Detection Settings
+DUPLICATE_BADGE_DETECTION_ENABLED=True          # Enable/disable detection
+DUPLICATE_BADGE_TIME_WINDOW_SECONDS=60          # Detection window (default: 60s)
+DUPLICATE_BADGE_ACTION=block                    # warn | block | silent
+DUPLICATE_BADGE_ALERT_DURATION_MS=3000          # Alert display time (ms)
+```
+
+### Action Modes
+
+**`warn` (default)**: Scan is accepted and recorded. Yellow alert overlay displays briefly.
+- User sees: "DUPLICATED" in yellow
+- Scan is recorded to database
+- Alert auto-dismisses after configured duration
+- Input re-enabled for next scan
+
+**`block`**: Scan is rejected and NOT recorded. Red alert overlay displays briefly.
+- User sees: "DUPLICATED" in red
+- Scan is rejected (not written to database)
+- Alert auto-dismisses after configured duration
+- Input re-enabled for next scan
+- Prevents duplicate records while allowing legitimate re-scans after the time window expires
+
+**`silent`**: Scan is accepted and recorded. No alert displayed.
+- Useful for testing; no UI feedback for duplicates
+- Scan is recorded to database
+
+### How It Works
+
+1. When a badge is scanned, the system checks if the same badge was scanned at the same station within the configured time window.
+2. If a duplicate is detected:
+   - In **warn mode**: Records the scan and shows a yellow alert
+   - In **block mode**: Rejects the scan (no recording) and shows a red alert
+   - In **silent mode**: Records the scan with no alert
+3. Input is disabled during the alert to prevent accidental rapid re-scanning
+4. Timer resets on each new scan of a different badge
+
+### UI Alert
+
+- Alert overlays the barcode input area (prevents further scans)
+- Displays badge ID and full name for user confirmation
+- Color changes per action mode (yellow = warn, red = block)
+- Auto-dismisses after `DUPLICATE_BADGE_ALERT_DURATION_MS`
+- Professional design matching export overlay pattern
+
+### For Testing
+
+To disable duplicate detection (useful for stress testing):
+
+```ini
+DUPLICATE_BADGE_DETECTION_ENABLED=False
+```
+
+---
 
 ## Cloud Synchronization
 
