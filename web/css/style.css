@@ -758,15 +758,11 @@ header h1 {
     display: none;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 250, 225, 0.92);  /* Light yellow transparent - warn mode default */
+    background: rgba(255, 255, 255, 0.94);
     border-radius: 12px;
     text-align: center;
     padding: 32px;
     z-index: 5;
-}
-
-.duplicate-overlay--error {
-    background: rgba(255, 235, 238, 0.92);  /* Light red transparent - block/error mode */
 }
 
 .duplicate-overlay--visible {
@@ -775,44 +771,45 @@ header h1 {
 
 .duplicate-overlay__dialog {
     background-color: var(--background);
-    border: 2px solid #fbc02d;  /* Yellow border - warn mode default */
+    border: 3px solid #fbc02d;  /* Yellow border - warn mode default */
     border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
-    max-width: 420px;
+    padding: 24px 28px;
+    box-shadow: 0 12px 32px rgba(251, 192, 45, 0.2);  /* Yellow shadow - warn mode default */
+    max-width: 520px;
     width: 100%;
 }
 
 .duplicate-overlay--error .duplicate-overlay__dialog {
     border-color: #f44336;  /* Red border - block/error mode */
+    box-shadow: 0 12px 32px rgba(244, 67, 54, 0.2);  /* Red shadow - block/error mode */
 }
 
-.duplicate-overlay__icon {
-    font-size: 2rem;
-    line-height: 1;
-    margin-bottom: 8px;
-}
-
-.duplicate-overlay__title {
-    font-size: 1.2rem;
-    margin-bottom: 8px;
-    padding-bottom: 0;
-    color: #d4a500;  /* Yellow text - warn mode default */
+.duplicate-overlay .duplicate-overlay__title {
+    font-size: 1.6rem;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    color: #fbc02d;  /* Yellow - warn mode default */
+    font-weight: 700;
 }
 
 .duplicate-overlay--error .duplicate-overlay__title {
-    color: #f44336;  /* Red text - block/error mode */
+    color: #f44336;  /* Red - block/error mode */
 }
 
-.duplicate-overlay__message {
-    margin: 0;
-    white-space: pre-wrap;
-    line-height: 1.4;
+.duplicate-overlay__badge {
+    margin: 0 0 8px 0;
+    font-size: 1.4rem;
     color: var(--deloitte-grey-dark);
-    font-size: 0.9rem;
+    line-height: 1.5;
+    text-align: center;
 }
 
-.duplicate-overlay--error .duplicate-overlay__message {
-    color: #b71c1c;  /* Dark red text - block/error mode */
+.duplicate-overlay__name {
+    margin: 0;
+    font-size: 1.4rem;
+    color: var(--deloitte-black);
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: center;
 }
 

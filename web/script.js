@@ -193,8 +193,10 @@ ${destination}` : message;
     let duplicateOverlayTimeout = null;
     window.__handleDuplicateBadge = (payload = {}) => {
         const duplicateOverlay = document.getElementById('duplicate-overlay');
-        const duplicateMessage = document.getElementById('duplicate-overlay-message');
-        if (!duplicateOverlay || !duplicateMessage) {
+        const duplicateTitle = document.getElementById('duplicate-overlay-title');
+        const duplicateBadge = document.getElementById('duplicate-overlay-badge');
+        const duplicateName = document.getElementById('duplicate-overlay-name');
+        if (!duplicateOverlay || !duplicateTitle || !duplicateBadge || !duplicateName) {
             return;
         }
 
@@ -205,12 +207,15 @@ ${destination}` : message;
         }
 
         const badgeId = payload.badgeId || 'Unknown';
-        const fullName = payload.fullName || 'Badge scanned';
+        const fullName = payload.fullName || 'Unknown';
         const isError = payload.isError || false;  // true for block mode, false for warn mode
 
-        // Build overlay message with user info
-        const message = `Badge: ${badgeId}\nName: ${fullName}`;
-        duplicateMessage.textContent = message;
+        // Set title - always "DUPLICATED" for professional tone
+        duplicateTitle.textContent = 'DUPLICATED';
+
+        // Populate badge ID and full name in separate elements
+        duplicateBadge.textContent = badgeId;
+        duplicateName.textContent = fullName;
 
         // Update styling based on error state
         duplicateOverlay.classList.toggle('duplicate-overlay--error', isError);
