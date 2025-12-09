@@ -60,9 +60,60 @@ class SyncService:
         except Exception as e:
             return False, f"Connection error: {str(e)}"
 
-    def sync_pending_scans(self) -> Dict[str, int]:
+    def sync_pending_scans(self, sync_all: bool = False, max_batches: int = None) -> Dict[str, int]:
         """
         Upload pending scans to cloud API.
+
+        Args:
+            sync_all: If True, syncs all pending scans in batches until none remain.
+                      If False (default), syncs only one batch.
+            max_batches: Maximum number of batches to sync when sync_all=True.
+                         Prevents infinite loops. Default None (no limit).
+
+        Returns:
+            Dictionary with counts: {"synced": int, "failed": int, "pending": int}
+            If sync_all=True, also includes {"batches": int}
+        """
+        if not sync_all:
+            # Original behavior: sync one batch only
+            return self._sync_one_batch()
+
+        # Sync all pending scans in batches
+        total_synced = 0
+        total_failed = 0
+        batch_count = 0
+
+        while True:
+            batch_result = self._sync_one_batch()
+            batch_synced = batch_result.get('synced', 0)
+            batch_failed = batch_result.get('failed', 0)
+            pending = batch_result.get('pending', 0)
+
+            total_synced += batch_synced
+            total_failed += batch_failed
+            batch_count += 1
+
+            # Stop conditions
+            if pending == 0:
+                LOGGER.info(f"All scans synced after {batch_count} batch(es)")
+                break
+            if batch_synced == 0 and batch_failed == 0:
+                LOGGER.warning(f"No progress in batch {batch_count}, stopping")
+                break
+            if max_batches and batch_count >= max_batches:
+                LOGGER.info(f"Reached max_batches limit ({max_batches})")
+                break
+
+        return {
+            "synced": total_synced,
+            "failed": total_failed,
+            "pending": pending,
+            "batches": batch_count,
+        }
+
+    def _sync_one_batch(self) -> Dict[str, int]:
+        """
+        Internal method: Upload ONE BATCH of pending scans to cloud API.
 
         Returns:
             Dictionary with counts: {"synced": int, "failed": int, "pending": int}

@@ -208,7 +208,7 @@ def run_stress_test(
             load_loop.quit()
 
     def api_factory(quit_callback):
-        return Api(service=service, quit_callback=quit_callback)
+        return Api(service=service, quit_callback=quit_callback, sync_service=sync_service)
 
     try:
         app, window, view, _ = initialize_app(
@@ -302,16 +302,19 @@ def run_stress_test(
 
                     print(f'[sync] Syncing {pending_before} pending scan(s) now...')
                     sync_start = time.perf_counter()
-                    sync_result = sync_service.sync_pending_scans()
+
+                    # Sync all pending scans using sync_all=True
+                    sync_result = sync_service.sync_pending_scans(sync_all=True)
                     sync_duration = time.perf_counter() - sync_start
 
                     synced_count = sync_result.get('synced', 0)
                     failed_count = sync_result.get('failed', 0)
                     pending_after = sync_result.get('pending', 0)
+                    batch_count = sync_result.get('batches', 0)
 
                     sync_success = synced_count > 0 or failed_count == 0
 
-                    print(f'[sync] Complete in {sync_duration:.2f}s: {synced_count} synced, {failed_count} failed, {pending_after} pending')
+                    print(f'[sync] Complete in {sync_duration:.2f}s: {synced_count} synced, {failed_count} failed, {pending_after} pending ({batch_count} batches)')
 
                     # Update UI sync statistics after sync completes
                     view.page().runJavaScript("""
