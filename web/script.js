@@ -215,8 +215,9 @@ ${destination}` : message;
         // Update styling based on error state
         duplicateAlert.classList.toggle('alert-error', isError);
 
-        // Show the alert
+        // Show the alert and disable barcode input to prevent further scans
         duplicateAlert.style.display = '';
+        barcodeInput.disabled = true;
 
         // Auto-dismiss after configured duration
         const duration = payload.alertDurationMs || 3000;
@@ -224,6 +225,8 @@ ${destination}` : message;
             duplicateAlertTimeout = window.setTimeout(() => {
                 duplicateAlertTimeout = null;
                 duplicateAlert.style.display = 'none';
+                barcodeInput.disabled = false;  // Re-enable input after alert dismisses
+                returnFocusToInput();
             }, duration);
         }
     };
