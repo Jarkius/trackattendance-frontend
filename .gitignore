@@ -29,5 +29,11 @@ dist/
 exports/
 *.spec
 
+# Secrets & Environment
+.env
+.env.local
+*.key
+secrets/
+
 # Tooling
 tools/
