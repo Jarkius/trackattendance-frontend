@@ -13,7 +13,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from PyQt6.QtWidgets import QInputDialog, QMessageBox, QWidget
 
-from database import DatabaseManager, EmployeeRecord, ScanRecord
+from database import DatabaseManager, EmployeeRecord, ScanRecord, ISO_TIMESTAMP_FORMAT
 
 LOGGER = logging.getLogger(__name__)
 REQUIRED_COLUMNS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
@@ -258,7 +258,7 @@ class AttendanceService:
                     "badgeId": sanitized,
                     "fullName": employee.full_name if employee else "Unknown",
                 }
-        timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         self._db.record_scan(sanitized, self.station_name, employee, timestamp)
         history = self._db.get_recent_scans()
         payload = {
