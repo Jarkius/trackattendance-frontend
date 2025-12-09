@@ -361,15 +361,46 @@ def run_stress_test(
 
         # Final UI update to ensure user sees pending=0 and updated sync counters
         if sync_attempted and sync_success:
-            view.page().runJavaScript("""
-                (function() {
-                    if (typeof updateSyncStatus === 'function') {
-                        updateSyncStatus();
-                    }
-                })();
-            """)
-            print(f'[info] Keeping window open for 5 seconds to verify final sync status...')
-            time.sleep(5)  # Give user time to see pending=0, synced counter updated
+            print(f'[info] Updating UI to show final sync status (pending=0)...')
+
+            # Verify actual database state first
+            final_stats = sync_service.db.get_sync_statistics()
+            print(f'[info] Database stats - Pending: {final_stats["pending"]}, Synced: {final_stats["synced"]}, Failed: {final_stats["failed"]}')
+
+            # Force multiple UI refresh cycles to ensure callback completes
+            for refresh_cycle in range(3):
+                print(f'[info] UI refresh cycle {refresh_cycle + 1}/3...')
+
+                # Call updateSyncStatus via JavaScript
+                view.page().runJavaScript("""
+                    (function() {
+                        if (typeof updateSyncStatus === 'function') {
+                            updateSyncStatus();
+                        }
+                    })();
+                """)
+
+                # Process events aggressively
+                for _ in range(20):
+                    app.processEvents()
+
+                # Wait for bridge callback to complete
+                time.sleep(1.0)
+
+                # Process events again
+                for _ in range(20):
+                    app.processEvents()
+
+            # Now keep window open so user can see the results
+            print(f'[info] ============================================')
+            print(f'[info] Window will stay open for 10 seconds')
+            print(f'[info] VERIFY IN UI: Pending: 0, Synced: {final_stats["synced"]}')
+            print(f'[info] ============================================')
+
+            # Sleep in small chunks while processing events to keep UI responsive
+            for i in range(100):  # 100 × 100ms = 10 seconds
+                time.sleep(0.1)
+                app.processEvents()
 
         window.close()
         for _ in range(3):
