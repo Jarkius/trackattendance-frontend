@@ -758,11 +758,15 @@ header h1 {
     display: none;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 250, 225, 0.92);  /* Light yellow transparent - warn mode default */
     border-radius: 12px;
     text-align: center;
     padding: 32px;
     z-index: 5;
+}
+
+.duplicate-overlay--error {
+    background: rgba(255, 235, 238, 0.92);  /* Light red transparent - block/error mode */
 }
 
 .duplicate-overlay--visible {
@@ -771,7 +775,7 @@ header h1 {
 
 .duplicate-overlay__dialog {
     background-color: var(--background);
-    border: 2px solid #fbc02d;
+    border: 2px solid #fbc02d;  /* Yellow border - warn mode default */
     border-radius: 12px;
     padding: 16px 20px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
@@ -780,7 +784,7 @@ header h1 {
 }
 
 .duplicate-overlay--error .duplicate-overlay__dialog {
-    border-color: #f44336;
+    border-color: #f44336;  /* Red border - block/error mode */
 }
 
 .duplicate-overlay__icon {
@@ -793,11 +797,11 @@ header h1 {
     font-size: 1.2rem;
     margin-bottom: 8px;
     padding-bottom: 0;
-    color: var(--deloitte-black);
+    color: #d4a500;  /* Yellow text - warn mode default */
 }
 
 .duplicate-overlay--error .duplicate-overlay__title {
-    color: #f44336;
+    color: #f44336;  /* Red text - block/error mode */
 }
 
 .duplicate-overlay__message {
@@ -809,6 +813,6 @@ header h1 {
 }
 
 .duplicate-overlay--error .duplicate-overlay__message {
-    color: #b71c1c;
+    color: #b71c1c;  /* Dark red text - block/error mode */
 }
 
