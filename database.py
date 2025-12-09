@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -228,6 +228,49 @@ class DatabaseManager:
             )
             for row in cursor.fetchall()
         ]
+
+    def check_if_duplicate_badge(
+        self,
+        badge_id: str,
+        station_name: str,
+        time_window_seconds: int = 60,
+    ) -> tuple[bool, Optional[int]]:
+        """
+        Check if a badge was recently scanned at the same station.
+
+        This prevents accidental duplicate scans within a time window.
+
+        Args:
+            badge_id: The badge ID to check
+            station_name: The station where scan occurred
+            time_window_seconds: Time window to check (default 60s)
+
+        Returns:
+            (is_duplicate: bool, original_scan_id: Optional[int])
+            - is_duplicate=True if badge was scanned within window
+            - original_scan_id=ID of the original scan if duplicate
+        """
+        # Calculate cutoff time (now - time_window)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=time_window_seconds)
+        cutoff_timestamp = cutoff_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Query: Find most recent scan with same badge at same station within window
+        cursor = self._connection.execute(
+            """
+            SELECT id FROM scans
+            WHERE badge_id = ?
+            AND station_name = ?
+            AND scanned_at >= ?
+            ORDER BY scanned_at DESC
+            LIMIT 1
+            """,
+            (badge_id, station_name, cutoff_timestamp),
+        )
+
+        result = cursor.fetchone()
+        if result:
+            return True, result["id"]
+        return False, None
 
     def fetch_pending_scans(self, limit: int = 100) -> List[ScanRecord]:
         """Fetch scans that need to be synced to cloud."""

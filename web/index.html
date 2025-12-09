@@ -36,6 +36,17 @@
                                     <button type="button" class="export-overlay__button export-btn export-overlay__button--hidden" id="export-overlay-confirm">Close Application</button>
                                 </div>
                             </div>
+                            <!-- Duplicate Badge Alert (Issue #21) -->
+                            <div id="duplicate-alert" class="alert alert-duplicate" style="display: none;">
+                                <div class="alert-content">
+                                    <span class="alert-icon">⚠️</span>
+                                    <div class="alert-text">
+                                        <div class="alert-title">Duplicate Scan</div>
+                                        <div class="alert-message" id="duplicate-message"></div>
+                                    </div>
+                                    <button class="alert-close" onclick="document.getElementById('duplicate-alert').style.display='none';">×</button>
+                                </div>
+                            </div>
                             <h5>Welcome</h5>
                             <p id="live-feedback-name">Ready to scan...</p>
                             <div class="scan-section">

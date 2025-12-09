@@ -226,13 +226,38 @@ class AttendanceService:
         }
 
     def register_scan(self, badge_id: str) -> Dict[str, object]:
+        import config
+
         sanitized = badge_id.strip()
         if not sanitized:
             return {
                 "ok": False,
                 "message": "Badge ID is required.",
             }
+
+        # Get employee info first (needed for both success and duplicate rejection)
         employee = self._employee_cache.get(sanitized)
+
+        # Check for duplicate badge scan (Issue #20)
+        is_duplicate = False
+        if config.DUPLICATE_BADGE_DETECTION_ENABLED:
+            is_dup, original_id = self._db.check_if_duplicate_badge(
+                sanitized,
+                self.station_name,
+                config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS
+            )
+            is_duplicate = is_dup
+
+            # If duplicate and action is 'block', reject the scan
+            if is_duplicate and config.DUPLICATE_BADGE_ACTION == 'block':
+                return {
+                    "ok": False,
+                    "status": "duplicate_rejected",
+                    "message": f"Duplicate: Badge {sanitized} scanned within {config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS} seconds",
+                    "is_duplicate": True,
+                    "badgeId": sanitized,
+                    "fullName": employee.full_name if employee else "Unknown",
+                }
         timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         self._db.record_scan(sanitized, self.station_name, employee, timestamp)
         history = self._db.get_recent_scans()
@@ -245,6 +270,7 @@ class AttendanceService:
             "totalScansToday": self._db.count_scans_today(),
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
+            "is_duplicate": is_duplicate,  # Include flag for UI alert
         }
         return payload
 

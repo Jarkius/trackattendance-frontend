@@ -189,6 +189,45 @@ ${destination}` : message;
         }, 80);
     };
 
+    // Duplicate Badge Alert Handler (Issue #21)
+    let duplicateAlertTimeout = null;
+    window.__handleDuplicateBadge = (payload = {}) => {
+        const duplicateAlert = document.getElementById('duplicate-alert');
+        const duplicateMessage = document.getElementById('duplicate-message');
+        if (!duplicateAlert || !duplicateMessage) {
+            return;
+        }
+
+        // Clear any pending timeout
+        if (duplicateAlertTimeout) {
+            window.clearTimeout(duplicateAlertTimeout);
+            duplicateAlertTimeout = null;
+        }
+
+        const badgeId = payload.badgeId || 'Unknown';
+        const fullName = payload.fullName || 'Badge scanned';
+        const isError = payload.isError || false;  // true for block mode, false for warn mode
+
+        // Build alert message with user info
+        const message = `Badge: ${badgeId}\nName: ${fullName}`;
+        duplicateMessage.textContent = message;
+
+        // Update styling based on error state
+        duplicateAlert.classList.toggle('alert-error', isError);
+
+        // Show the alert
+        duplicateAlert.style.display = '';
+
+        // Auto-dismiss after configured duration
+        const duration = payload.alertDurationMs || 3000;
+        if (duration > 0) {
+            duplicateAlertTimeout = window.setTimeout(() => {
+                duplicateAlertTimeout = null;
+                duplicateAlert.style.display = 'none';
+            }, duration);
+        }
+    };
+
     function adjustFeedbackSizing(content) {
         const message = typeof content === 'string' ? content : '';
         liveFeedbackName.style.fontSize = '';
@@ -355,6 +394,16 @@ ${destination}` : message;
         if (!response || response.ok === false) {
             const message = response?.message || 'Scan failed';
             setLiveFeedback(message, 'red', 3000);
+
+            // Show duplicate badge alert if this is a duplicate rejection (block mode)
+            if (response?.is_duplicate) {
+                window.__handleDuplicateBadge({
+                    badgeId: response.badgeId || 'Unknown',
+                    fullName: response.fullName || 'Badge blocked',
+                    isError: true,  // Red error styling for block mode
+                    alertDurationMs: 3000,  // Show for 3 seconds
+                });
+            }
             return;
         }
         state.totalScansToday = response.totalScansToday ?? state.totalScansToday;
@@ -371,6 +420,16 @@ ${destination}` : message;
             ? (response.fullName || badgeValue || 'Unknown')
             : 'Not matched';
         setLiveFeedback(message, found ? 'var(--deloitte-black)' : 'red');
+
+        // Show duplicate badge alert if this is a duplicate scan (warn mode - accepted but flagged)
+        if (response?.is_duplicate) {
+            window.__handleDuplicateBadge({
+                badgeId: response.badgeId || 'Unknown',
+                fullName: response.fullName || 'Unknown',
+                isError: false,  // Yellow warning styling for warn mode
+                alertDurationMs: 3000,  // Show for 3 seconds
+            });
+        }
     };
 
     const submitScan = (badgeValue) => {
