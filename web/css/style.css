@@ -751,112 +751,64 @@ header h1 {
     display: none;
 }
 
-/* Duplicate Badge Alert (Issue #21) - Overlay covering barcode input */
-.alert {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 2000;
-    max-width: 700px;
-    width: 85%;
-    box-sizing: border-box;
-}
-
-.alert-content {
-    display: flex;
-    flex-direction: column;
+/* Duplicate Badge Alert (Issue #21) - Uses export overlay pattern */
+.duplicate-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
     align-items: center;
-    gap: 16px;
-    padding: 32px 28px;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.94);
     border-radius: 12px;
-    background-color: #fff8e1;
-    border: 3px solid #fbc02d;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    text-align: center;
+    padding: 32px;
+    z-index: 5;
 }
 
-.alert-duplicate.alert-error .alert-content {
-    background-color: #ffebee;
+.duplicate-overlay--visible {
+    display: flex;
+}
+
+.duplicate-overlay__dialog {
+    background-color: var(--background);
+    border: 2px solid #fbc02d;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    max-width: 420px;
+    width: 100%;
+}
+
+.duplicate-overlay--error .duplicate-overlay__dialog {
     border-color: #f44336;
 }
 
-.alert-icon {
-    flex-shrink: 0;
-    font-size: 3.5rem;
+.duplicate-overlay__icon {
+    font-size: 2rem;
     line-height: 1;
+    margin-bottom: 8px;
 }
 
-.alert-text {
-    flex-grow: 1;
-    width: 100%;
-    text-align: center;
+.duplicate-overlay__title {
+    font-size: 1.2rem;
+    margin-bottom: 8px;
+    padding-bottom: 0;
+    color: var(--deloitte-black);
 }
 
-.alert-title {
-    font-weight: 700;
-    font-size: 1.4rem;
-    color: var(--deloitte-grey-dark);
-    margin: 0 0 12px 0;
-}
-
-.alert-duplicate.alert-error .alert-title {
+.duplicate-overlay--error .duplicate-overlay__title {
     color: #f44336;
 }
 
-.alert-message {
-    font-size: 1.1rem;
-    color: var(--deloitte-grey-dark);
+.duplicate-overlay__message {
     margin: 0;
-    line-height: 1.6;
-    font-weight: 500;
     white-space: pre-wrap;
-    word-break: break-word;
-}
-
-.alert-duplicate.alert-error .alert-message {
-    color: #b71c1c;
-}
-
-.alert-close {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    background: none;
-    border: none;
-    color: var(--deloitte-grey-medium);
-    font-size: 1.8rem;
-    cursor: pointer;
-    padding: 4px 8px;
-    margin: 0;
-    line-height: 1;
-    transition: color 0.2s ease-in-out;
-}
-
-.alert-close:hover {
+    line-height: 1.4;
     color: var(--deloitte-grey-dark);
+    font-size: 0.9rem;
 }
 
-.alert-duplicate.alert-error .alert-close {
-    color: #f44336;
-}
-
-.alert-duplicate.alert-error .alert-close:hover {
-    color: #d32f2f;
-}
-
-/* Alert animation for appearance - scale and fade in */
-@keyframes alert-pop-in {
-    from {
-        opacity: 0;
-        transform: translate(-50%, -50%) scale(0.85);
-    }
-    to {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-    }
-}
-
-.alert {
-    animation: alert-pop-in 0.3s ease-out;
+.duplicate-overlay--error .duplicate-overlay__message {
+    color: #b71c1c;
 }
 

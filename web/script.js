@@ -189,43 +189,45 @@ ${destination}` : message;
         }, 80);
     };
 
-    // Duplicate Badge Alert Handler (Issue #21)
-    let duplicateAlertTimeout = null;
+    // Duplicate Badge Alert Handler (Issue #21) - Uses export overlay pattern
+    let duplicateOverlayTimeout = null;
     window.__handleDuplicateBadge = (payload = {}) => {
-        const duplicateAlert = document.getElementById('duplicate-alert');
-        const duplicateMessage = document.getElementById('duplicate-message');
-        if (!duplicateAlert || !duplicateMessage) {
+        const duplicateOverlay = document.getElementById('duplicate-overlay');
+        const duplicateMessage = document.getElementById('duplicate-overlay-message');
+        if (!duplicateOverlay || !duplicateMessage) {
             return;
         }
 
         // Clear any pending timeout
-        if (duplicateAlertTimeout) {
-            window.clearTimeout(duplicateAlertTimeout);
-            duplicateAlertTimeout = null;
+        if (duplicateOverlayTimeout) {
+            window.clearTimeout(duplicateOverlayTimeout);
+            duplicateOverlayTimeout = null;
         }
 
         const badgeId = payload.badgeId || 'Unknown';
         const fullName = payload.fullName || 'Badge scanned';
         const isError = payload.isError || false;  // true for block mode, false for warn mode
 
-        // Build alert message with user info
+        // Build overlay message with user info
         const message = `Badge: ${badgeId}\nName: ${fullName}`;
         duplicateMessage.textContent = message;
 
         // Update styling based on error state
-        duplicateAlert.classList.toggle('alert-error', isError);
+        duplicateOverlay.classList.toggle('duplicate-overlay--error', isError);
 
-        // Show the alert and disable barcode input to prevent further scans
-        duplicateAlert.style.display = '';
+        // Show the overlay and disable barcode input to prevent further scans
+        duplicateOverlay.classList.add('duplicate-overlay--visible');
+        duplicateOverlay.setAttribute('aria-hidden', 'false');
         barcodeInput.disabled = true;
 
         // Auto-dismiss after configured duration
         const duration = payload.alertDurationMs || 3000;
         if (duration > 0) {
-            duplicateAlertTimeout = window.setTimeout(() => {
-                duplicateAlertTimeout = null;
-                duplicateAlert.style.display = 'none';
-                barcodeInput.disabled = false;  // Re-enable input after alert dismisses
+            duplicateOverlayTimeout = window.setTimeout(() => {
+                duplicateOverlayTimeout = null;
+                duplicateOverlay.classList.remove('duplicate-overlay--visible');
+                duplicateOverlay.setAttribute('aria-hidden', 'true');
+                barcodeInput.disabled = false;  // Re-enable input after overlay dismisses
                 returnFocusToInput();
             }, duration);
         }

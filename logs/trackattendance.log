@@ -1,0 +1,90 @@
+2025-12-09 23:27:54 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-09 23:28:56 [INFO    ] sync - Attempting to sync 48 scans
+2025-12-09 23:28:56 [INFO    ] sync - Syncing 48 scans to cloud API (attempt 1/3)...
+2025-12-09 23:28:57 [INFO    ] sync - Cloud API response received in 0.89s
+2025-12-09 23:28:57 [ERROR   ] sync - Sync failed: API error: 401 (non-retryable)
+2025-12-09 23:46:34 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-09 23:47:43 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-09 23:47:43 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-09 23:47:44 [INFO    ] sync - Cloud API response received in 1.14s
+2025-12-09 23:47:44 [ERROR   ] sync - Sync failed: API error: 401 (non-retryable)
+2025-12-09 23:53:21 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-09 23:54:25 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-09 23:54:25 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-09 23:54:27 [INFO    ] sync - Cloud API response received in 1.46s
+2025-12-09 23:54:27 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-10 00:01:30 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:01:54 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-10 00:01:54 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-10 00:01:55 [INFO    ] sync - Cloud API response received in 0.98s
+2025-12-10 00:01:55 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-10 00:02:02 [INFO    ] sync - No pending scans to sync
+2025-12-10 00:02:22 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:04:29 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:04:37 [INFO    ] sync - No pending scans to sync
+2025-12-10 00:04:42 [INFO    ] sync - No pending scans to sync
+2025-12-10 00:05:32 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-10 00:05:32 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-10 00:05:33 [INFO    ] sync - Cloud API response received in 1.09s
+2025-12-10 00:05:33 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-10 00:07:51 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:08:13 [INFO    ] sync - Attempting to sync 100 scans
+2025-12-10 00:08:13 [INFO    ] sync - Syncing 100 scans to cloud API (attempt 1/3)...
+2025-12-10 00:08:14 [INFO    ] sync - Cloud API response received in 0.81s
+2025-12-10 00:08:14 [INFO    ] sync - Successfully synced 100 scans (saved: 100, duplicates: 0)
+2025-12-10 00:08:23 [INFO    ] sync - Attempting to sync 49 scans
+2025-12-10 00:08:23 [INFO    ] sync - Syncing 49 scans to cloud API (attempt 1/3)...
+2025-12-10 00:08:25 [INFO    ] sync - Cloud API response received in 1.55s
+2025-12-10 00:08:25 [INFO    ] sync - Successfully synced 49 scans (saved: 49, duplicates: 0)
+2025-12-10 00:10:45 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:11:50 [INFO    ] sync - Attempting to sync 2 scans
+2025-12-10 00:11:50 [INFO    ] sync - Syncing 2 scans to cloud API (attempt 1/3)...
+2025-12-10 00:11:52 [INFO    ] sync - Cloud API response received in 1.22s
+2025-12-10 00:11:52 [INFO    ] sync - Successfully synced 2 scans (saved: 2, duplicates: 0)
+2025-12-10 00:18:49 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:19:53 [INFO    ] sync - Attempting to sync 3 scans
+2025-12-10 00:19:53 [INFO    ] sync - Syncing 3 scans to cloud API (attempt 1/3)...
+2025-12-10 00:19:55 [INFO    ] sync - Cloud API response received in 1.53s
+2025-12-10 00:19:55 [INFO    ] sync - Successfully synced 3 scans (saved: 3, duplicates: 0)
+2025-12-10 00:21:36 [INFO    ] sync - Attempting to sync 2 scans
+2025-12-10 00:21:36 [INFO    ] sync - Syncing 2 scans to cloud API (attempt 1/3)...
+2025-12-10 00:21:37 [INFO    ] sync - Cloud API response received in 0.77s
+2025-12-10 00:21:37 [INFO    ] sync - Successfully synced 2 scans (saved: 2, duplicates: 0)
+2025-12-10 00:21:37 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-10 00:27:19 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:28:25 [INFO    ] sync - Attempting to sync 3 scans
+2025-12-10 00:28:25 [INFO    ] sync - Syncing 3 scans to cloud API (attempt 1/3)...
+2025-12-10 00:28:27 [INFO    ] sync - Cloud API response received in 1.57s
+2025-12-10 00:28:27 [INFO    ] sync - Successfully synced 3 scans (saved: 3, duplicates: 0)
+2025-12-10 00:28:44 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-10 00:28:44 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-10 00:28:44 [INFO    ] sync - Cloud API response received in 0.68s
+2025-12-10 00:28:45 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-10 00:28:45 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-10 00:31:51 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:32:45 [INFO    ] sync - Attempting to sync 3 scans
+2025-12-10 00:32:45 [INFO    ] sync - Syncing 3 scans to cloud API (attempt 1/3)...
+2025-12-10 00:32:46 [INFO    ] sync - Cloud API response received in 0.69s
+2025-12-10 00:32:46 [INFO    ] sync - Successfully synced 3 scans (saved: 3, duplicates: 0)
+2025-12-10 00:32:46 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-10 00:33:20 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:33:31 [INFO    ] sync - Attempting to sync 2 scans
+2025-12-10 00:33:31 [INFO    ] sync - Syncing 2 scans to cloud API (attempt 1/3)...
+2025-12-10 00:33:32 [INFO    ] sync - Cloud API response received in 0.79s
+2025-12-10 00:33:32 [INFO    ] sync - Successfully synced 2 scans (saved: 2, duplicates: 0)
+2025-12-10 00:33:32 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-10 00:41:42 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:43:45 [INFO    ] sync - Attempting to sync 13 scans
+2025-12-10 00:43:45 [INFO    ] sync - Syncing 13 scans to cloud API (attempt 1/3)...
+2025-12-10 00:43:47 [INFO    ] sync - Cloud API response received in 1.53s
+2025-12-10 00:43:47 [INFO    ] sync - Successfully synced 13 scans (saved: 13, duplicates: 0)
+2025-12-10 00:51:14 [INFO    ] sync - Attempting to sync 4 scans
+2025-12-10 00:51:14 [INFO    ] sync - Syncing 4 scans to cloud API (attempt 1/3)...
+2025-12-10 00:51:15 [INFO    ] sync - Cloud API response received in 0.98s
+2025-12-10 00:51:15 [INFO    ] sync - Successfully synced 4 scans (saved: 4, duplicates: 0)
+2025-12-10 00:51:15 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-10 00:51:25 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-10 00:52:36 [INFO    ] sync - Attempting to sync 3 scans
+2025-12-10 00:52:36 [INFO    ] sync - Syncing 3 scans to cloud API (attempt 1/3)...
+2025-12-10 00:52:37 [INFO    ] sync - Cloud API response received in 0.91s
+2025-12-10 00:52:37 [INFO    ] sync - Successfully synced 3 scans (saved: 3, duplicates: 0)

@@ -36,15 +36,12 @@
                                     <button type="button" class="export-overlay__button export-btn export-overlay__button--hidden" id="export-overlay-confirm">Close Application</button>
                                 </div>
                             </div>
-                            <!-- Duplicate Badge Alert (Issue #21) -->
-                            <div id="duplicate-alert" class="alert alert-duplicate" style="display: none;">
-                                <div class="alert-content">
-                                    <span class="alert-icon">⚠️</span>
-                                    <div class="alert-text">
-                                        <div class="alert-title">Duplicate Scan</div>
-                                        <div class="alert-message" id="duplicate-message"></div>
-                                    </div>
-                                    <button class="alert-close" onclick="document.getElementById('duplicate-alert').style.display='none';">×</button>
+                            <!-- Duplicate Badge Alert (Issue #21) - Uses export overlay pattern -->
+                            <div class="duplicate-overlay" id="duplicate-overlay" aria-hidden="true">
+                                <div class="duplicate-overlay__dialog">
+                                    <div class="duplicate-overlay__icon">⚠️</div>
+                                    <h5 class="duplicate-overlay__title" id="duplicate-overlay-title">Duplicate Scan</h5>
+                                    <p class="duplicate-overlay__message" id="duplicate-overlay-message"></p>
                                 </div>
                             </div>
                             <h5>Welcome</h5>

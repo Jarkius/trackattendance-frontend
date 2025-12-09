@@ -30,7 +30,8 @@
       "Bash(timeout 150 python:*)",
       "Bash(gh issue close:*)",
       "Bash(\">\n    <div class=\"alert-content\">\n        <span class=\"alert-icon\">⚠️</span>\n        <div class=\"alert-text\">\n            <div class=\"alert-title\">Duplicate Scan</div>\n            <div class=\"alert-message\" id=\"duplicate-message\"></div>\n        </div>\n        <button class=\"alert-close\" onclick=\"this.parentElement.style.display='none')",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
