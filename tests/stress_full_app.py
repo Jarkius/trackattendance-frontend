@@ -222,6 +222,10 @@ def run_stress_test(
 
         window.setProperty('suppress_export_notification', True)
 
+        # Maximize window if showing in windowed mode
+        if show_window and not show_full_screen:
+            window.showMaximized()
+
         if load_state['ok'] is None:
             load_loop.exec()
         if not load_state['ok']:
@@ -274,7 +278,19 @@ def run_stress_test(
 
                 if pending_before > 0:
                     sync_attempted = True
-                    print(f'[sync] Syncing {pending_before} pending scan(s) before export...')
+                    print(f'[sync] {pending_before} pending scan(s) detected. Waiting 2 seconds to view UI...')
+
+                    # Update UI to show pending count before sync
+                    view.page().runJavaScript("""
+                        (function() {
+                            if (typeof updateSyncStatus === 'function') {
+                                updateSyncStatus();
+                            }
+                        })();
+                    """)
+                    time.sleep(2)  # Give user time to see pending count in UI
+
+                    print(f'[sync] Syncing {pending_before} pending scan(s) now...')
                     sync_start = time.perf_counter()
                     sync_result = sync_service.sync_pending_scans()
                     sync_duration = time.perf_counter() - sync_start
@@ -286,6 +302,15 @@ def run_stress_test(
                     sync_success = synced_count > 0 or failed_count == 0
 
                     print(f'[sync] Complete in {sync_duration:.2f}s: {synced_count} synced, {failed_count} failed, {pending_after} pending')
+
+                    # Update UI sync statistics after sync completes
+                    view.page().runJavaScript("""
+                        (function() {
+                            if (typeof updateSyncStatus === 'function') {
+                                updateSyncStatus();
+                            }
+                        })();
+                    """)
                 else:
                     print('[sync] No pending scans to sync')
             except Exception as exc:
@@ -350,7 +375,7 @@ def main() -> int:
     parser.add_argument('--sample-size', type=int, default=50, help='Employee barcodes to sample from the workbook when no explicit list is provided.')
     parser.add_argument('--no-specials', action='store_true', help='Exclude synthetic invalid barcode cases from the run.')
     parser.add_argument('--no-show-window', action='store_true', help='Keep the window hidden during the run.')
-    parser.add_argument('--windowed', action='store_true', help='Show the window but avoid fullscreen mode.')
+    parser.add_argument('--fullscreen', action='store_true', help='Show the window in fullscreen mode (default is maximized window).')
     parser.add_argument('--disable-fade', action='store_true', help='Skip the window fade animation to save a few frames.')
     parser.add_argument('--verbose', action='store_true', help='Log every scan instead of periodic checkpoints.')
     args = parser.parse_args()
@@ -369,7 +394,7 @@ def main() -> int:
         barcodes=base_barcodes,
         delay_ms=max(args.delay_ms, 0),
         show_window=not args.no_show_window,
-        show_full_screen=not args.windowed,
+        show_full_screen=args.fullscreen,
         enable_fade=not args.disable_fade,
         verbose=args.verbose,
     )
