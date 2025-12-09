@@ -95,6 +95,7 @@ AUTO_SYNC_CONNECTION_TIMEOUT = 5
 ## Testing & Utilities
 - `tests/stress_full_app.py` drives the PyQt window end-to-end.
   - Flags: `--iterations`, `--sample-size`, `--delay-ms`, `--no-specials`, `--no-show-window`, `--windowed`, `--disable-fade`, `--verbose`.
+  - Default behavior: shows the full UI in fullscreen when run with no flags; use `--no-show-window` (headless) or `--windowed` (non-fullscreen) to change it.
   - Examples:
     ```bash
     # Fast, headless smoke test
