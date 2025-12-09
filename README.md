@@ -1,19 +1,27 @@
 # Track Attendance
 
-PyQt6 desktop shell that hosts a local web UI for scanning badge barcodes, matching them against an Excel roster, writing scans to SQLite, exporting to XLSX, and optionally syncing to a cloud API.
+Production-ready desktop application for scanning QR/1D barcodes, matching them against a roster, logging to SQLite, exporting to XLSX, and syncing to a cloud API. Built with Python and a PyQt6-hosted web UI for a kiosk-style experience.
 
-## Features
-- Keyboard-wedge scanners or manual entry with live feedback and recent-history list.
-- Employee matching from `data/employee.xlsx`; unmatched scans are stored with a "not matched" flag for follow-up.
-- Local persistence in `data/database.db` with per-station tagging; prompts for a station name on first launch.
-- Manual exports to `exports/` plus automatic export (and optional sync) during shutdown.
-- Cloud sync via `sync.py` with manual "Sync Now" and idle-triggered auto-sync controlled by `config.py`.
-- Offline-first UI assets in `web/`; scanning and exporting work without network access.
+## Project Overview
+- 🚀 **Production-ready**: Offline-first desktop shell, packaged for Windows 10/11 via PyInstaller.
+- ✅ **Cloud Sync Enabled**: Optional sync to a Google Cloud Run API; runs fully offline if no network is available.
+- 🔒 **Privacy-first**: Only badge/timestamp/station are synced; employee names stay local.
+- 🖥️ **Kiosk UX**: Frameless PyQt window hosting a modern web UI with live feedback, counters, and recent history.
 
 ## System Requirements
-- Windows 10/11 target environment (PyInstaller bundle is Windows-focused).
-- Python 3.11+ recommended with PyQt6 and PyQt6-WebEngine.
-- Keyboard-emulating barcode scanner for best results (typing + Enter also works).
+- Windows 10/11 (packaged build target).
+- Python 3.11+ recommended (PyQt6 + WebEngine required).
+- Keyboard-emulating barcode scanner (manual typing + Enter works for testing).
+
+## Feature Highlights
+- 🔍 Barcode-first workflow; normalizes input before writing to the database.
+- 📊 Instant feedback banner, dashboard counters, and recent-history list.
+- 🎨 Compact UI with optimized spacing; sync controls inline with stats.
+- 🔄 Manual sync button (spinning icon during sync) and idle-triggered auto-sync.
+- 🔍 Unknowns captured as “Not matched” for later reconciliation.
+- 📈 One-click exports plus automatic export on shutdown (after a sync attempt).
+- 🌐 Offline-first assets; runs without network access.
+- 🛡 Graceful error handling and fallback UI if web assets fail to load.
 
 ## Setup
 1. Clone the repository and enter the folder.
@@ -31,76 +39,96 @@ PyQt6 desktop shell that hosts a local web UI for scanning badge barcodes, match
    - On first run, a sample `data/exampleof_employee.xlsx` is created if the roster is missing; update it and save as `employee.xlsx`.
    - `data/database.db` is created automatically.
 5. Configure sync (optional):
-   - Update `config.py` with your `CLOUD_API_URL`, `CLOUD_API_KEY`, and batch size.
-   - Tune auto-sync knobs (`AUTO_SYNC_*`) or set `AUTO_SYNC_ENABLED = False` to disable background sync.
+   - Set `CLOUD_API_URL`, `CLOUD_API_KEY`, `CLOUD_SYNC_BATCH_SIZE` in `config.py`.
+   - Tune auto-sync via `AUTO_SYNC_*` settings, or set `AUTO_SYNC_ENABLED = False` to disable.
    - Keep real API keys out of commits.
 
-## Run the App
+## Running the App
 ```bash
 python main.py
 ```
-- The app prompts for a station name on first launch; the value is saved in the database.
-- The window opens frameless and fullscreen by default. Edit `config.SHOW_FULL_SCREEN`/`config.ENABLE_FADE_ANIMATION` if you need different behavior.
-- Scan a badge (or type and press Enter). The dashboard counters and history update immediately.
+- Prompts for a station name on first launch (saved in SQLite).
+- Opens frameless and fullscreen by default (`config.SHOW_FULL_SCREEN` / `config.ENABLE_FADE_ANIMATION`).
+- Shows “Awaiting first scan” until the first badge is recorded.
 
-## Cloud Sync
-- `sync.py` uploads pending scans in batches to the configured API and marks records as `synced`/`failed` in SQLite.
-- Manual sync: the "Sync" button in the dashboard tests connectivity, then calls `sync_now` to push pending scans. Status text shows successes or errors.
-- Auto-sync: `AutoSyncManager` runs every `AUTO_SYNC_CHECK_INTERVAL_SECONDS`, checks idle time (`AUTO_SYNC_IDLE_SECONDS`), pending count (`AUTO_SYNC_MIN_PENDING_SCANS`), and connectivity before calling `sync_pending_scans`. Status messages clear after `AUTO_SYNC_MESSAGE_DURATION_MS`.
-- Shutdown flow: closing the window triggers a sync attempt for pending scans before exporting so cloud state and local exports stay aligned.
+## Cloud Synchronization
+- **Manual sync**: Dashboard sync button tests connectivity then pushes pending scans; status text shows success/error.
+- **Auto-Sync (v1.2.0)**:
+  - Idle detection: triggers only after `AUTO_SYNC_IDLE_SECONDS` with no scans.
+  - Connectivity check: hits API root before syncing.
+  - Timing: checks every `AUTO_SYNC_CHECK_INTERVAL_SECONDS`.
+  - Conditions: idle, pending scans ≥ `AUTO_SYNC_MIN_PENDING_SCANS`, no active sync.
+  - Messages: start/success/fail messages auto-clear after `AUTO_SYNC_MESSAGE_DURATION_MS`.
+- **Shutdown flow**: On close, attempts a sync for pending scans, then exports; UI overlay shows sync/export status.
+- **Batching**: `sync_pending_scans` uploads batches and marks records `synced`/`failed` in SQLite with stats.
+
+### Cloud API Configuration (config.py)
+```python
+CLOUD_API_URL = "https://trackattendance-api-969370105809.asia-southeast1.run.app"
+CLOUD_API_KEY = "your-api-key-here"
+CLOUD_SYNC_BATCH_SIZE = 100
+```
+
+### Auto-Sync Configuration
+```python
+AUTO_SYNC_ENABLED = True
+AUTO_SYNC_IDLE_SECONDS = 30
+AUTO_SYNC_CHECK_INTERVAL_SECONDS = 60
+AUTO_SYNC_MIN_PENDING_SCANS = 1
+AUTO_SYNC_SHOW_START_MESSAGE = True
+AUTO_SYNC_SHOW_COMPLETE_MESSAGE = True
+AUTO_SYNC_MESSAGE_DURATION_MS = 3000
+AUTO_SYNC_CONNECTION_TIMEOUT = 5
+```
+
+## UI/UX Notes
+- Sync status inline with stats; 30px circular sync icon (bright blue #00A3E0) with spin animation while syncing.
+- Color use: Blue (#00A3E0) for manual sync, Green (#86bc25) for auto-sync success, Red for errors.
+- Optimized spacing yields 3–5 more visible history rows; responsive layout for different screen sizes.
 
 ## Data & Exports
-- Runtime data lives in `data/` (SQLite database, employee workbook). These files are intentionally ignored by git.
-- Exports are written to `exports/Checkins_<station>_<timestamp>.xlsx` with submitted value, match flag, roster columns, station, and timestamp.
-- Manual exports are available from the UI; a final export runs automatically during shutdown even if sync fails.
+- Runtime data in `data/` (SQLite DB, employee workbook); ignored by git.
+- Exports: `exports/Checkins_<station>_<timestamp>.xlsx` with submitted value, match flag, roster columns, station, timestamp.
+- Automatic export on shutdown (after optional sync attempt); manual export from UI any time.
 
 ## Testing & Utilities
-- `tests/stress_full_app.py` drives the PyQt window end-to-end; example:
-  ```bash
-  python tests/stress_full_app.py --iterations 50 --no-show-window --disable-fade
-  ```
-- Stress test flags:
-  - `--iterations N` (default 200): number of scans to submit.
-  - `--sample-size N` (default 50): employee barcodes to sample from `employee.xlsx`.
-  - `--delay-ms N` (default 75): delay between scans.
-  - `--no-specials`: exclude synthetic invalid barcodes.
-  - `--no-show-window`: hide the window (headless).
-  - `--windowed`: show the window but not fullscreen.
-  - `--disable-fade`: skip the fade animation.
-  - `--verbose`: log every scan instead of periodic checkpoints.
-- Stress test examples:
-  ```bash
-  # Fast, headless smoke test
-  python tests/stress_full_app.py --iterations 50 --delay-ms 0 --no-show-window --disable-fade
+- `tests/stress_full_app.py` drives the PyQt window end-to-end.
+  - Flags: `--iterations`, `--sample-size`, `--delay-ms`, `--no-specials`, `--no-show-window`, `--windowed`, `--disable-fade`, `--verbose`.
+  - Examples:
+    ```bash
+    # Fast, headless smoke test
+    python tests/stress_full_app.py --iterations 50 --delay-ms 0 --no-show-window --disable-fade
 
-  # Windowed with sampled employees only
-  python tests/stress_full_app.py --iterations 100 --sample-size 40 --no-specials --windowed --delay-ms 30
+    # Windowed with sampled employees only
+    python tests/stress_full_app.py --iterations 100 --sample-size 40 --no-specials --windowed --delay-ms 30
 
-  # Explicit barcode list
-  python tests/stress_full_app.py 101117 101118 101119 --iterations 30 --delay-ms 10
-  ```
-- `tests/simulate_scans.py` loads `web/index.html` and submits a list of barcodes without the desktop shell.
-- Sync diagnostics: `test_production_sync.py`, `test_batch_sync.py`, `test_connection_scenarios.py`, `debug_sync_performance.py`, `reset_failed_scans.py`, `migrate_sync_schema.py`, and `create_test_scan.py` help validate API connectivity and database state. They expect a configured API and a local database.
-- Timestamp formatting checks: `tests/test_utc_timestamps.py` asserts stored timestamps use the UTC `Z` suffix.
+    # Explicit barcode list
+    python tests/stress_full_app.py 101117 101118 101119 --iterations 30 --delay-ms 10
+    ```
+- `tests/simulate_scans.py`: submits barcodes to `web/index.html` without the desktop shell.
+- Sync diagnostics: `test_production_sync.py`, `test_batch_sync.py`, `test_connection_scenarios.py`, `debug_sync_performance.py`, `reset_failed_scans.py`, `migrate_sync_schema.py`, `create_test_scan.py`.
+- Timestamp check: `tests/test_utc_timestamps.py` verifies UTC `Z` suffix format.
 
 ## Packaging
 ```bash
 pyinstaller TrackAttendance.spec
 ```
-- The packaged app lands in `dist/TrackAttendance/`. Keep `data/` alongside the executable so scans and exports persist between runs.
+- Output: `dist/TrackAttendance/TrackAttendance.exe`; keep `data/` alongside the executable so scans/exports persist.
 
 ## Repository Layout
-- `main.py`: PyQt6 entry point, window lifecycle, shutdown export/sync, auto-sync manager.
-- `attendance.py` / `database.py`: employee import, scan recording, SQLite access, and XLSX export.
-- `sync.py`: cloud sync client.
-- `config.py`: API endpoint/key, auto-sync cadence, and UI flags.
-- `web/`: HTML/CSS/JS for the embedded UI (Materialize, Inter, Material Icons).
-- `data/`, `exports/`: runtime storage (not version controlled; keep a `.gitkeep` only).
-- `tests/`: simulation and diagnostics scripts.
-- `assets/` and `TrackAttendance.spec`: packaging assets and PyInstaller configuration.
-- `Backup/`: archived experiments (not loaded at runtime).
+- `main.py` — PyQt6 entry, window lifecycle, shutdown sync/export, AutoSyncManager wiring.
+- `attendance.py` / `database.py` — roster import, scan recording, SQLite access, XLSX export.
+- `sync.py` — cloud sync client (batch upload, idempotency key generation).
+- `config.py` — API endpoint/key, auto-sync cadence, UI flags.
+- `web/` — HTML/CSS/JS for the embedded UI (Materialize, Inter, Material Icons).
+- `tests/` — simulation, stress, and diagnostics scripts.
+- `assets/` + `TrackAttendance.spec` — packaging assets and PyInstaller config.
+- `data/`, `exports/` — runtime storage (ignored by git); `Backup/` — archived experiments.
 
-## Troubleshooting
-- If the UI fails to load, a fallback HTML page appears; verify `web/` exists next to `main.py` or inside the PyInstaller bundle.
-- If employee data is missing, the app creates `data/exampleof_employee.xlsx` and flags unmatched scans; replace it with a real `employee.xlsx`.
-- Ensure Qt WebEngine is installed (from `requirements.txt`) when running tests that spin up a `QWebEngineView`.
+## Version History (high level)
+- **v1.2.0** — Auto-Sync Intelligence: idle detection, connectivity check, inline status updates, configurable via `config.py`.
+- **v1.1.0** — Sync status UI redesign: compact layout, spinning sync icon, space optimization.
+- **v1.0.0** — Initial production cloud sync: batch uploads, idempotency, offline-first.
+
+## Data Privacy
+- Do not commit `data/database.db`, `data/employee.xlsx`, or generated exports. Keep sensitive rosters local.
