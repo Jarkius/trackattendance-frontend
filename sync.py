@@ -4,12 +4,33 @@ from __future__ import annotations
 
 import logging
 import requests
+import time
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 
 from database import DatabaseManager, ScanRecord
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _is_retryable_error(exception: Exception) -> bool:
+    """
+    Determine if an error is transient and should trigger a retry.
+
+    Retryable errors:
+    - Connection timeouts
+    - Connection errors (temporary network issues)
+    - Server errors (5xx)
+
+    Non-retryable errors:
+    - Authentication errors (4xx except 429)
+    - Bad request (4xx)
+    """
+    if isinstance(exception, requests.exceptions.Timeout):
+        return True
+    if isinstance(exception, requests.exceptions.ConnectionError):
+        return True
+    return False
 
 
 class SyncService:
@@ -113,7 +134,9 @@ class SyncService:
 
     def _sync_one_batch(self) -> Dict[str, int]:
         """
-        Internal method: Upload ONE BATCH of pending scans to cloud API.
+        Internal method: Upload ONE BATCH of pending scans to cloud API with retry logic.
+
+        Uses exponential backoff for transient failures (timeouts, connection errors).
 
         Returns:
             Dictionary with counts: {"synced": int, "failed": int, "pending": int}
@@ -127,7 +150,7 @@ class SyncService:
 
         LOGGER.info(f"Attempting to sync {len(pending_scans)} scans")
 
-        # Build batch payload
+        # Build batch payload (reusable for retries)
         events = []
         for scan in pending_scans:
             # Ensure timestamp has Z suffix for UTC format
@@ -150,48 +173,98 @@ class SyncService:
                 },
             })
 
-        # Upload to cloud API
-        try:
-            LOGGER.info(f"Syncing {len(events)} scans to cloud API...")
-            response = requests.post(
-                f"{self.api_url}/v1/scans/batch",
-                json={"events": events},
-                headers={
-                    "Content-Type": "application/json; charset=utf-8",
-                    "Authorization": f"Bearer {self.api_key}",
-                },
-                timeout=10,  # Reduced from 30 to 10 seconds
-            )
-            response.encoding = 'utf-8'  # Force UTF-8 encoding
-            LOGGER.info(f"Cloud API response received in {response.elapsed.total_seconds():.2f}s")
+        # Upload to cloud API with retry logic
+        from config import SYNC_RETRY_ENABLED, SYNC_RETRY_MAX_ATTEMPTS, SYNC_RETRY_BACKOFF_SECONDS
 
-            if response.status_code == 200:
-                result = response.json()
-                synced_count = result.get("saved", 0) + result.get("duplicates", 0)
-                scan_ids = [scan.id for scan in pending_scans]
+        max_attempts = SYNC_RETRY_MAX_ATTEMPTS if SYNC_RETRY_ENABLED else 1
+        backoff_seconds = SYNC_RETRY_BACKOFF_SECONDS if SYNC_RETRY_ENABLED else 0
+        last_error = None
 
-                # Mark as synced
-                self.db.mark_scans_as_synced(scan_ids)
-
-                LOGGER.info(
-                    f"Successfully synced {synced_count} scans "
-                    f"(saved: {result.get('saved')}, duplicates: {result.get('duplicates')})"
+        for attempt in range(max_attempts):
+            try:
+                LOGGER.info(f"Syncing {len(events)} scans to cloud API (attempt {attempt + 1}/{max_attempts})...")
+                response = requests.post(
+                    f"{self.api_url}/v1/scans/batch",
+                    json={"events": events},
+                    headers={
+                        "Content-Type": "application/json; charset=utf-8",
+                        "Authorization": f"Bearer {self.api_key}",
+                    },
+                    timeout=10,
                 )
+                response.encoding = 'utf-8'  # Force UTF-8 encoding
+                LOGGER.info(f"Cloud API response received in {response.elapsed.total_seconds():.2f}s")
 
-                # Get remaining pending count
-                stats = self.db.get_sync_statistics()
+                if response.status_code == 200:
+                    result = response.json()
+                    synced_count = result.get("saved", 0) + result.get("duplicates", 0)
+                    scan_ids = [scan.id for scan in pending_scans]
 
-                return {
-                    "synced": synced_count,
-                    "failed": 0,
-                    "pending": stats["pending"],
-                }
-            else:
-                # API error - mark as failed
-                error_msg = f"API error: {response.status_code}"
+                    # Mark as synced
+                    self.db.mark_scans_as_synced(scan_ids)
+
+                    LOGGER.info(
+                        f"Successfully synced {synced_count} scans "
+                        f"(saved: {result.get('saved')}, duplicates: {result.get('duplicates')})"
+                    )
+
+                    # Get remaining pending count
+                    stats = self.db.get_sync_statistics()
+
+                    return {
+                        "synced": synced_count,
+                        "failed": 0,
+                        "pending": stats["pending"],
+                    }
+                else:
+                    # Non-retryable API error (4xx except 429) - mark as failed immediately
+                    if 400 <= response.status_code < 500 and response.status_code != 429:
+                        error_msg = f"API error: {response.status_code} (non-retryable)"
+                        scan_ids = [scan.id for scan in pending_scans]
+                        self.db.mark_scans_as_failed(scan_ids, error_msg)
+                        LOGGER.error(f"Sync failed: {error_msg}")
+                        return {
+                            "synced": 0,
+                            "failed": len(pending_scans),
+                            "pending": len(pending_scans),
+                        }
+                    else:
+                        # Retryable error (5xx or 429) - will retry
+                        error_msg = f"API error: {response.status_code}"
+                        last_error = error_msg
+                        if attempt < max_attempts - 1:
+                            wait_time = backoff_seconds * (2 ** attempt)  # Exponential backoff
+                            LOGGER.warning(f"{error_msg}, retrying in {wait_time}s...")
+                            time.sleep(wait_time)
+                        continue
+
+            except requests.exceptions.Timeout as e:
+                # Timeout - retryable
+                error_msg = f"Connection timeout: {str(e)}"
+                last_error = error_msg
+                if attempt < max_attempts - 1:
+                    wait_time = backoff_seconds * (2 ** attempt)
+                    LOGGER.warning(f"{error_msg}, retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    LOGGER.error(f"Sync failed after {max_attempts} attempts: {error_msg}")
+
+            except requests.exceptions.ConnectionError as e:
+                # Connection error - retryable
+                error_msg = f"Connection error: {str(e)}"
+                last_error = error_msg
+                if attempt < max_attempts - 1:
+                    wait_time = backoff_seconds * (2 ** attempt)
+                    LOGGER.warning(f"{error_msg}, retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    LOGGER.error(f"Sync failed after {max_attempts} attempts: {error_msg}")
+
+            except requests.exceptions.RequestException as e:
+                # Other network errors - mark as failed
+                error_msg = f"Network error: {str(e)}"
                 scan_ids = [scan.id for scan in pending_scans]
                 self.db.mark_scans_as_failed(scan_ids, error_msg)
-
                 LOGGER.error(f"Sync failed: {error_msg}")
 
                 return {
@@ -200,19 +273,18 @@ class SyncService:
                     "pending": len(pending_scans),
                 }
 
-        except requests.exceptions.RequestException as e:
-            # Network error - mark as failed
-            error_msg = f"Network error: {str(e)}"
+        # All retries exhausted with no success
+        if last_error:
+            error_msg = f"Network error (after {max_attempts} attempts): {last_error}"
             scan_ids = [scan.id for scan in pending_scans]
             self.db.mark_scans_as_failed(scan_ids, error_msg)
+            LOGGER.error(error_msg)
 
-            LOGGER.error(f"Sync failed: {error_msg}")
-
-            return {
-                "synced": 0,
-                "failed": len(pending_scans),
-                "pending": len(pending_scans),
-            }
+        return {
+            "synced": 0,
+            "failed": len(pending_scans),
+            "pending": len(pending_scans),
+        }
 
     def _generate_idempotency_key(self, scan: ScanRecord) -> str:
         """
