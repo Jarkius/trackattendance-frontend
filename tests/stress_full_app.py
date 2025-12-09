@@ -359,6 +359,18 @@ def run_stress_test(
                     print(f'[info] export written to {dest}')
             window.setProperty('export_notification_triggered', True)
 
+        # Final UI update to ensure user sees pending=0 and updated sync counters
+        if sync_attempted and sync_success:
+            view.page().runJavaScript("""
+                (function() {
+                    if (typeof updateSyncStatus === 'function') {
+                        updateSyncStatus();
+                    }
+                })();
+            """)
+            print(f'[info] Keeping window open for 5 seconds to verify final sync status...')
+            time.sleep(5)  # Give user time to see pending=0, synced counter updated
+
         window.close()
         for _ in range(3):
             app.processEvents()
