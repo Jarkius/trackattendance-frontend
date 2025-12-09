@@ -1,0 +1,79 @@
+# Product Requirements Document: QR Code Attendance Tracking System
+
+## 1. Introduction
+
+**Product:** QR Code Attendance Tracking System
+**Objective:** To provide a simple, reliable, and efficient solution for tracking employee attendance using QR code badges. The system is a standalone desktop application designed for kiosk-style deployment at entry points.
+**Target Audience:** Small to medium-sized businesses, event organizers, or any organization needing a simple on-premise attendance solution.
+**Problem Solved:** Replaces manual sign-in sheets, reduces human error in data entry, and provides an easily exportable digital record of attendance.
+
+## 2. Goals & Success Metrics
+
+*   **Primary Goal:** Streamline the attendance tracking process to be fast and frictionless for employees.
+*   **Secondary Goal:** Provide administrators with a simple way to manage rosters and export attendance data for reporting and payroll.
+*   **Success Metrics:**
+    *   Scan-to-feedback time under 1 second.
+    *   Reduction of data entry errors to near-zero.
+    *   Administrator time for report generation reduced by 90% compared to manual methods.
+    *   High user satisfaction from both employees and administrators.
+
+## 3. User Personas
+
+*   **Administrator:** Responsible for setting up the system, managing the employee roster (`employee.xlsx`), configuring the station, and exporting attendance reports. This user is moderately tech-savvy.
+*   **Employee:** Any individual whose attendance is being tracked. Their only interaction is scanning their QR code badge.
+
+## 4. Features
+
+*   **QR Code Scanning:** Captures attendance by scanning an employee's QR code badge.
+*   **Employee Roster Integration:** Imports employee data (e.g., Badge ID, Name, Department) from a standard Excel file.
+*   **Real-time UI Feedback:** Provides immediate on-screen confirmation for successful, duplicate, or unrecognized scans.
+*   **Dashboard View:** Displays key real-time metrics, including total scans today, unique employees present, and a log of recent scan activity.
+*   **Automated Data Export:** Exports the complete attendance log to a timestamped Excel file for archival and processing.
+*   **Station Configuration:** Allows setting a unique identifier for the physical scanning station, which is recorded with each scan.
+*   **Kiosk Mode:** Runs as a full-screen, frameless desktop application suitable for dedicated hardware.
+
+## 5. Functional Requirements
+
+### 5.1. System Setup & Configuration
+*   FR1.1: The application shall read employee data from `data/employee.xlsx`.
+*   FR1.2: If `employee.xlsx` is not found, the application must display a warning but continue to operate, logging all scans as "unmatched".
+*   FR1.3: The application shall store all scan data in a local SQLite database at `data/database.db`.
+*   FR1.4: On first run or if not configured, the application must prompt the administrator to set a unique Station ID.
+
+### 5.2. QR Code Scanning & Processing
+*   FR2.1: The system must accept input from any keyboard-emulating QR code scanner.
+*   FR2.2: Upon receiving a scan (a string followed by an Enter keypress), the system shall look up the badge ID in the employee roster.
+*   FR2.3: **Successful Scan:** If the badge ID is found, the system will record the employee's details, timestamp, and Station ID. The UI will display a success message with the employee's name.
+*   FR2.4: **Unmatched Scan:** If the badge ID is not found, the system will record the raw badge ID, timestamp, and Station ID, flagging the entry as "unmatched". The UI will display a warning message.
+*   FR2.5: **Duplicate Scan:** If an employee is scanned multiple times within a configurable time window (e.g., 5 minutes), the subsequent scans will be logged but flagged as duplicates. The UI will provide distinct feedback for this case.
+
+### 5.3. User Interface (UI)
+*   FR3.1: The main screen shall display a live dashboard with:
+    *   Total number of scans today.
+    *   Count of unique employees scanned today.
+    *   A scrolling log of the 10 most recent scans, including employee name (or badge ID if unmatched), time, and status.
+*   FR3.2: The UI shall include a button for the administrator to manually trigger a data export.
+*   FR3.3: The UI shall include a button to close the application.
+
+### 5.4. Data Export
+*   FR4.1: The application must be able to export the entire scan history from the database into an Excel (`.xlsx`) file.
+*   FR4.2: Exported files shall be saved to the `exports/` directory.
+*   FR4.3: The filename shall be timestamped to prevent overwrites, e.g., `attendance_YYYY-MM-DD_HH-MM-SS.xlsx`.
+*   FR4.4: The application shall automatically trigger an export when it is closed. The UI will show the status of this final export before shutting down.
+
+## 6. Non-Functional Requirements
+
+*   **NFR1 (Performance):** The time from scan to UI feedback must be less than 500ms.
+*   **NFR2 (Usability):** The interface must be intuitive, requiring no training for employees to use. Administrative functions should be clearly accessible.
+*   **NFR3 (Reliability):** The application must be stable for continuous operation (24/7). It must handle I/O errors gracefully (e.g., if the database file is locked).
+*   **NFR4 (Deployment):** The application must be distributable as a single executable file for Windows, with all web assets embedded.
+*   **NFR5 (Security):** As the application handles employee data, the `data/` directory should be secured by appropriate file system permissions. The application itself does not implement user authentication.
+
+## 7. Out of Scope (Future Enhancements)
+
+*   Centralized, web-based administration dashboard.
+*   Network synchronization between multiple scanning stations.
+*   Direct editing of employee or attendance records within the application.
+*   Display of employee photos upon scanning.
+*   Support for operating systems other than Windows.
+*   User roles and permissions.
