@@ -54,6 +54,8 @@ python main.py
 
 ## Cloud Synchronization
 
+**For detailed API documentation**, see [API.md](API.md) — covers endpoint specifications, request/response formats, authentication, and error handling.
+
 ### Sync Mechanism Overview
 The sync system is **offline-first** by design. All scans are recorded locally to SQLite with a `sync_status` field. Synchronization happens in three phases:
 
@@ -308,6 +310,8 @@ pyinstaller TrackAttendance.spec
 - `attendance.py` / `database.py` — roster import, scan recording, SQLite access, XLSX export.
 - `sync.py` — cloud sync client (batch upload, idempotency key generation).
 - `config.py` — API endpoint/key, auto-sync cadence, UI flags.
+- `API.md` — Cloud API specification, endpoints, authentication, error handling.
+- `ARCHITECTURE.md` — System design, component responsibilities, communication flow.
 - `web/` — HTML/CSS/JS for the embedded UI (Materialize, Inter, Material Icons).
 - `tests/` — simulation, stress, and diagnostics scripts.
 - `assets/` + `TrackAttendance.spec` — packaging assets and PyInstaller config.
