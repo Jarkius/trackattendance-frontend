@@ -81,6 +81,44 @@ class SyncService:
         except Exception as e:
             return False, f"Connection error: {str(e)}"
 
+    def test_authentication(self) -> Tuple[bool, str]:
+        """
+        Test authentication with the cloud API.
+        Makes a minimal authenticated request to verify the API key is valid.
+
+        Returns:
+            (success: bool, message: str)
+        """
+        try:
+            # Make a minimal POST request with auth header to verify token works
+            # Using empty events array - API accepts this without errors
+            response = requests.post(
+                f"{self.api_url}/v1/scans/batch",
+                json={"events": []},
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
+                timeout=5,
+            )
+            response.encoding = 'utf-8'
+
+            if response.status_code == 200:
+                return True, "API authentication successful"
+            elif response.status_code == 401:
+                return False, "API authentication failed (invalid or expired API key)"
+            elif response.status_code == 403:
+                return False, "API access forbidden (insufficient permissions)"
+            else:
+                return False, f"API error: {response.status_code}"
+
+        except requests.exceptions.Timeout:
+            return False, "Authentication check timeout"
+        except requests.exceptions.ConnectionError:
+            return False, "Cannot reach API (network error)"
+        except Exception as e:
+            return False, f"Authentication error: {str(e)}"
+
     def sync_pending_scans(self, sync_all: bool = False, max_batches: int = None) -> Dict[str, int]:
         """
         Upload pending scans to cloud API.

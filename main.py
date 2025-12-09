@@ -181,8 +181,14 @@ class AutoSyncManager(QObject):
             print(f"[AutoSync] No internet connection, skipping auto-sync")
             return
 
+        # Check authentication before attempting sync
+        auth_ok, auth_msg = self.sync_service.test_authentication()
+        if not auth_ok:
+            print(f"[AutoSync] Authentication failed: {auth_msg}")
+            return
+
         # All conditions met - trigger auto-sync
-        print(f"[AutoSync] Conditions met: idle={self.is_idle()}, pending={pending_count}, connected=True")
+        print(f"[AutoSync] Conditions met: idle={self.is_idle()}, pending={pending_count}, connected=True, auth=OK")
         self.trigger_auto_sync()
 
     def trigger_auto_sync(self) -> None:
@@ -384,6 +390,17 @@ class Api(QObject):
             return {
                 "ok": False,
                 "message": f"Cannot connect: {message}",
+                "synced": 0,
+                "failed": 0,
+                "pending": 0,
+            }
+
+        # Then test authentication
+        auth_ok, auth_msg = self._sync_service.test_authentication()
+        if not auth_ok:
+            return {
+                "ok": False,
+                "message": f"Authentication failed: {auth_msg}",
                 "synced": 0,
                 "failed": 0,
                 "pending": 0,
