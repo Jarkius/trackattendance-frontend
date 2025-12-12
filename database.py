@@ -259,7 +259,7 @@ class DatabaseManager:
 
         import logging
         logger = logging.getLogger(__name__)
-        logger.debug(
+        logger.info(
             f"DuplicateCheck: badge={badge_id}, station={station_name}, "
             f"window={time_window_seconds}s, cutoff={cutoff_timestamp}"
         )
@@ -281,7 +281,7 @@ class DatabaseManager:
         if result:
             logger.info(f"DuplicateCheck: FOUND duplicate scan (id={result[0]})")
         else:
-            logger.debug(f"DuplicateCheck: No duplicate found for {badge_id} at {station_name}")
+            logger.info(f"DuplicateCheck: No duplicate found for {badge_id} at {station_name}")
         if result:
             return True, result["id"]
         return False, None
