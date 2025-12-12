@@ -304,11 +304,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const configuredInterval = Number(payload?.connectionCheckIntervalMs);
         if (Number.isFinite(configuredInterval) && configuredInterval >= 0) {
             connectionCheckIntervalMs = configuredInterval;
-            if (connectionCheckIntervalMs === 0) {
-                stopConnectionStatusPolling();
-                return;
-            }
-            startConnectionStatusPolling();
+            // Don't start polling here - it will be started after the initial delay
+            console.info('[Config] Connection check interval:', connectionCheckIntervalMs, 'ms (polling deferred)');
             return;
         }
         connectionCheckIntervalMs = DEFAULT_CONNECTION_CHECK_INTERVAL_MS;
@@ -724,7 +721,9 @@ ${destination}` : message;
                 // Indicator starts black (invisible), so no rush to show status
                 // Uses configurable delay from CONNECTION_CHECK_INITIAL_DELAY_SECONDS
                 window.setTimeout(() => {
+                    console.info('[ConnectionSignal] Initial delay expired, starting connection checks');
                     refreshConnectionStatus();  // Check API connectivity after UI renders
+                    startConnectionStatusPolling();  // Start periodic polling after first check
                 }, connectionCheckInitialDelayMs);
                 returnFocusToInput();
             });
