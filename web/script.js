@@ -709,9 +709,10 @@ ${destination}` : message;
                 updateSyncStatus();  // Load sync status on startup
                 // Delay connection check to reduce initial load time
                 // Indicator starts black (invisible), so no rush to show status
+                // 5-10 second delay allows full UI render before background check
                 window.setTimeout(() => {
                     refreshConnectionStatus();  // Check API connectivity after UI renders
-                }, 2000);  // 2 second delay to prioritize UI responsiveness
+                }, 5000);  // 5 second delay to prioritize UI responsiveness and reduce load
                 returnFocusToInput();
             });
         });
