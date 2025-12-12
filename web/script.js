@@ -363,8 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bindConnectionSignal();
             flushApiQueue();
             loadInitialData();
-            refreshConnectionStatus();
-            startConnectionStatusPolling();
+            // Don't refresh connection status here - loadInitialData() handles the 15s delay
         });
     } else {
         console.warn('Qt WebChannel transport not available; desktop integration disabled.');
