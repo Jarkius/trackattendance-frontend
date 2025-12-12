@@ -707,7 +707,11 @@ ${destination}` : message;
                 state.history = Array.isArray(payload?.scanHistory) ? payload.scanHistory : [];
                 applyDashboardState();
                 updateSyncStatus();  // Load sync status on startup
-                refreshConnectionStatus();  // Check API connectivity on startup
+                // Delay connection check to reduce initial load time
+                // Indicator starts black (invisible), so no rush to show status
+                window.setTimeout(() => {
+                    refreshConnectionStatus();  // Check API connectivity after UI renders
+                }, 2000);  // 2 second delay to prioritize UI responsiveness
                 returnFocusToInput();
             });
         });
