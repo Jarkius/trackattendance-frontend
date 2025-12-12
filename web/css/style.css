@@ -52,8 +52,8 @@ header h1 {
     position: fixed;
     top: 23px;  /* Align with X icon center */
     right: 110px;  /* More gap from close button */
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: var(--deloitte-black) !important;
     box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.0);
@@ -71,7 +71,7 @@ header h1 {
     transform: translateY(-50%);
     width: 1px;
     height: 24px;
-    background: rgba(255, 255, 255, 0.3);  /* Grey/transparent white */
+    background: rgba(255, 255, 255, 0.45);  /* Grey/transparent white */
 }
 
 .connection-status--unknown {
