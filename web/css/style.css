@@ -127,6 +127,26 @@ header h1 {
     color: var(--deloitte-green);
 }
 
+#debug-offline-toggle {
+    position: absolute;
+    top: 50%;
+    right: 150px;
+    transform: translateY(-50%);
+    color: white;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s ease-in-out;
+}
+
+#debug-offline-toggle:hover {
+    color: var(--deloitte-green);
+}
+
+#debug-offline-toggle.debug-offline-active {
+    color: #f44336;
+    text-shadow: 0 0 8px rgba(244, 67, 54, 0.8);
+}
+
 .container-fluid {
     padding-top: 60px; /* Push content below header */
 }

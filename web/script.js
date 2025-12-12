@@ -91,7 +91,13 @@ window.toggleDebugOfflineMode = function() {
     const wasFalse = !window._debugForceOfflineMode;
     window._debugForceOfflineMode = wasFalse;
     console.info(`[DEBUG] Offline mode simulation: ${wasFalse ? 'ENABLED' : 'DISABLED'}`);
-    console.info('[DEBUG] Use window.toggleDebugOfflineMode() to toggle');
+
+    // Update UI: toggle icon appearance
+    const debugIcon = document.getElementById('debug-offline-toggle');
+    if (debugIcon) {
+        debugIcon.classList.toggle('debug-offline-active', wasFalse);
+    }
+
     return wasFalse;
 };
 
@@ -958,6 +964,16 @@ ${destination}` : message;
     if (scanHistoryList) {
         scanHistoryList.addEventListener('scroll', returnFocusToInput);
     }
+
+    // Debug: Add click handler for offline mode toggle
+    const debugOfflineToggle = document.getElementById('debug-offline-toggle');
+    if (debugOfflineToggle) {
+        debugOfflineToggle.addEventListener('click', (event) => {
+            event.stopPropagation();
+            window.toggleDebugOfflineMode();
+        });
+    }
+
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
             queueOrRun((bridge) => bridge.close_window());
