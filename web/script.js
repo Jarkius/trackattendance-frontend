@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let connectionCheckInitialDelayMs = DEFAULT_CONNECTION_CHECK_INITIAL_DELAY_MS;
     let consecutiveFailures = 0;  // Track failures for hysteresis
     let connectionState = 'unknown';  // 'unknown' | 'online' | 'offline'
+    let initialDelayCompleted = false;  // Track if initial delay has passed
     const barcodeInput = document.getElementById('barcode-input');
     const liveFeedbackName = document.getElementById('live-feedback-name');
     const stationNameLabel = document.getElementById('station-name');
@@ -721,6 +722,7 @@ ${destination}` : message;
                 // Uses configurable delay from CONNECTION_CHECK_INITIAL_DELAY_SECONDS
                 window.setTimeout(() => {
                     console.info('[ConnectionSignal] Initial delay expired, starting connection checks');
+                    initialDelayCompleted = true;  // Allow event listeners to trigger checks now
                     refreshConnectionStatus();  // Check API connectivity after UI renders
                     startConnectionStatusPolling();  // Start periodic polling after first check
                 }, connectionCheckInitialDelayMs);
@@ -947,17 +949,28 @@ ${destination}` : message;
     });
     window.addEventListener('focus', () => {
         returnFocusToInput();
-        refreshConnectionStatus();
+        // Only check connection after initial delay has completed
+        if (initialDelayCompleted) {
+            refreshConnectionStatus();
+        }
     });
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             returnFocusToInput();
-            refreshConnectionStatus();
+            // Only check connection after initial delay has completed
+            if (initialDelayCompleted) {
+                refreshConnectionStatus();
+            }
         }
     });
     document.addEventListener('mouseup', returnFocusToInput);
     document.addEventListener('touchend', returnFocusToInput);
-    window.addEventListener('online', () => refreshConnectionStatus());
+    window.addEventListener('online', () => {
+        // Only check connection after initial delay has completed
+        if (initialDelayCompleted) {
+            refreshConnectionStatus();
+        }
+    });
     window.addEventListener('offline', () => setConnectionStatus('offline', 'No network connection'));
 
     applyDashboardState();
