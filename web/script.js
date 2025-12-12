@@ -86,21 +86,6 @@ const debugConsole = {
     }
 };
 
-// Debug: Global function to toggle offline simulation
-window.toggleDebugOfflineMode = function() {
-    const wasFalse = !window._debugForceOfflineMode;
-    window._debugForceOfflineMode = wasFalse;
-    console.info(`[DEBUG] Offline mode simulation: ${wasFalse ? 'ENABLED' : 'DISABLED'}`);
-
-    // Update UI: toggle icon appearance
-    const debugIcon = document.getElementById('debug-offline-toggle');
-    if (debugIcon) {
-        debugIcon.classList.toggle('debug-offline-active', wasFalse);
-    }
-
-    return wasFalse;
-};
-
 document.addEventListener('DOMContentLoaded', () => {
     debugConsole.init();
     console.info('Debug console initialized - Press Ctrl+Shift+D to toggle');
@@ -213,14 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleConnectionStatusPayload = (payload) => {
         clearConnectionGuard();
         console.info('[ConnectionSignal] Handling payload:', payload);
-        let isOk = Boolean(payload && payload.ok);
-
-        // Debug: Force offline mode if enabled
-        if (window._debugForceOfflineMode && isOk) {
-            isOk = false;
-            console.warn('[ConnectionSignal] DEBUG: Forcing offline mode (ignoring ok=true)');
-        }
-
+        const isOk = Boolean(payload && payload.ok);
         const message = payload?.message || (isOk ? 'Connected to API' : 'Cannot reach API');
 
         // Hysteresis logic: prevent flicker from transient failures
@@ -963,15 +941,6 @@ ${destination}` : message;
     document.addEventListener('scroll', returnFocusToInput, true);
     if (scanHistoryList) {
         scanHistoryList.addEventListener('scroll', returnFocusToInput);
-    }
-
-    // Debug: Add click handler for offline mode toggle
-    const debugOfflineToggle = document.getElementById('debug-offline-toggle');
-    if (debugOfflineToggle) {
-        debugOfflineToggle.addEventListener('click', (event) => {
-            event.stopPropagation();
-            window.toggleDebugOfflineMode();
-        });
     }
 
     document.addEventListener('keydown', (event) => {

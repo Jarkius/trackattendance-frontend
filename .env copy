@@ -1,0 +1,34 @@
+# TrackAttendance Environment Configuration
+# Copy this file to .env and fill in your actual values
+# .env is ignored by git and will never be committed
+
+# Cloud API Configuration
+CLOUD_API_URL=https://trackattendance-api-969370105809.asia-southeast1.run.app
+CLOUD_API_KEY=trackattendance-api-service-ac@trackattendance-20251014.iam.gserviceaccount.com
+GOOGLE_APPLICATION_CREDENTIALS=C:\Users\jsanitareephon\.gcp\trackattendance-20251014-03bac9858418.json
+
+# Sync Settings
+CLOUD_SYNC_BATCH_SIZE=100
+AUTO_SYNC_ENABLED=True
+AUTO_SYNC_IDLE_SECONDS=30
+AUTO_SYNC_CHECK_INTERVAL_SECONDS=60
+AUTO_SYNC_MIN_PENDING_SCANS=1
+AUTO_SYNC_MESSAGE_DURATION_MS=3000
+AUTO_SYNC_CONNECTION_TIMEOUT=5
+
+# UI Settings
+SHOW_FULL_SCREEN=True
+ENABLE_FADE_ANIMATION=True
+AUTO_EXPORT_ON_SHUTDOWN=True
+
+# Duplicate Badge Detection (Issue #20, #21)
+# Prevent users from scanning the same badge multiple times in quick succession
+DUPLICATE_BADGE_DETECTION_ENABLED=True
+DUPLICATE_BADGE_TIME_WINDOW_SECONDS=60
+# Action on duplicate: 'warn' (accept + alert), 'block' (reject), 'silent' (accept + no alert)
+DUPLICATE_BADGE_ACTION=block
+DUPLICATE_BADGE_ALERT_DURATION_MS=3000
+
+# Debug/Logging (optional)
+DEBUG=False
+LOG_LEVEL=INFO
