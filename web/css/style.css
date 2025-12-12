@@ -49,13 +49,17 @@ header h1 {
 }
 
 .connection-status {
-    width: 14px;
-    height: 14px;
+    position: fixed;
+    top: 15px;
+    right: 70px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     background: var(--deloitte-black);  /* Initially black - blends with header */
     box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.0);
-    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-    flex-shrink: 0;
+    transition: background-color 0.2s ease;
+    z-index: 999;
+    cursor: pointer;
 }
 
 .connection-status--unknown {
@@ -65,8 +69,7 @@ header h1 {
 
 .connection-status--online {
     background: var(--deloitte-green);
-    box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.35);
-    animation: pulse-connection 1.8s ease-in-out infinite;
+    animation: grow-pulse 2s ease-out infinite;
 }
 
 .connection-status--offline {
@@ -91,6 +94,19 @@ header h1 {
     100% {
         box-shadow: 0 0 0 0 rgba(134, 188, 37, 0);
         transform: scale(1);
+    }
+}
+
+/* Growing pulse ring animation - expanding ripple effect */
+@keyframes grow-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(134, 188, 37, 0.3);
+    }
+    100% {
+        box-shadow: 0 0 0 16px rgba(134, 188, 37, 0);
     }
 }
 
