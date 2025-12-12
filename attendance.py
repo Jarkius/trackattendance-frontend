@@ -227,6 +227,7 @@ class AttendanceService:
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
             "connectionCheckIntervalMs": max(0, int(config.CONNECTION_CHECK_INTERVAL_MS)),
+            "connectionCheckInitialDelayMs": max(0, int(config.CONNECTION_CHECK_INITIAL_DELAY_MS)),
             "duplicateBadgeAlertDurationMs": max(0, int(config.DUPLICATE_BADGE_ALERT_DURATION_MS)),
             "debugMode": os.getenv("DEBUG", "False").lower() == "true",
         }

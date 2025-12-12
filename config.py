@@ -86,6 +86,10 @@ CONNECTION_CHECK_INTERVAL_MS = _parse_connection_interval_ms()
 # Timeout (seconds) for cloud API health checks triggered by the UI
 CONNECTION_CHECK_TIMEOUT_SECONDS = float(os.getenv("CONNECTION_CHECK_TIMEOUT_SECONDS", "1.5"))
 
+# Initial connection check delay in milliseconds (converted from seconds)
+# Default: 15 seconds. Indicator starts black (invisible), so no rush to check during startup
+CONNECTION_CHECK_INITIAL_DELAY_MS = int(float(os.getenv("CONNECTION_CHECK_INITIAL_DELAY_SECONDS", "15")) * 1000)
+
 
 # =============================================================================
 # Auto-Sync Configuration

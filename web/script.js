@@ -106,9 +106,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Connection status polling with hysteresis to prevent flicker and reduce API calls
     const DEFAULT_CONNECTION_CHECK_INTERVAL_MS = 60000;  // 60 seconds (not 10!) to reduce API cost
+    const DEFAULT_CONNECTION_CHECK_INITIAL_DELAY_MS = 15000;  // 15 seconds - wait for UI to render
     const CONNECTION_CHECK_FALLBACK_MS = 15000;  // Timeout if no signal after 15s
     const CONNECTION_HYSTERESIS_THRESHOLD = 2;  // Require 2 consecutive failures before showing red
     let connectionCheckIntervalMs = DEFAULT_CONNECTION_CHECK_INTERVAL_MS;
+    let connectionCheckInitialDelayMs = DEFAULT_CONNECTION_CHECK_INITIAL_DELAY_MS;
     let consecutiveFailures = 0;  // Track failures for hysteresis
     let connectionState = 'unknown';  // 'unknown' | 'online' | 'offline'
     const barcodeInput = document.getElementById('barcode-input');
@@ -310,6 +312,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         connectionCheckIntervalMs = DEFAULT_CONNECTION_CHECK_INTERVAL_MS;
+    };
+
+    const applyConnectionInitialDelayFromPayload = (payload) => {
+        const configuredDelay = Number(payload?.connectionCheckInitialDelayMs);
+        if (Number.isFinite(configuredDelay) && configuredDelay >= 0) {
+            connectionCheckInitialDelayMs = configuredDelay;
+            console.info('[Config] Connection check initial delay:', connectionCheckInitialDelayMs, 'ms');
+            return;
+        }
+        connectionCheckInitialDelayMs = DEFAULT_CONNECTION_CHECK_INITIAL_DELAY_MS;
     };
 
     const bindConnectionSignal = () => {
@@ -693,6 +705,7 @@ ${destination}` : message;
         queueOrRun((bridge) => {
             bridge.get_initial_data((payload) => {
                 applyConnectionIntervalFromPayload(payload);
+                applyConnectionInitialDelayFromPayload(payload);
                 debugMode = Boolean(payload?.debugMode);
                 if (debugMode) {
                     console.info('[DEBUG] Debug mode enabled - auto-focus disabled');
@@ -709,10 +722,10 @@ ${destination}` : message;
                 updateSyncStatus();  // Load sync status on startup
                 // Delay connection check to reduce initial load time
                 // Indicator starts black (invisible), so no rush to show status
-                // 15 second delay allows full UI render and prioritizes responsiveness
+                // Uses configurable delay from CONNECTION_CHECK_INITIAL_DELAY_SECONDS
                 window.setTimeout(() => {
                     refreshConnectionStatus();  // Check API connectivity after UI renders
-                }, 15000);  // 15 second delay to prioritize UI responsiveness and reduce load
+                }, connectionCheckInitialDelayMs);
                 returnFocusToInput();
             });
         });
