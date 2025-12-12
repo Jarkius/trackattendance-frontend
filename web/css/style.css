@@ -49,26 +49,28 @@ header h1 {
 }
 
 .connection-status {
-    position: fixed;
-    top: 15px;
-    right: 70px;
-    width: 30px;
-    height: 30px;
+    display: block !important;
+    position: absolute;
+    top: 50%;
+    right: 110px;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
-    background: var(--deloitte-black);  /* Initially black - blends with header */
+    background: var(--deloitte-black) !important;
     box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.0);
     transition: background-color 0.2s ease;
-    z-index: 999;
+    z-index: 1;
     cursor: pointer;
 }
 
 .connection-status--unknown {
-    background: var(--deloitte-black);  /* Black - blends with header, no animation */
+    background: var(--deloitte-black) !important;  /* Black - blends with header, no animation */
     animation: none;
 }
 
 .connection-status--online {
-    background: var(--deloitte-green);
+    background: var(--deloitte-green) !important;
     animation: grow-pulse 2s ease-out infinite;
 }
 
@@ -103,10 +105,10 @@ header h1 {
         box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.7);
     }
     50% {
-        box-shadow: 0 0 0 8px rgba(134, 188, 37, 0.3);
+        box-shadow: 0 0 0 12px rgba(134, 188, 37, 0.3);
     }
     100% {
-        box-shadow: 0 0 0 16px rgba(134, 188, 37, 0);
+        box-shadow: 0 0 0 24px rgba(134, 188, 37, 0);
     }
 }
 
@@ -889,5 +891,13 @@ header h1 {
     color: var(--deloitte-black);
     font-weight: 700;
     line-height: 1.5;
+    text-align: center;
+}
+
+.duplicate-overlay__message {
+    margin: -14px 0 12px 0;
+    font-size: 9pt;
+    color: #f44336;
+    line-height: 1.4;
     text-align: center;
 }

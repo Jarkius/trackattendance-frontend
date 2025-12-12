@@ -86,6 +86,15 @@ const debugConsole = {
     }
 };
 
+// Debug: Global function to toggle offline simulation
+window.toggleDebugOfflineMode = function() {
+    const wasFalse = !window._debugForceOfflineMode;
+    window._debugForceOfflineMode = wasFalse;
+    console.info(`[DEBUG] Offline mode simulation: ${wasFalse ? 'ENABLED' : 'DISABLED'}`);
+    console.info('[DEBUG] Use window.toggleDebugOfflineMode() to toggle');
+    return wasFalse;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     debugConsole.init();
     console.info('Debug console initialized - Press Ctrl+Shift+D to toggle');
@@ -198,7 +207,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleConnectionStatusPayload = (payload) => {
         clearConnectionGuard();
         console.info('[ConnectionSignal] Handling payload:', payload);
-        const isOk = Boolean(payload && payload.ok);
+        let isOk = Boolean(payload && payload.ok);
+
+        // Debug: Force offline mode if enabled
+        if (window._debugForceOfflineMode && isOk) {
+            isOk = false;
+            console.warn('[ConnectionSignal] DEBUG: Forcing offline mode (ignoring ok=true)');
+        }
+
         const message = payload?.message || (isOk ? 'Connected to API' : 'Cannot reach API');
 
         // Hysteresis logic: prevent flicker from transient failures
@@ -509,7 +525,8 @@ ${destination}` : message;
         const duplicateTitle = document.getElementById('duplicate-overlay-title');
         const duplicateBadge = document.getElementById('duplicate-overlay-badge');
         const duplicateName = document.getElementById('duplicate-overlay-name');
-        if (!duplicateOverlay || !duplicateTitle || !duplicateBadge || !duplicateName) {
+        const duplicateMessage = document.getElementById('duplicate-overlay-message');
+        if (!duplicateOverlay || !duplicateTitle || !duplicateBadge || !duplicateName || !duplicateMessage) {
             return;
         }
 
@@ -521,14 +538,16 @@ ${destination}` : message;
 
         const badgeId = payload.badgeId || 'Unknown';
         const fullName = payload.fullName || 'Unknown';
+        const message = payload.message || '';
         const isError = payload.isError || false;  // true for block mode, false for warn mode
 
         // Set title - always "DUPLICATED" for professional tone
         duplicateTitle.textContent = 'DUPLICATED';
 
-        // Populate badge ID and full name in separate elements
+        // Populate badge ID, full name, and message in separate elements
         duplicateBadge.textContent = badgeId;
         duplicateName.textContent = fullName;
+        duplicateMessage.textContent = message;
 
         // Update styling based on error state
         duplicateOverlay.classList.toggle('duplicate-overlay--error', isError);
@@ -734,13 +753,13 @@ ${destination}` : message;
     const handleScanResponse = (response) => {
         if (!response || response.ok === false) {
             const message = response?.message || 'Scan failed';
-            setLiveFeedback(message, 'red', 3000);
 
             // Show duplicate badge alert if this is a duplicate rejection (block mode)
             if (response?.is_duplicate) {
                 window.__handleDuplicateBadge({
                     badgeId: response.badgeId || 'Unknown',
                     fullName: response.fullName || 'Badge blocked',
+                    message: message,  // Pass the error message
                     isError: true,  // Red error styling for block mode
                     alertDurationMs: duplicateBadgeAlertDurationMs,
                 });
@@ -767,6 +786,7 @@ ${destination}` : message;
             window.__handleDuplicateBadge({
                 badgeId: response.badgeId || 'Unknown',
                 fullName: response.fullName || 'Unknown',
+                message: 'Scanned within 5 minutes',  // Inform user about time window
                 isError: false,  // Yellow warning styling for warn mode
                 alertDurationMs: duplicateBadgeAlertDurationMs,
             });

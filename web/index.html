@@ -21,8 +21,8 @@
         <div class="header-inner">
             <h1>Station : <span id="station-name">--</span></h1>
         </div>
+        <span class="connection-status connection-status--unknown" id="connection-status" aria-label="API connection status" title="Checking connection"></span>
     </header>
-    <span class="connection-status connection-status--unknown" id="connection-status" aria-label="API connection status" title="Checking connection"></span>
     <i id="close-btn" class="material-icons">close</i>
 
     <!-- Debug Console (temporary) -->
@@ -51,6 +51,7 @@
                             <div class="duplicate-overlay" id="duplicate-overlay" aria-hidden="true">
                                 <div class="duplicate-overlay__dialog">
                                     <h5 class="duplicate-overlay__title" id="duplicate-overlay-title"></h5>
+                                    <p class="duplicate-overlay__message" id="duplicate-overlay-message"></p>
                                     <p class="duplicate-overlay__badge" id="duplicate-overlay-badge"></p>
                                     <p class="duplicate-overlay__name" id="duplicate-overlay-name"></p>
                                 </div>
