@@ -98,6 +98,9 @@ document.addEventListener('DOMContentLoaded', () => {
         stationName: '--',
     };
 
+    // Debug mode flag - disable auto-focus when debugging
+    let debugMode = false;
+
     // Connection status polling with hysteresis to prevent flicker and reduce API calls
     const DEFAULT_CONNECTION_CHECK_INTERVAL_MS = 60000;  // 60 seconds (not 10!) to reduce API cost
     const CONNECTION_CHECK_FALLBACK_MS = 15000;  // Timeout if no signal after 15s
@@ -178,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const clearConnectionGuard = () => {
         if (connectionCheckTimeoutId !== null) {
+            console.debug('[ConnectionSignal] Clearing timeout guard');
             window.clearTimeout(connectionCheckTimeoutId);
             connectionCheckTimeoutId = null;
         }
@@ -196,8 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (connectionState !== 'online') {
                 connectionState = 'online';
                 console.info('[ConnectionSignal] Connection restored (hysteresis: failures reset)');
-                setConnectionStatus('online', message);
             }
+            // Always update visual to online when connection succeeds
+            // (even if already online, to override the 'checking' state set earlier)
+            setConnectionStatus('online', message);
         } else {
             // If connection failed, increment failure counter
             consecutiveFailures++;
@@ -232,15 +238,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (connectionCheckInFlight) {
+            console.debug('[ConnectionSignal] Check already in flight, skipping');
             return;
         }
+        console.info('[ConnectionSignal] Starting connection check');
         connectionCheckInFlight = true;
         clearConnectionGuard();
         connectionCheckTimeoutId = window.setTimeout(() => {
             connectionCheckTimeoutId = null;
             if (!connectionCheckInFlight) {
+                console.debug('[ConnectionSignal] Timeout fired but check already completed');
                 return;
             }
+            console.warn('[ConnectionSignal] Connection check timed out after', CONNECTION_CHECK_FALLBACK_MS, 'ms');
             handleConnectionStatusPayload({ ok: false, message: 'Connection check timed out' });
         }, CONNECTION_CHECK_FALLBACK_MS);
         setConnectionStatus('checking', 'Checking connection...');
@@ -263,12 +273,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const startConnectionStatusPolling = () => {
         if (!connectionStatusDot || connectionCheckIntervalMs <= 0) {
+            console.warn('[ConnectionSignal] Polling disabled or dot not found');
             return;
         }
         if (connectionStatusIntervalId !== null) {
             window.clearInterval(connectionStatusIntervalId);
             connectionStatusIntervalId = null;
         }
+        console.info('[ConnectionSignal] Starting polling every', connectionCheckIntervalMs, 'ms');
         connectionStatusIntervalId = window.setInterval(() => {
             refreshConnectionStatus();
         }, connectionCheckIntervalMs);
@@ -465,6 +477,10 @@ ${destination}` : message;
     };
 
     const returnFocusToInput = () => {
+        // Skip auto-focus when in debug mode (allows copying debug console text)
+        if (debugMode) {
+            return;
+        }
         window.setTimeout(() => {
             if (document.body.contains(barcodeInput)) {
                 barcodeInput.focus();
@@ -672,6 +688,10 @@ ${destination}` : message;
         queueOrRun((bridge) => {
             bridge.get_initial_data((payload) => {
                 applyConnectionIntervalFromPayload(payload);
+                debugMode = Boolean(payload?.debugMode);
+                if (debugMode) {
+                    console.info('[DEBUG] Debug mode enabled - auto-focus disabled');
+                }
                 // Signal binding already done in QWebChannel setup, don't rebind here
                 state.totalEmployees = payload?.totalEmployees ?? 0;
                 state.totalScansToday = payload?.totalScansToday ?? 0;
