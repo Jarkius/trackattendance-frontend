@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
+
+logger = logging.getLogger(__name__)
 
 ISO_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # UTC format with Z suffix
 
@@ -135,8 +138,6 @@ class DatabaseManager:
         scanned_at: Optional[str] = None,
     ) -> None:
         timestamp = scanned_at or datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(f"RecordingScan: badge={badge_id}, station={station_name}, time={timestamp}")
         with self._connection:
             self._connection.execute(
@@ -257,8 +258,6 @@ class DatabaseManager:
         cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=time_window_seconds)
         cutoff_timestamp = cutoff_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(
             f"DuplicateCheck: badge={badge_id}, station={station_name}, "
             f"window={time_window_seconds}s, cutoff={cutoff_timestamp}"
@@ -353,7 +352,7 @@ class DatabaseManager:
             )
         return cursor.rowcount
 
-    def get_sync_statistics(self) -> Dict[str, any]:
+    def get_sync_statistics(self) -> Dict[str, Any]:
         """Get sync statistics for UI display."""
         cursor = self._connection.execute(
             """
