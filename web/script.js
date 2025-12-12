@@ -161,18 +161,20 @@ document.addEventListener('DOMContentLoaded', () => {
         apiQueue.push(callback);
     };
 
-    const setConnectionStatus = (status = 'offline', message = '') => {
+    const setConnectionStatus = (status = 'unknown', message = '') => {
         console.debug('[ConnectionSignal] setConnectionStatus called', { status, message, hasDot: !!connectionStatusDot });
         if (!connectionStatusDot) {
             console.warn('[ConnectionSignal] Connection status dot not found!');
             return;
         }
-        connectionStatusDot.classList.remove('connection-status--online', 'connection-status--offline', 'connection-status--checking');
+        connectionStatusDot.classList.remove('connection-status--unknown', 'connection-status--online', 'connection-status--offline', 'connection-status--checking');
         const normalizedStatus = status === 'online'
             ? 'connection-status--online'
             : status === 'checking'
                 ? 'connection-status--checking'
-                : 'connection-status--offline';
+                : status === 'offline'
+                    ? 'connection-status--offline'
+                    : 'connection-status--unknown';  // Default to unknown/black for all other states
         connectionStatusDot.classList.add(normalizedStatus);
         console.debug('[ConnectionSignal] Applied class:', normalizedStatus, 'Current classes:', connectionStatusDot.className);
 
