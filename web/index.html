@@ -18,9 +18,20 @@
 
 <body>
     <header>
-        <h1>Station : <span id="station-name">--</span></h1>
+        <div class="header-inner">
+            <h1>Station : <span id="station-name">--</span></h1>
+            <span class="connection-status connection-status--offline" id="connection-status" aria-label="API connection status" title="Checking connection"></span>
+        </div>
     </header>
     <i id="close-btn" class="material-icons">close</i>
+
+    <!-- Debug Console (temporary) -->
+    <div id="debug-console" style="position: fixed; bottom: 10px; left: 10px; width: 400px; max-height: 250px; background: rgba(0,0,0,0.9); color: #0f0; font-family: monospace; font-size: 10px; padding: 8px; overflow-y: auto; z-index: 9999; display: none; border: 1px solid #0f0;">
+        <div style="color: #f0f; margin-bottom: 5px; cursor: pointer; text-decoration: underline;" onclick="document.getElementById('debug-status').textContent = JSON.stringify(window.localStorage, null, 2);">LocalStorage DEBUG DATA (Click to view)</div>
+        <div id="debug-status" style="color: #ff0; margin-bottom: 5px; white-space: pre-wrap; word-break: break-word;"></div>
+        <div style="color: #f0f; margin-bottom: 5px;">CONSOLE LOG:</div>
+        <div id="debug-output"></div>
+    </div>
 
     <div class="container-fluid">
         <div class="row">

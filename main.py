@@ -3,10 +3,13 @@ from __future__ import annotations
 import sys
 import json
 import time
+import logging
+import threading
+import os
 from pathlib import Path
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple, Dict
 
-from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal
+from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -76,6 +79,8 @@ UI_INDEX_HTML = RESOURCE_ROOT / "web" / "index.html"
 
 DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AutoSyncManager(QObject):
@@ -314,6 +319,9 @@ class AutoSyncManager(QObject):
 class Api(QObject):
     """Expose desktop controls to the embedded web UI."""
 
+    # Use QVariant so QWebChannel can deliver payloads to JS reliably
+    connection_status_changed = pyqtSignal("QVariant")
+
     def __init__(
         self,
         service: AttendanceService,
@@ -327,6 +335,36 @@ class Api(QObject):
         self._sync_service = sync_service
         self._auto_sync_manager = auto_sync_manager
         self._window = None
+        self._connection_check_inflight = False
+        self._last_connection_result: Dict[str, object] = {
+            "ok": False,
+            "message": "Connection not checked yet",
+        }
+        # Emit initial state so the UI can bind immediately
+        QTimer.singleShot(0, lambda: self.connection_status_changed.emit(self._last_connection_result))
+
+    @pyqtSlot()
+    def _do_emit_signal(self) -> None:
+        """Helper slot to emit signal on main thread."""
+        LOGGER.debug("Emitting signal from main thread")
+        self.connection_status_changed.emit(self._last_connection_result)
+
+    def _emit_connection_status(self, payload: Dict[str, object]) -> None:
+        """
+        Emit connection status back to the UI on the Qt main thread.
+
+        This ensures the signal reaches QWebChannel even if the check
+        completes in a worker thread.
+        """
+        self._last_connection_result = payload
+        LOGGER.info(
+            "Emitting connection status to UI: ok=%s, message=%s",
+            payload.get("ok"),
+            payload.get("message"),
+        )
+        # Schedule emission on main thread using QTimer
+        # This is thread-safe and guarantees signal reaches QWebChannel
+        QTimer.singleShot(0, self._do_emit_signal)
 
     def attach_window(self, window: QMainWindow) -> None:
         self._window = window
@@ -360,17 +398,38 @@ class Api(QObject):
 
     @pyqtSlot(result="QVariant")
     def test_cloud_connection(self) -> dict:
-        """Test connection to cloud API and return status."""
-        if not self._sync_service:
-            return {
+        """Kick off a non-blocking cloud API health check and return last known status."""
+        LOGGER.info("UI requested cloud health check")
+
+        if self._connection_check_inflight:
+            LOGGER.info("Health check already in flight; returning cached status")
+            self._emit_connection_status(self._last_connection_result)
+            return self._last_connection_result
+
+        def _run_check() -> None:
+            payload = {
                 "ok": False,
                 "message": "Sync service not configured",
             }
-        success, message = self._sync_service.test_connection()
-        return {
-            "ok": success,
-            "message": message,
-        }
+            try:
+                if not self._sync_service:
+                    LOGGER.warning("Health check skipped: sync service not configured")
+                else:
+                    LOGGER.info("Dispatching async health check...")
+                    ok, msg = self._sync_service.test_connection()
+                    payload = {"ok": ok, "message": msg}
+                    LOGGER.info("Cloud health check result: ok=%s, message=%s", ok, msg)
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.exception("Health check failed: %s", exc)
+                payload = {"ok": False, "message": f"Check failed: {exc}"}
+            finally:
+                self._last_connection_result = payload
+                self._connection_check_inflight = False
+                self._emit_connection_status(payload)
+
+        self._connection_check_inflight = True
+        threading.Thread(target=_run_check, daemon=True, name="cloud-health-check").start()
+        return self._last_connection_result
 
     @pyqtSlot(result="QVariant")
     def sync_now(self) -> dict:
@@ -555,6 +614,12 @@ def main() -> None:
         api_url=config.CLOUD_API_URL,
         api_key=config.CLOUD_API_KEY,
         batch_size=config.CLOUD_SYNC_BATCH_SIZE,
+        connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
+    )
+    LOGGER.info(
+        "Connection status checks: interval=%sms, timeout=%.2fs",
+        config.CONNECTION_CHECK_INTERVAL_MS,
+        config.CONNECTION_CHECK_TIMEOUT_SECONDS,
     )
 
     roster_missing = not service.employees_loaded()
@@ -817,8 +882,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
-
-

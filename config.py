@@ -54,6 +54,40 @@ CLOUD_SYNC_BATCH_SIZE = int(os.getenv("CLOUD_SYNC_BATCH_SIZE", "100"))
 
 
 # =============================================================================
+# Connection Health Check
+# =============================================================================
+
+def _parse_connection_interval_ms() -> int:
+    """
+    Parse connection interval from env.
+
+    Supports either CONNECTION_CHECK_INTERVAL_SECONDS (preferred, seconds)
+    or CONNECTION_CHECK_INTERVAL_MS (legacy, milliseconds). Returns ms.
+    """
+    seconds_raw = os.getenv("CONNECTION_CHECK_INTERVAL_SECONDS")
+    if seconds_raw is not None:
+        try:
+            seconds_val = float(seconds_raw)
+            return max(0, int(seconds_val * 1000))
+        except ValueError:
+            pass
+
+    ms_raw = os.getenv("CONNECTION_CHECK_INTERVAL_MS", "10000")
+    try:
+        return max(0, int(ms_raw))
+    except ValueError:
+        return 10000
+
+
+# Interval (ms) for UI connection status polling; set to 0 to disable polling.
+# Prefer configuring CONNECTION_CHECK_INTERVAL_SECONDS in .env for clarity.
+CONNECTION_CHECK_INTERVAL_MS = _parse_connection_interval_ms()
+
+# Timeout (seconds) for cloud API health checks triggered by the UI
+CONNECTION_CHECK_TIMEOUT_SECONDS = float(os.getenv("CONNECTION_CHECK_TIMEOUT_SECONDS", "1.5"))
+
+
+# =============================================================================
 # Auto-Sync Configuration
 # =============================================================================
 

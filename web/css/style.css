@@ -42,6 +42,54 @@ header h1 {
     font-weight: 500;
 }
 
+.header-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.connection-status {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #d9d9d9;
+    box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.0);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.connection-status--online {
+    background: var(--deloitte-green);
+    box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.35);
+    animation: pulse-connection 1.8s ease-in-out infinite;
+}
+
+.connection-status--offline {
+    background: #d9d9d9;
+    animation: none;
+}
+
+.connection-status--checking {
+    background: #f0f0f0;
+    box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.15);
+    animation: pulse-connection 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-connection {
+    0% {
+        box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.35);
+        transform: scale(1);
+    }
+    70% {
+        box-shadow: 0 0 0 12px rgba(134, 188, 37, 0);
+        transform: scale(1.05);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(134, 188, 37, 0);
+        transform: scale(1);
+    }
+}
+
 #close-btn {
     position: fixed;
     top: 15px;
@@ -812,4 +860,3 @@ header h1 {
     line-height: 1.5;
     text-align: center;
 }
-

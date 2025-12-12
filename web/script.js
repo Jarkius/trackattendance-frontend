@@ -1,4 +1,95 @@
+// Debug Console Setup (temporary debugging)
+const debugConsole = {
+    element: null,
+    output: null,
+    messages: [],
+
+    init() {
+        this.element = document.getElementById('debug-console');
+        this.output = document.getElementById('debug-output');
+
+        // Override console.log, console.info, console.warn, console.error
+        const originalLog = console.log;
+        const originalInfo = console.info;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        const originalDebug = console.debug;
+
+        const self = this;
+        console.log = (...args) => {
+            originalLog(...args);
+            self.addMessage('LOG', args);
+        };
+        console.info = (...args) => {
+            originalInfo(...args);
+            self.addMessage('INFO', args);
+        };
+        console.warn = (...args) => {
+            originalWarn(...args);
+            self.addMessage('WARN', args);
+        };
+        console.error = (...args) => {
+            originalError(...args);
+            self.addMessage('ERROR', args);
+        };
+        console.debug = (...args) => {
+            originalDebug(...args);
+            self.addMessage('DEBUG', args);
+        };
+
+        // Keyboard shortcut: Ctrl+Shift+D to toggle debug console
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                e.preventDefault();
+                self.toggle();
+            }
+        });
+    },
+
+    addMessage(level, args) {
+        const msg = args.map(arg => {
+            if (typeof arg === 'object') {
+                try {
+                    return JSON.stringify(arg);
+                } catch {
+                    return String(arg);
+                }
+            }
+            return String(arg);
+        }).join(' ');
+
+        const timestamp = new Date().toLocaleTimeString();
+        const line = `[${timestamp}] ${level}: ${msg}`;
+        this.messages.push(line);
+
+        if (this.output) {
+            const p = document.createElement('div');
+            p.textContent = line;
+            p.style.color = level === 'ERROR' ? '#f00' : level === 'WARN' ? '#ff0' : '#0f0';
+            this.output.appendChild(p);
+            this.output.scrollTop = this.output.scrollHeight;
+
+            // Keep last 50 messages
+            while (this.messages.length > 50) {
+                this.messages.shift();
+                if (this.output.firstChild) {
+                    this.output.removeChild(this.output.firstChild);
+                }
+            }
+        }
+    },
+
+    toggle() {
+        if (this.element) {
+            this.element.style.display = this.element.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+};
+
 document.addEventListener('DOMContentLoaded', () => {
+    debugConsole.init();
+    console.info('Debug console initialized - Press Ctrl+Shift+D to toggle');
+
     const state = {
         totalEmployees: 0,
         totalScansToday: 0,
@@ -7,6 +98,13 @@ document.addEventListener('DOMContentLoaded', () => {
         stationName: '--',
     };
 
+    // Connection status polling with hysteresis to prevent flicker and reduce API calls
+    const DEFAULT_CONNECTION_CHECK_INTERVAL_MS = 60000;  // 60 seconds (not 10!) to reduce API cost
+    const CONNECTION_CHECK_FALLBACK_MS = 15000;  // Timeout if no signal after 15s
+    const CONNECTION_HYSTERESIS_THRESHOLD = 2;  // Require 2 consecutive failures before showing red
+    let connectionCheckIntervalMs = DEFAULT_CONNECTION_CHECK_INTERVAL_MS;
+    let consecutiveFailures = 0;  // Track failures for hysteresis
+    let connectionState = 'unknown';  // 'unknown' | 'online' | 'offline'
     const barcodeInput = document.getElementById('barcode-input');
     const liveFeedbackName = document.getElementById('live-feedback-name');
     const stationNameLabel = document.getElementById('station-name');
@@ -24,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncSyncedCounter = document.getElementById('sync-synced');
     const syncFailedCounter = document.getElementById('sync-failed');
     const syncStatusMessage = document.getElementById('sync-status-message');
+    const connectionStatusDot = document.getElementById('connection-status');
 
     if (!barcodeInput || !liveFeedbackName || !totalEmployeesCounter || !totalScannedCounter) {
         console.warn('Attendance UI missing required elements; event wiring skipped.');
@@ -31,6 +130,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let api;
+    let webChannelReady = false;
+    let connectionStatusIntervalId = null;
+    let connectionCheckInFlight = false;
+    let connectionCheckTimeoutId = null;
     const apiQueue = [];
     let overlayHideTimer = null;
     const overlayIntent = {
@@ -44,17 +147,6 @@ document.addEventListener('DOMContentLoaded', () => {
         apiQueue.splice(0).forEach((callback) => callback(api));
     };
 
-    if (window.qt && window.qt.webChannelTransport) {
-        new QWebChannel(window.qt.webChannelTransport, (channel) => {
-            api = channel.objects.api;
-            flushApiQueue();
-            loadInitialData();
-        });
-    } else {
-        console.warn('Qt WebChannel transport not available; desktop integration disabled.');
-        setLiveFeedback('Desktop bridge unavailable', 'red');
-    }
-
     const queueOrRun = (callback) => {
         if (api) {
             callback(api);
@@ -62,6 +154,197 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         apiQueue.push(callback);
     };
+
+    const setConnectionStatus = (status = 'offline', message = '') => {
+        console.debug('[ConnectionSignal] setConnectionStatus called', { status, message, hasDot: !!connectionStatusDot });
+        if (!connectionStatusDot) {
+            console.warn('[ConnectionSignal] Connection status dot not found!');
+            return;
+        }
+        connectionStatusDot.classList.remove('connection-status--online', 'connection-status--offline', 'connection-status--checking');
+        const normalizedStatus = status === 'online'
+            ? 'connection-status--online'
+            : status === 'checking'
+                ? 'connection-status--checking'
+                : 'connection-status--offline';
+        connectionStatusDot.classList.add(normalizedStatus);
+        console.debug('[ConnectionSignal] Applied class:', normalizedStatus, 'Current classes:', connectionStatusDot.className);
+
+        const fallbackLabel = status === 'online' ? 'API connected' : 'API offline';
+        const label = message && typeof message === 'string' ? message : fallbackLabel;
+        connectionStatusDot.setAttribute('aria-label', label);
+        connectionStatusDot.setAttribute('title', label);
+    };
+
+    const clearConnectionGuard = () => {
+        if (connectionCheckTimeoutId !== null) {
+            window.clearTimeout(connectionCheckTimeoutId);
+            connectionCheckTimeoutId = null;
+        }
+    };
+
+    const handleConnectionStatusPayload = (payload) => {
+        clearConnectionGuard();
+        console.info('[ConnectionSignal] Handling payload:', payload);
+        const isOk = Boolean(payload && payload.ok);
+        const message = payload?.message || (isOk ? 'Connected to API' : 'Cannot reach API');
+
+        // Hysteresis logic: prevent flicker from transient failures
+        if (isOk) {
+            // If connection is OK, reset failure counter and show green immediately
+            consecutiveFailures = 0;
+            if (connectionState !== 'online') {
+                connectionState = 'online';
+                console.info('[ConnectionSignal] Connection restored (hysteresis: failures reset)');
+                setConnectionStatus('online', message);
+            }
+        } else {
+            // If connection failed, increment failure counter
+            consecutiveFailures++;
+            console.info(`[ConnectionSignal] Connection check failed (${consecutiveFailures}/${CONNECTION_HYSTERESIS_THRESHOLD})`);
+
+            // Only show offline after N consecutive failures (prevents flicker from transient issues)
+            if (consecutiveFailures >= CONNECTION_HYSTERESIS_THRESHOLD && connectionState !== 'offline') {
+                connectionState = 'offline';
+                console.warn('[ConnectionSignal] Connection lost (hysteresis threshold reached)');
+                setConnectionStatus('offline', message);
+            }
+        }
+
+        connectionCheckInFlight = false;
+        localStorage.setItem('connectionDebug_state', JSON.stringify({
+            state: connectionState,
+            consecutiveFailures,
+            hysteresisThreshold: CONNECTION_HYSTERESIS_THRESHOLD,
+            lastMessage: message
+        }));
+    };
+
+    const refreshConnectionStatus = () => {
+        if (!connectionStatusDot) {
+            return;
+        }
+        if (connectionCheckIntervalMs === 0) {
+            return;
+        }
+        if (!webChannelReady) {
+            setConnectionStatus('offline', 'Desktop bridge unavailable');
+            return;
+        }
+        if (connectionCheckInFlight) {
+            return;
+        }
+        connectionCheckInFlight = true;
+        clearConnectionGuard();
+        connectionCheckTimeoutId = window.setTimeout(() => {
+            connectionCheckTimeoutId = null;
+            if (!connectionCheckInFlight) {
+                return;
+            }
+            handleConnectionStatusPayload({ ok: false, message: 'Connection check timed out' });
+        }, CONNECTION_CHECK_FALLBACK_MS);
+        setConnectionStatus('checking', 'Checking connection...');
+        queueOrRun((bridge) => {
+            if (!bridge.test_cloud_connection) {
+                setConnectionStatus('offline', 'Connection check unavailable');
+                connectionCheckInFlight = false;
+                return;
+            }
+            // Non-blocking: result delivered via connection_status_changed signal
+            try {
+                bridge.test_cloud_connection();
+            } catch (err) {
+                setConnectionStatus('offline', 'Connection check error');
+                connectionCheckInFlight = false;
+                clearConnectionGuard();
+            }
+        });
+    };
+
+    const startConnectionStatusPolling = () => {
+        if (!connectionStatusDot || connectionCheckIntervalMs <= 0) {
+            return;
+        }
+        if (connectionStatusIntervalId !== null) {
+            window.clearInterval(connectionStatusIntervalId);
+            connectionStatusIntervalId = null;
+        }
+        connectionStatusIntervalId = window.setInterval(() => {
+            refreshConnectionStatus();
+        }, connectionCheckIntervalMs);
+    };
+
+    const stopConnectionStatusPolling = () => {
+        if (connectionStatusIntervalId !== null) {
+            window.clearInterval(connectionStatusIntervalId);
+            connectionStatusIntervalId = null;
+        }
+    };
+
+    const applyConnectionIntervalFromPayload = (payload) => {
+        const configuredInterval = Number(payload?.connectionCheckIntervalMs);
+        if (Number.isFinite(configuredInterval) && configuredInterval >= 0) {
+            connectionCheckIntervalMs = configuredInterval;
+            if (connectionCheckIntervalMs === 0) {
+                stopConnectionStatusPolling();
+                return;
+            }
+            startConnectionStatusPolling();
+            return;
+        }
+        connectionCheckIntervalMs = DEFAULT_CONNECTION_CHECK_INTERVAL_MS;
+    };
+
+    const bindConnectionSignal = () => {
+        const debug = {
+            hasApi: !!api,
+            hasSignal: !!(api && api.connection_status_changed),
+            hasConnect: !!(api && api.connection_status_changed && api.connection_status_changed.connect),
+        };
+        console.debug('[ConnectionSignal] bindConnectionSignal called', debug);
+        localStorage.setItem('connectionDebug_bindCalled', JSON.stringify(debug));
+
+        if (!api || !api.connection_status_changed || !api.connection_status_changed.connect) {
+            console.warn('[ConnectionSignal] Signal connection failed - missing component');
+            localStorage.setItem('connectionDebug_bindFailed', 'missing component');
+            return;
+        }
+        try {
+            api.connection_status_changed.connect((payload) => {
+                console.debug('[ConnectionSignal] Signal fired', payload);
+                localStorage.setItem('connectionDebug_signalFired', JSON.stringify(payload));
+                handleConnectionStatusPayload(payload);
+            });
+            console.info('[ConnectionSignal] Successfully connected to connection_status_changed signal');
+            localStorage.setItem('connectionDebug_bindSuccess', 'true');
+        } catch (err) {
+            console.error('[ConnectionSignal] Failed to connect signal:', err);
+            localStorage.setItem('connectionDebug_bindError', String(err));
+        }
+    };
+
+    if (window.qt && window.qt.webChannelTransport) {
+        new QWebChannel(window.qt.webChannelTransport, (channel) => {
+            console.info('[QWebChannel] Connected, got api object');
+            webChannelReady = true;
+            api = channel.objects.api;
+            console.info('[QWebChannel] API object assigned, attempting signal binding');
+            console.debug('[QWebChannel] api properties:', {
+                hasConnectionStatusChanged: !!api.connection_status_changed,
+                connectionStatusChangedType: typeof api.connection_status_changed,
+                hasConnect: !!(api.connection_status_changed && typeof api.connection_status_changed.connect === 'function'),
+            });
+            bindConnectionSignal();
+            flushApiQueue();
+            loadInitialData();
+            refreshConnectionStatus();
+            startConnectionStatusPolling();
+        });
+    } else {
+        console.warn('Qt WebChannel transport not available; desktop integration disabled.');
+        setLiveFeedback('Desktop bridge unavailable', 'red');
+        setConnectionStatus('offline', 'Desktop bridge unavailable');
+    }
 
 
 
@@ -388,6 +671,8 @@ ${destination}` : message;
     const loadInitialData = () => {
         queueOrRun((bridge) => {
             bridge.get_initial_data((payload) => {
+                applyConnectionIntervalFromPayload(payload);
+                // Signal binding already done in QWebChannel setup, don't rebind here
                 state.totalEmployees = payload?.totalEmployees ?? 0;
                 state.totalScansToday = payload?.totalScansToday ?? 0;
                 state.totalScansOverall = payload?.totalScansOverall ?? 0;
@@ -395,6 +680,7 @@ ${destination}` : message;
                 state.history = Array.isArray(payload?.scanHistory) ? payload.scanHistory : [];
                 applyDashboardState();
                 updateSyncStatus();  // Load sync status on startup
+                refreshConnectionStatus();  // Check API connectivity on startup
                 returnFocusToInput();
             });
         });
@@ -549,6 +835,7 @@ ${destination}` : message;
 
                 // Update sync statistics (with small delay to ensure DB is updated)
                 setTimeout(updateSyncStatus, 100);
+                refreshConnectionStatus();
                 returnFocusToInput();
             });
         });
@@ -615,14 +902,20 @@ ${destination}` : message;
             returnFocusToInput();
         }
     });
-    window.addEventListener('focus', returnFocusToInput);
+    window.addEventListener('focus', () => {
+        returnFocusToInput();
+        refreshConnectionStatus();
+    });
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             returnFocusToInput();
+            refreshConnectionStatus();
         }
     });
     document.addEventListener('mouseup', returnFocusToInput);
     document.addEventListener('touchend', returnFocusToInput);
+    window.addEventListener('online', () => refreshConnectionStatus());
+    window.addEventListener('offline', () => setConnectionStatus('offline', 'No network connection'));
 
     applyDashboardState();
     returnFocusToInput();

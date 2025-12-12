@@ -42,6 +42,7 @@ class SyncService:
         api_url: str,
         api_key: str,
         batch_size: int = 100,
+        connection_timeout: float = 3.0,
     ) -> None:
         """
         Initialize sync service.
@@ -56,6 +57,7 @@ class SyncService:
         self.api_url = api_url.rstrip("/")
         self.api_key = api_key
         self.batch_size = batch_size
+        self.connection_timeout = connection_timeout
 
     def test_connection(self) -> Tuple[bool, str]:
         """
@@ -65,20 +67,30 @@ class SyncService:
             (success: bool, message: str)
         """
         try:
+            LOGGER.info(
+                "Health check: GET %s/ (timeout=%.2fs)",
+                self.api_url,
+                self.connection_timeout,
+            )
             response = requests.get(
                 f"{self.api_url}/",
-                timeout=3,  # Reduced from 5 to 3 seconds
+                timeout=self.connection_timeout,
             )
             response.encoding = 'utf-8'  # Force UTF-8 encoding
             if response.status_code == 200:
+                LOGGER.info("Health check success")
                 return True, "Connected to cloud API"
             else:
+                LOGGER.warning("Health check failed: API returned %s", response.status_code)
                 return False, f"API returned status {response.status_code}"
         except requests.exceptions.ConnectionError:
+            LOGGER.warning("Health check failed: Cannot connect to API (network error)")
             return False, "Cannot connect to API (network error)"
         except requests.exceptions.Timeout:
+            LOGGER.warning("Health check failed: Connection timeout after %.2fs", self.connection_timeout)
             return False, "Connection timeout"
         except Exception as e:
+            LOGGER.error("Health check error: %s", e)
             return False, f"Connection error: {str(e)}"
 
     def test_authentication(self) -> Tuple[bool, str]:

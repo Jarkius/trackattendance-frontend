@@ -216,6 +216,8 @@ class AttendanceService:
         return self._station_name
 
     def get_initial_payload(self) -> Dict[str, object]:
+        import config
+
         history = self._db.get_recent_scans()
         return {
             "stationName": self.station_name,
@@ -223,6 +225,7 @@ class AttendanceService:
             "totalScansToday": self._db.count_scans_today(),
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
+            "connectionCheckIntervalMs": max(0, int(config.CONNECTION_CHECK_INTERVAL_MS)),
         }
 
     def register_scan(self, badge_id: str) -> Dict[str, object]:
