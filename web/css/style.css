@@ -49,17 +49,17 @@ header h1 {
 }
 
 .connection-status {
-    display: inline-block !important;
+    position: fixed;
+    top: 18px;
+    right: 80px;  /* Position next to close button (right: 30px) */
     width: 24px;
     height: 24px;
     border-radius: 50%;
     background: var(--deloitte-black) !important;
     box-shadow: 0 0 0 0 rgba(134, 188, 37, 0.0);
     transition: background-color 0.2s ease;
-    z-index: 1;
+    z-index: 1000;
     cursor: pointer;
-    margin: 0 15px 0 0;
-    flex-shrink: 0;
 }
 
 .connection-status--unknown {
@@ -139,14 +139,14 @@ header h1 {
 }
 
 #debug-offline-toggle {
-    position: absolute;
-    top: 50%;
-    right: 150px;
-    transform: translateY(-50%);
+    position: fixed;
+    top: 18px;
+    right: 130px;  /* Position to left of connection indicator (right: 80px) */
     color: white;
     font-size: 1.5rem;
     cursor: pointer;
     transition: color 0.2s ease-in-out;
+    z-index: 1000;
 }
 
 #debug-offline-toggle:hover {
