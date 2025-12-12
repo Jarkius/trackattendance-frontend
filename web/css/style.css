@@ -50,7 +50,7 @@ header h1 {
 
 .connection-status {
     position: fixed;
-    top: 15px;  /* Align with close button */
+    top: 18px;  /* Adjusted to align visually with X icon center */
     right: 80px;  /* Position next to close button (right: 30px) */
     width: 22px;
     height: 22px;
@@ -110,7 +110,7 @@ header h1 {
 
 #debug-offline-toggle {
     position: fixed;
-    top: 15px;  /* Align with close button and indicator */
+    top: 18px;  /* Align with indicator */
     right: 130px;  /* Position to left of connection indicator (right: 80px) */
     color: white;
     font-size: 1.5rem;
