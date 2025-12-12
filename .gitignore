@@ -23,6 +23,12 @@ Backup/
 data/*
 !data/.gitkeep
 
+# Logs (keep structure, ignore contents)
+logs/*.log
+logs/*.png
+logs/*.jpg
+!logs/.gitkeep
+
 # Build Artifacts
 build/
 dist/
@@ -32,6 +38,7 @@ exports/
 # Secrets & Environment
 .env
 .env.local
+.env*copy*
 *.key
 secrets/
 # Google Cloud service account keys
