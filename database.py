@@ -135,6 +135,9 @@ class DatabaseManager:
         scanned_at: Optional[str] = None,
     ) -> None:
         timestamp = scanned_at or datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"RecordingScan: badge={badge_id}, station={station_name}, time={timestamp}")
         with self._connection:
             self._connection.execute(
                 """
@@ -254,6 +257,13 @@ class DatabaseManager:
         cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=time_window_seconds)
         cutoff_timestamp = cutoff_time.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            f"DuplicateCheck: badge={badge_id}, station={station_name}, "
+            f"window={time_window_seconds}s, cutoff={cutoff_timestamp}"
+        )
+
         # Query: Find most recent scan with same badge at same station within window
         cursor = self._connection.execute(
             """
@@ -268,6 +278,10 @@ class DatabaseManager:
         )
 
         result = cursor.fetchone()
+        if result:
+            logger.info(f"DuplicateCheck: FOUND duplicate scan (id={result[0]})")
+        else:
+            logger.debug(f"DuplicateCheck: No duplicate found for {badge_id} at {station_name}")
         if result:
             return True, result["id"]
         return False, None
