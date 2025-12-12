@@ -803,18 +803,23 @@ header h1 {
 .duplicate-overlay {
     position: absolute;
     inset: 0;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, 0);
     border-radius: 12px;
     text-align: center;
     padding: 32px;
     z-index: 5;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease, background-color 0.3s ease;
 }
 
 .duplicate-overlay--visible {
-    display: flex;
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.94);
+    pointer-events: auto;
 }
 
 .duplicate-overlay__dialog {
@@ -825,6 +830,12 @@ header h1 {
     box-shadow: 0 12px 32px rgba(251, 192, 45, 0.2);  /* Yellow shadow - warn mode default */
     max-width: 520px;
     width: 100%;
+    transform: scale(0.85);
+    transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.duplicate-overlay--visible .duplicate-overlay__dialog {
+    transform: scale(1);
 }
 
 .duplicate-overlay--error .duplicate-overlay__dialog {

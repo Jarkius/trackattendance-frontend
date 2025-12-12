@@ -101,6 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Debug mode flag - disable auto-focus when debugging
     let debugMode = false;
 
+    // Duplicate badge alert configuration
+    let duplicateBadgeAlertDurationMs = 3000;  // Default: 3 seconds
+
     // Connection status polling with hysteresis to prevent flicker and reduce API calls
     const DEFAULT_CONNECTION_CHECK_INTERVAL_MS = 60000;  // 60 seconds (not 10!) to reduce API cost
     const CONNECTION_CHECK_FALLBACK_MS = 15000;  // Timeout if no signal after 15s
@@ -692,6 +695,8 @@ ${destination}` : message;
                 if (debugMode) {
                     console.info('[DEBUG] Debug mode enabled - auto-focus disabled');
                 }
+                duplicateBadgeAlertDurationMs = Math.max(0, Number(payload?.duplicateBadgeAlertDurationMs) || 3000);
+                console.info('[Config] Duplicate badge alert duration:', duplicateBadgeAlertDurationMs, 'ms');
                 // Signal binding already done in QWebChannel setup, don't rebind here
                 state.totalEmployees = payload?.totalEmployees ?? 0;
                 state.totalScansToday = payload?.totalScansToday ?? 0;
@@ -717,7 +722,7 @@ ${destination}` : message;
                     badgeId: response.badgeId || 'Unknown',
                     fullName: response.fullName || 'Badge blocked',
                     isError: true,  // Red error styling for block mode
-                    alertDurationMs: 3000,  // Show for 3 seconds
+                    alertDurationMs: duplicateBadgeAlertDurationMs,
                 });
             }
             return;
@@ -743,7 +748,7 @@ ${destination}` : message;
                 badgeId: response.badgeId || 'Unknown',
                 fullName: response.fullName || 'Unknown',
                 isError: false,  // Yellow warning styling for warn mode
-                alertDurationMs: 3000,  // Show for 3 seconds
+                alertDurationMs: duplicateBadgeAlertDurationMs,
             });
         }
     };
