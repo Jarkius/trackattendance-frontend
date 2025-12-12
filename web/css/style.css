@@ -62,6 +62,18 @@ header h1 {
     cursor: pointer;
 }
 
+/* Vertical divider line between indicator and close button */
+.connection-status::after {
+    content: '';
+    position: absolute;
+    right: -40px;  /* Position between indicator and X */
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.3);  /* Grey/transparent white */
+}
+
 .connection-status--unknown {
     background: var(--deloitte-black) !important;  /* Black - blends with header, no animation */
     animation: none;
