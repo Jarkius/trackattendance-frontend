@@ -50,7 +50,7 @@ header h1 {
 
 .connection-status {
     position: fixed;
-    top: 23px;  /* Align with X icon center */
+    top: 22px;  /* Align with X icon center */
     right: 110px;  /* More gap from close button */
     width: 20px;
     height: 20px;
