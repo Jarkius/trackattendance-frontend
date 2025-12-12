@@ -66,7 +66,7 @@ header h1 {
 .connection-status::after {
     content: '';
     position: absolute;
-    right: -40px;  /* Position between indicator and X */
+    right: -45px;  /* Centered between indicator (110px) and X (20px) */
     top: 50%;
     transform: translateY(-50%);
     width: 1px;
@@ -108,10 +108,10 @@ header h1 {
 #close-btn {
     position: fixed;
     top: 15px;
-    right: 30px;
+    right: 20px;  /* Shifted right to center between pipe and edge */
     z-index: 1001;
     color: white;
-    font-size: 2.2rem;  /* Increased to match 22px indicator */
+    font-size: 2.2rem;
     cursor: pointer;
     transition: color 0.2s ease-in-out;
 }
