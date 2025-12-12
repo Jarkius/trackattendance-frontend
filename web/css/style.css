@@ -73,7 +73,8 @@ header h1 {
 }
 
 .connection-status--offline {
-    background: #f44336 !important;  /* Red - indicates connection problem */
+    /* Radial gradient: solid red center fading to transparent edge - appears smaller */
+    background: radial-gradient(circle, #f44336 40%, rgba(244, 67, 54, 0.3) 70%, transparent 100%) !important;
     animation: red-pulse 2s ease-out infinite;
 }
 
