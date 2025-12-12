@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.warn('[ConnectionSignal] Connection check timed out after', CONNECTION_CHECK_FALLBACK_MS, 'ms');
             handleConnectionStatusPayload({ ok: false, message: 'Connection check timed out' });
         }, CONNECTION_CHECK_FALLBACK_MS);
-        setConnectionStatus('checking', 'Checking connection...');
+        // Note: Don't show 'checking' state - keep current state (green/grey) during checks with hysteresis
         queueOrRun((bridge) => {
             if (!bridge.test_cloud_connection) {
                 setConnectionStatus('offline', 'Connection check unavailable');

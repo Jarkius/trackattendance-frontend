@@ -49,11 +49,7 @@ header h1 {
 }
 
 .connection-status {
-    display: block !important;
-    position: absolute;
-    top: 50%;
-    right: 110px;
-    transform: translateY(-50%);
+    display: inline-block !important;
     width: 24px;
     height: 24px;
     border-radius: 50%;
@@ -62,6 +58,8 @@ header h1 {
     transition: background-color 0.2s ease;
     z-index: 1;
     cursor: pointer;
+    margin: 0 15px 0 0;
+    flex-shrink: 0;
 }
 
 .connection-status--unknown {
