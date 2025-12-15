@@ -6108,3 +6108,32 @@
 2025-12-15 16:37:32 [INFO    ] sync - Cloud API response received in 0.71s
 2025-12-15 16:37:32 [INFO    ] sync - Successfully synced 9 scans (saved: 9, duplicates: 0)
 2025-12-15 16:37:32 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-15 16:39:25 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 16:39:25 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 16:39:25 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 16:39:33 [INFO    ] dashboard - Dashboard: total_scans=52, unique_badges=25, stations=1
+2025-12-15 16:39:50 [INFO    ] dashboard - Dashboard: total_scans=52, unique_badges=25, stations=1
+2025-12-15 16:40:01 [INFO    ] dashboard - Dashboard: total_scans=52, unique_badges=25, stations=1
+2025-12-15 16:40:22 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T09:35:22Z
+2025-12-15 16:40:22 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at One Bangkok
+2025-12-15 16:40:22 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T09:40:22Z
+2025-12-15 16:40:23 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:40:24 [INFO    ] sync - Health check success
+2025-12-15 16:40:25 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-15 16:40:25 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-15 16:40:25 [INFO    ] sync - Cloud API response received in 0.58s
+2025-12-15 16:40:25 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-15 16:40:25 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 16:40:25 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 16:40:25 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:40:26 [INFO    ] sync - Health check success
+2025-12-15 16:40:26 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 16:40:26 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 16:40:29 [INFO    ] dashboard - Dashboard: total_scans=53, unique_badges=25, stations=1
+2025-12-15 16:41:02 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 16:41:02 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 16:41:02 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:41:03 [INFO    ] sync - Health check success
+2025-12-15 16:41:03 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 16:41:03 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 16:41:04 [INFO    ] dashboard - Dashboard: total_scans=53, unique_badges=25, stations=1
