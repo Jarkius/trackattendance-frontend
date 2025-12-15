@@ -6066,3 +6066,45 @@
 2025-12-15 16:34:43 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
 2025-12-15 16:34:46 [INFO    ] dashboard - Dashboard: total_scans=43, unique_badges=16, stations=1
 2025-12-15 16:34:52 [ERROR   ] dashboard - Missing dependency: No module named 'pandas'. Run: pip install pandas openpyxl
+2025-12-15 16:36:49 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 16:36:50 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 16:36:50 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 16:36:57 [INFO    ] database - DuplicateCheck: badge=101536, station=One Bangkok, window=300s, cutoff=2025-12-15T09:31:57Z
+2025-12-15 16:36:57 [INFO    ] database - DuplicateCheck: No duplicate found for 101536 at One Bangkok
+2025-12-15 16:36:57 [INFO    ] database - RecordingScan: badge=101536, station=One Bangkok, time=2025-12-15T09:36:57Z
+2025-12-15 16:36:59 [INFO    ] database - DuplicateCheck: badge=101447, station=One Bangkok, window=300s, cutoff=2025-12-15T09:31:59Z
+2025-12-15 16:36:59 [INFO    ] database - DuplicateCheck: No duplicate found for 101447 at One Bangkok
+2025-12-15 16:36:59 [INFO    ] database - RecordingScan: badge=101447, station=One Bangkok, time=2025-12-15T09:36:59Z
+2025-12-15 16:37:02 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 16:37:02 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 16:37:02 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:37:02 [INFO    ] sync - Health check success
+2025-12-15 16:37:02 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 16:37:02 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 16:37:03 [INFO    ] database - DuplicateCheck: badge=101235, station=One Bangkok, window=300s, cutoff=2025-12-15T09:32:03Z
+2025-12-15 16:37:03 [INFO    ] database - DuplicateCheck: No duplicate found for 101235 at One Bangkok
+2025-12-15 16:37:03 [INFO    ] database - RecordingScan: badge=101235, station=One Bangkok, time=2025-12-15T09:37:03Z
+2025-12-15 16:37:05 [INFO    ] database - DuplicateCheck: badge=10154155, station=One Bangkok, window=300s, cutoff=2025-12-15T09:32:05Z
+2025-12-15 16:37:05 [INFO    ] database - DuplicateCheck: No duplicate found for 10154155 at One Bangkok
+2025-12-15 16:37:05 [INFO    ] database - RecordingScan: badge=10154155, station=One Bangkok, time=2025-12-15T09:37:05Z
+2025-12-15 16:37:07 [INFO    ] database - DuplicateCheck: badge=100005, station=One Bangkok, window=300s, cutoff=2025-12-15T09:32:07Z
+2025-12-15 16:37:07 [INFO    ] database - DuplicateCheck: No duplicate found for 100005 at One Bangkok
+2025-12-15 16:37:07 [INFO    ] database - RecordingScan: badge=100005, station=One Bangkok, time=2025-12-15T09:37:07Z
+2025-12-15 16:37:08 [INFO    ] database - DuplicateCheck: badge=445454, station=One Bangkok, window=300s, cutoff=2025-12-15T09:32:08Z
+2025-12-15 16:37:08 [INFO    ] database - DuplicateCheck: No duplicate found for 445454 at One Bangkok
+2025-12-15 16:37:08 [INFO    ] database - RecordingScan: badge=445454, station=One Bangkok, time=2025-12-15T09:37:08Z
+2025-12-15 16:37:09 [INFO    ] database - DuplicateCheck: badge=454545, station=One Bangkok, window=300s, cutoff=2025-12-15T09:32:09Z
+2025-12-15 16:37:09 [INFO    ] database - DuplicateCheck: No duplicate found for 454545 at One Bangkok
+2025-12-15 16:37:09 [INFO    ] database - RecordingScan: badge=454545, station=One Bangkok, time=2025-12-15T09:37:09Z
+2025-12-15 16:37:10 [INFO    ] database - DuplicateCheck: badge=46545, station=One Bangkok, window=300s, cutoff=2025-12-15T09:32:10Z
+2025-12-15 16:37:10 [INFO    ] database - DuplicateCheck: No duplicate found for 46545 at One Bangkok
+2025-12-15 16:37:10 [INFO    ] database - RecordingScan: badge=46545, station=One Bangkok, time=2025-12-15T09:37:10Z
+2025-12-15 16:37:11 [INFO    ] database - DuplicateCheck: badge=15154, station=One Bangkok, window=300s, cutoff=2025-12-15T09:32:11Z
+2025-12-15 16:37:11 [INFO    ] database - DuplicateCheck: No duplicate found for 15154 at One Bangkok
+2025-12-15 16:37:11 [INFO    ] database - RecordingScan: badge=15154, station=One Bangkok, time=2025-12-15T09:37:11Z
+2025-12-15 16:37:14 [INFO    ] dashboard - Dashboard: total_scans=43, unique_badges=16, stations=1
+2025-12-15 16:37:32 [INFO    ] sync - Attempting to sync 9 scans
+2025-12-15 16:37:32 [INFO    ] sync - Syncing 9 scans to cloud API (attempt 1/3)...
+2025-12-15 16:37:32 [INFO    ] sync - Cloud API response received in 0.71s
+2025-12-15 16:37:32 [INFO    ] sync - Successfully synced 9 scans (saved: 9, duplicates: 0)
+2025-12-15 16:37:32 [INFO    ] sync - All scans synced after 1 batch(es)

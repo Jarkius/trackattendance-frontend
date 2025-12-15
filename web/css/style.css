@@ -942,7 +942,7 @@ header h1 {
 .dashboard-overlay--visible {
     visibility: visible;
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.6);
 }
 
 .dashboard-overlay__dialog {
