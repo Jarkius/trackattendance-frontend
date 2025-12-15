@@ -949,51 +949,21 @@ header h1 {
 }
 
 .dashboard-overlay__dialog {
-    transform: translateY(-100vh);
+    transform: scale(0.8);
     opacity: 0;
-    transition: transform 0.3s ease-in, opacity 0.2s ease;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
 }
 
 .dashboard-overlay--visible .dashboard-overlay__dialog {
-    transform: translateY(0);
+    transform: scale(1);
     opacity: 1;
-    animation: dropBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-/* Exit animation - slide up */
+/* Exit animation - scale down */
 .dashboard-overlay--closing .dashboard-overlay__dialog {
-    animation: slideUp 0.3s ease-in forwards;
-}
-
-@keyframes dropBounce {
-    0% {
-        transform: translateY(-100vh);
-        opacity: 0;
-    }
-    50% {
-        transform: translateY(20px);
-        opacity: 1;
-    }
-    70% {
-        transform: translateY(-10px);
-    }
-    85% {
-        transform: translateY(5px);
-    }
-    100% {
-        transform: translateY(0);
-    }
-}
-
-@keyframes slideUp {
-    0% {
-        transform: translateY(0);
-        opacity: 1;
-    }
-    100% {
-        transform: translateY(-100vh);
-        opacity: 0;
-    }
+    transform: scale(0.8);
+    opacity: 0;
+    transition: transform 0.2s ease-in, opacity 0.2s ease-in;
 }
 
 /* Prevent scrolling when dashboard is open */

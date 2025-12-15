@@ -954,7 +954,7 @@ ${destination}` : message;
             }
 
             returnFocusToInput();
-        }, 300); // Match slideUp animation duration
+        }, 200); // Match scale-down animation duration
     };
 
     const fetchDashboardData = () => {
