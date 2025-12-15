@@ -5947,3 +5947,21 @@
 2025-12-15 16:16:33 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
 2025-12-15 16:16:34 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET /v1/dashboard/stats HTTP/1.1" 200 174
 2025-12-15 16:16:34 [INFO    ] dashboard - Dashboard: total_scans=37, unique_badges=16, stations=1
+2025-12-15 16:17:34 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 16:17:34 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 16:17:34 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 16:17:40 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T09:12:40Z
+2025-12-15 16:17:40 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at One Bangkok
+2025-12-15 16:17:40 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T09:17:40Z
+2025-12-15 16:17:42 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T09:12:42Z
+2025-12-15 16:17:42 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=46)
+2025-12-15 16:17:42 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T09:17:42Z
+2025-12-15 16:17:45 [INFO    ] dashboard - Dashboard: total_scans=37, unique_badges=16, stations=1
+2025-12-15 16:17:53 [INFO    ] dashboard - Dashboard: total_scans=37, unique_badges=16, stations=1
+2025-12-15 16:17:56 [INFO    ] dashboard - Dashboard: total_scans=37, unique_badges=16, stations=1
+2025-12-15 16:17:59 [INFO    ] dashboard - Dashboard: total_scans=37, unique_badges=16, stations=1
+2025-12-15 16:18:02 [INFO    ] sync - Attempting to sync 2 scans
+2025-12-15 16:18:02 [INFO    ] sync - Syncing 2 scans to cloud API (attempt 1/3)...
+2025-12-15 16:18:03 [INFO    ] sync - Cloud API response received in 0.53s
+2025-12-15 16:18:03 [INFO    ] sync - Successfully synced 2 scans (saved: 2, duplicates: 0)
+2025-12-15 16:18:03 [INFO    ] sync - All scans synced after 1 batch(es)
