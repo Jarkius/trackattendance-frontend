@@ -874,6 +874,18 @@ ${destination}` : message;
             console.debug('[Dashboard] Paused connection polling');
         }
 
+        // Disable barcode input to prevent accidental scans while viewing dashboard
+        if (barcodeInput) {
+            barcodeInput.disabled = true;
+            console.debug('[Dashboard] Disabled barcode input');
+        }
+
+        // Hide sync status message to prevent layout shift
+        if (syncStatusMessage) {
+            syncStatusMessage.style.display = 'none';
+            console.debug('[Dashboard] Hidden sync status message');
+        }
+
         // Initialize with loading state
         if (dashboardRegistered) dashboardRegistered.textContent = '--';
         if (dashboardScanned) dashboardScanned.textContent = '--';
@@ -895,6 +907,18 @@ ${destination}` : message;
         if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
             startConnectionStatusPolling();
             console.debug('[Dashboard] Resumed connection polling');
+        }
+
+        // Re-enable barcode input
+        if (barcodeInput) {
+            barcodeInput.disabled = false;
+            console.debug('[Dashboard] Enabled barcode input');
+        }
+
+        // Restore sync status message
+        if (syncStatusMessage) {
+            syncStatusMessage.style.display = '';
+            console.debug('[Dashboard] Restored sync status message');
         }
 
         returnFocusToInput();
