@@ -942,7 +942,7 @@ header h1 {
 .dashboard-overlay--visible {
     visibility: visible;
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.3);
     transition: background 0.3s ease, visibility 0s linear 0s;
 }
 
