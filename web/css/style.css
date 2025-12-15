@@ -942,20 +942,27 @@ header h1 {
 .dashboard-overlay--visible {
     visibility: visible;
     pointer-events: auto;
-    background: rgba(0, 0, 0, 0.15);
-    transition: background 0.3s ease, visibility 0s linear 0s;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: background 0.3s ease, backdrop-filter 0.3s ease, visibility 0s linear 0s;
 }
 
 .dashboard-overlay__dialog {
     transform: translateY(-100vh);
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: transform 0.3s ease-in, opacity 0.2s ease;
 }
 
 .dashboard-overlay--visible .dashboard-overlay__dialog {
     transform: translateY(0);
     opacity: 1;
     animation: dropBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Exit animation - slide up */
+.dashboard-overlay--closing .dashboard-overlay__dialog {
+    animation: slideUp 0.3s ease-in forwards;
 }
 
 @keyframes dropBounce {
@@ -975,6 +982,17 @@ header h1 {
     }
     100% {
         transform: translateY(0);
+    }
+}
+
+@keyframes slideUp {
+    0% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100vh);
+        opacity: 0;
     }
 }
 

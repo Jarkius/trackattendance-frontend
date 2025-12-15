@@ -920,34 +920,41 @@ ${destination}` : message;
 
         // Clear flag to resume connection checks
         dashboardOpen = false;
-        console.debug('[Dashboard] Dashboard closed - connection checks resumed');
+        console.debug('[Dashboard] Dashboard closing - playing exit animation');
 
-        // Restore background scrolling
-        document.body.classList.remove('dashboard-open');
-        console.debug('[Dashboard] Restored background scrolling');
+        // Trigger exit animation
+        dashboardOverlay.classList.add('dashboard-overlay--closing');
 
-        dashboardOverlay.classList.remove('dashboard-overlay--visible');
-        dashboardOverlay.setAttribute('aria-hidden', 'true');
+        // Wait for animation to complete before hiding
+        setTimeout(() => {
+            dashboardOverlay.classList.remove('dashboard-overlay--visible');
+            dashboardOverlay.classList.remove('dashboard-overlay--closing');
+            dashboardOverlay.setAttribute('aria-hidden', 'true');
 
-        // Resume connection polling
-        if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
-            startConnectionStatusPolling();
-            console.debug('[Dashboard] Resumed connection polling interval');
-        }
+            // Restore background scrolling
+            document.body.classList.remove('dashboard-open');
+            console.debug('[Dashboard] Dashboard closed - connection checks resumed');
 
-        // Re-enable barcode input
-        if (barcodeInput) {
-            barcodeInput.disabled = false;
-            console.debug('[Dashboard] Enabled barcode input');
-        }
+            // Resume connection polling
+            if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
+                startConnectionStatusPolling();
+                console.debug('[Dashboard] Resumed connection polling interval');
+            }
 
-        // Restore sync status message
-        if (syncStatusMessage) {
-            syncStatusMessage.style.display = '';
-            console.debug('[Dashboard] Restored sync status message');
-        }
+            // Re-enable barcode input
+            if (barcodeInput) {
+                barcodeInput.disabled = false;
+                console.debug('[Dashboard] Enabled barcode input');
+            }
 
-        returnFocusToInput();
+            // Restore sync status message
+            if (syncStatusMessage) {
+                syncStatusMessage.style.display = '';
+                console.debug('[Dashboard] Restored sync status message');
+            }
+
+            returnFocusToInput();
+        }, 300); // Match slideUp animation duration
     };
 
     const fetchDashboardData = () => {
