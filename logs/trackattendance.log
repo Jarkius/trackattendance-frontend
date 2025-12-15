@@ -5982,3 +5982,23 @@
 2025-12-15 16:22:29 [INFO    ] sync - Cloud API response received in 0.60s
 2025-12-15 16:22:29 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
 2025-12-15 16:22:29 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-15 16:25:04 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 16:25:04 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 16:25:04 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 16:25:11 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T09:20:11Z
+2025-12-15 16:25:11 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=48)
+2025-12-15 16:25:11 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T09:25:11Z
+2025-12-15 16:25:15 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:25:15 [INFO    ] sync - Health check success
+2025-12-15 16:25:16 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-15 16:25:16 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-15 16:25:16 [INFO    ] sync - Cloud API response received in 0.59s
+2025-12-15 16:25:16 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-15 16:25:16 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 16:25:16 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 16:25:16 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:25:17 [INFO    ] sync - Health check success
+2025-12-15 16:25:17 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 16:25:17 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 16:25:23 [INFO    ] dashboard - Dashboard: total_scans=41, unique_badges=16, stations=1
+2025-12-15 16:25:37 [INFO    ] dashboard - Dashboard: total_scans=41, unique_badges=16, stations=1

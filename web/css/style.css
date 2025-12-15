@@ -949,21 +949,17 @@ header h1 {
 }
 
 .dashboard-overlay__dialog {
-    transform: scale(0.8);
     opacity: 0;
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+    transition: opacity 0.2s ease;
 }
 
 .dashboard-overlay--visible .dashboard-overlay__dialog {
-    transform: scale(1);
     opacity: 1;
 }
 
-/* Exit animation - scale down */
+/* Exit animation - fade out */
 .dashboard-overlay--closing .dashboard-overlay__dialog {
-    transform: scale(0.8);
     opacity: 0;
-    transition: transform 0.2s ease-in, opacity 0.2s ease-in;
 }
 
 /* Prevent scrolling when dashboard is open */
