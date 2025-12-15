@@ -22,6 +22,11 @@
             <h1>Station : <span id="station-name">--</span></h1>
         </div>
         <span class="connection-status connection-status--unknown" id="connection-status" aria-label="API connection status" title="Checking connection"></span>
+        <span class="dashboard-icon" id="dashboard-icon" title="View Dashboard">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+            </svg>
+        </span>
     </header>
     <i id="close-btn" class="material-icons">close</i>
 
@@ -54,6 +59,57 @@
                                     <p class="duplicate-overlay__message" id="duplicate-overlay-message"></p>
                                     <p class="duplicate-overlay__badge" id="duplicate-overlay-badge"></p>
                                     <p class="duplicate-overlay__name" id="duplicate-overlay-name"></p>
+                                </div>
+                            </div>
+                            <!-- Multi-Station Dashboard Overlay (Issue #27) -->
+                            <div class="dashboard-overlay" id="dashboard-overlay" aria-hidden="true">
+                                <div class="dashboard-overlay__dialog">
+                                    <div class="dashboard-overlay__header">
+                                        <h5 class="dashboard-overlay__title">Attendance Dashboard</h5>
+                                        <button type="button" class="dashboard-overlay__close" id="dashboard-close" title="Close">&times;</button>
+                                    </div>
+                                    <div class="dashboard-overlay__metrics">
+                                        <div class="dashboard-metric">
+                                            <span class="dashboard-metric__value" id="dashboard-registered">--</span>
+                                            <span class="dashboard-metric__label">Registered</span>
+                                        </div>
+                                        <div class="dashboard-metric">
+                                            <span class="dashboard-metric__value" id="dashboard-scanned">--</span>
+                                            <span class="dashboard-metric__label">Scanned</span>
+                                        </div>
+                                        <div class="dashboard-metric">
+                                            <span class="dashboard-metric__value" id="dashboard-rate">--%</span>
+                                            <span class="dashboard-metric__label">Attendance</span>
+                                        </div>
+                                    </div>
+                                    <div class="dashboard-overlay__table-container">
+                                        <table class="dashboard-overlay__table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Station</th>
+                                                    <th>Scans</th>
+                                                    <th>Unique</th>
+                                                    <th>Last Scan</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="dashboard-stations-body">
+                                                <tr>
+                                                    <td colspan="4" class="dashboard-overlay__loading">Loading...</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="dashboard-overlay__actions">
+                                        <button type="button" class="dashboard-overlay__btn dashboard-overlay__btn--primary" id="dashboard-export">
+                                            <i class="material-icons">file_download</i>
+                                            Export to Excel
+                                        </button>
+                                        <button type="button" class="dashboard-overlay__btn" id="dashboard-refresh">
+                                            <i class="material-icons">refresh</i>
+                                            Refresh
+                                        </button>
+                                    </div>
+                                    <p class="dashboard-overlay__footer" id="dashboard-updated">Last updated: --</p>
                                 </div>
                             </div>
                             <h5>Welcome</h5>

@@ -133,6 +133,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncStatusMessage = document.getElementById('sync-status-message');
     const connectionStatusDot = document.getElementById('connection-status');
 
+    // Dashboard overlay elements (Issue #27)
+    const dashboardIcon = document.getElementById('dashboard-icon');
+    const dashboardOverlay = document.getElementById('dashboard-overlay');
+    const dashboardClose = document.getElementById('dashboard-close');
+    const dashboardRegistered = document.getElementById('dashboard-registered');
+    const dashboardScanned = document.getElementById('dashboard-scanned');
+    const dashboardRate = document.getElementById('dashboard-rate');
+    const dashboardStationsBody = document.getElementById('dashboard-stations-body');
+    const dashboardUpdated = document.getElementById('dashboard-updated');
+    const dashboardExportBtn = document.getElementById('dashboard-export');
+    const dashboardRefreshBtn = document.getElementById('dashboard-refresh');
+
     if (!barcodeInput || !liveFeedbackName || !totalEmployeesCounter || !totalScannedCounter) {
         console.warn('Attendance UI missing required elements; event wiring skipped.');
         return;
@@ -848,6 +860,116 @@ ${destination}` : message;
         });
     };
 
+    // Dashboard overlay functions (Issue #27)
+    const showDashboardOverlay = () => {
+        if (!dashboardOverlay) return;
+
+        // Show loading state
+        if (dashboardStationsBody) {
+            dashboardStationsBody.innerHTML = '<tr><td colspan="4" class="dashboard-overlay__loading">Loading...</td></tr>';
+        }
+
+        dashboardOverlay.classList.add('dashboard-overlay--visible');
+        dashboardOverlay.setAttribute('aria-hidden', 'false');
+
+        // Fetch data from Python bridge
+        fetchDashboardData();
+    };
+
+    const hideDashboardOverlay = () => {
+        if (!dashboardOverlay) return;
+        dashboardOverlay.classList.remove('dashboard-overlay--visible');
+        dashboardOverlay.setAttribute('aria-hidden', 'true');
+        returnFocusToInput();
+    };
+
+    const fetchDashboardData = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.get_dashboard_data) {
+                updateDashboardUI({
+                    registered: 0,
+                    scanned: 0,
+                    attendance_rate: 0,
+                    stations: [],
+                    last_updated: '',
+                    error: 'Dashboard service not available',
+                });
+                return;
+            }
+            bridge.get_dashboard_data((data) => {
+                updateDashboardUI(data);
+            });
+        });
+    };
+
+    const updateDashboardUI = (data) => {
+        // Update metric cards
+        if (dashboardRegistered) {
+            dashboardRegistered.textContent = Number(data?.registered ?? 0).toLocaleString();
+        }
+        if (dashboardScanned) {
+            dashboardScanned.textContent = Number(data?.scanned ?? 0).toLocaleString();
+        }
+        if (dashboardRate) {
+            const rate = data?.attendance_rate ?? 0;
+            dashboardRate.textContent = `${rate.toFixed(1)}%`;
+        }
+        if (dashboardUpdated) {
+            dashboardUpdated.textContent = `Last updated: ${data?.last_updated || '--'}`;
+        }
+
+        // Update station table
+        if (dashboardStationsBody) {
+            const stations = data?.stations || [];
+            if (stations.length === 0) {
+                const errorMsg = data?.error || 'No scan data available';
+                dashboardStationsBody.innerHTML = `<tr><td colspan="4" class="dashboard-overlay__loading">${errorMsg}</td></tr>`;
+            } else {
+                dashboardStationsBody.innerHTML = stations.map(station => `
+                    <tr>
+                        <td>${station.name || '--'}</td>
+                        <td>${Number(station.scans || 0).toLocaleString()}</td>
+                        <td>${Number(station.unique || 0).toLocaleString()}</td>
+                        <td>${station.last_scan || '--'}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+    };
+
+    const handleDashboardExport = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.export_dashboard_excel) {
+                alert('Export service not available');
+                return;
+            }
+
+            // Generate default file path with timestamp
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const fileName = `attendance_report_${timestamp}.xlsx`;
+
+            // Disable button during export
+            if (dashboardExportBtn) {
+                dashboardExportBtn.disabled = true;
+                dashboardExportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i> Exporting...';
+            }
+
+            bridge.export_dashboard_excel(fileName, (result) => {
+                // Re-enable button
+                if (dashboardExportBtn) {
+                    dashboardExportBtn.disabled = false;
+                    dashboardExportBtn.innerHTML = '<i class="material-icons">file_download</i> Export to Excel';
+                }
+
+                if (result?.ok) {
+                    alert(`Export complete!\n\n${result.message}\n\nSaved to: ${result.file_path}`);
+                } else {
+                    alert(`Export failed: ${result?.message || 'Unknown error'}`);
+                }
+            });
+        });
+    };
+
     const handleSyncNow = () => {
         queueOrRun((bridge) => {
             if (!bridge.sync_now) {
@@ -933,6 +1055,45 @@ ${destination}` : message;
         });
     }
 
+    // Dashboard overlay event listeners (Issue #27)
+    if (dashboardIcon) {
+        dashboardIcon.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            showDashboardOverlay();
+        });
+    }
+
+    if (dashboardClose) {
+        dashboardClose.addEventListener('click', (event) => {
+            event.preventDefault();
+            hideDashboardOverlay();
+        });
+    }
+
+    if (dashboardRefreshBtn) {
+        dashboardRefreshBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            fetchDashboardData();
+        });
+    }
+
+    if (dashboardExportBtn) {
+        dashboardExportBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            handleDashboardExport();
+        });
+    }
+
+    // Close dashboard overlay when clicking outside the dialog
+    if (dashboardOverlay) {
+        dashboardOverlay.addEventListener('click', (event) => {
+            if (event.target === dashboardOverlay) {
+                hideDashboardOverlay();
+            }
+        });
+    }
+
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
             returnFocusToInput();
@@ -945,6 +1106,11 @@ ${destination}` : message;
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
+            // First check if dashboard overlay is open
+            if (dashboardOverlay && dashboardOverlay.classList.contains('dashboard-overlay--visible')) {
+                hideDashboardOverlay();
+                return;
+            }
             queueOrRun((bridge) => bridge.close_window());
             return;
         }

@@ -104,6 +104,31 @@ header h1 {
     }
 }
 
+/* Dashboard Icon (Issue #27) - positioned next to connection status */
+.dashboard-icon {
+    position: fixed;
+    top: 20px;
+    right: 150px;  /* Left of connection status */
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.dashboard-icon:hover {
+    color: var(--deloitte-green);
+    transform: scale(1.1);
+}
+
+.dashboard-icon svg {
+    width: 20px;
+    height: 20px;
+}
 
 #close-btn {
     position: fixed;
@@ -893,5 +918,207 @@ header h1 {
     font-size: 9pt;
     color: #f44336;
     line-height: 1.4;
+    text-align: center;
+}
+
+/* Multi-Station Dashboard Overlay (Issue #27) */
+.dashboard-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 2000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.dashboard-overlay--visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.dashboard-overlay__dialog {
+    background-color: var(--background);
+    border-radius: 12px;
+    padding: 0;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transform: scale(0.9) translateY(-20px);
+    transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.dashboard-overlay--visible .dashboard-overlay__dialog {
+    transform: scale(1) translateY(0);
+}
+
+.dashboard-overlay__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--deloitte-black);
+    color: white;
+}
+
+.dashboard-overlay__title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.dashboard-overlay__close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.dashboard-overlay__close:hover {
+    opacity: 1;
+}
+
+.dashboard-overlay__metrics {
+    display: flex;
+    justify-content: space-around;
+    padding: 20px;
+    background: var(--deloitte-grey-light);
+    border-bottom: 1px solid var(--border);
+}
+
+.dashboard-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.dashboard-metric__value {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: var(--deloitte-black);
+    line-height: 1.2;
+}
+
+.dashboard-metric__label {
+    font-size: 0.75rem;
+    color: var(--deloitte-grey-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 4px;
+}
+
+.dashboard-overlay__table-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px;
+    max-height: 300px;
+}
+
+.dashboard-overlay__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.dashboard-overlay__table thead {
+    position: sticky;
+    top: 0;
+    background: var(--background);
+}
+
+.dashboard-overlay__table th {
+    text-align: left;
+    padding: 12px 8px;
+    font-weight: 600;
+    color: var(--deloitte-grey-medium);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--border);
+}
+
+.dashboard-overlay__table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--deloitte-grey-dark);
+}
+
+.dashboard-overlay__table tr:last-child td {
+    border-bottom: none;
+}
+
+.dashboard-overlay__table tr:hover td {
+    background: var(--deloitte-grey-light);
+}
+
+.dashboard-overlay__loading {
+    text-align: center;
+    color: var(--deloitte-grey-medium);
+    padding: 20px !important;
+}
+
+.dashboard-overlay__actions {
+    display: flex;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--background);
+}
+
+.dashboard-overlay__btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--background);
+    color: var(--deloitte-grey-dark);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.dashboard-overlay__btn:hover {
+    background: var(--deloitte-grey-light);
+    border-color: var(--deloitte-grey-medium);
+}
+
+.dashboard-overlay__btn--primary {
+    background: var(--deloitte-green);
+    border-color: var(--deloitte-green);
+    color: white;
+}
+
+.dashboard-overlay__btn--primary:hover {
+    background: #75a820;
+    border-color: #75a820;
+}
+
+.dashboard-overlay__btn .material-icons {
+    font-size: 1.1rem;
+}
+
+.dashboard-overlay__footer {
+    margin: 0;
+    padding: 8px 20px 16px;
+    font-size: 0.75rem;
+    color: var(--deloitte-grey-medium);
     text-align: center;
 }

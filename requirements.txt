@@ -31,3 +31,4 @@ urllib3==2.5.0
 zope.event==6.0
 zope.interface==8.0
 openpyxl==3.1.5
+pandas==2.2.3

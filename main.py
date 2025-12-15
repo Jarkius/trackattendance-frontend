@@ -17,6 +17,7 @@ import requests
 
 from attendance import AttendanceService
 from sync import SyncService
+from dashboard import DashboardService
 import config
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
@@ -328,12 +329,14 @@ class Api(QObject):
         quit_callback: Callable[[], None],
         sync_service: Optional[SyncService] = None,
         auto_sync_manager: Optional[AutoSyncManager] = None,
+        dashboard_service: Optional[DashboardService] = None,
     ):
         super().__init__()
         self._service = service
         self._quit_callback = quit_callback
         self._sync_service = sync_service
         self._auto_sync_manager = auto_sync_manager
+        self._dashboard_service = dashboard_service
         self._window = None
         self._connection_check_inflight = False
         self._last_connection_result: Dict[str, object] = {
@@ -505,6 +508,33 @@ class Api(QObject):
         if self._quit_callback:
             self._quit_callback()
 
+    # Dashboard methods (Issue #27)
+    @pyqtSlot(result="QVariant")
+    def get_dashboard_data(self) -> dict:
+        """Fetch multi-station dashboard data from cloud and local database."""
+        if not self._dashboard_service:
+            return {
+                "registered": 0,
+                "scanned": 0,
+                "total_scans": 0,
+                "attendance_rate": 0.0,
+                "stations": [],
+                "last_updated": "",
+                "error": "Dashboard service not configured",
+            }
+        return self._dashboard_service.get_dashboard_data()
+
+    @pyqtSlot(str, result="QVariant")
+    def export_dashboard_excel(self, file_path: str) -> dict:
+        """Export dashboard data to Excel file."""
+        if not self._dashboard_service:
+            return {
+                "ok": False,
+                "message": "Dashboard service not configured",
+                "file_path": file_path,
+            }
+        return self._dashboard_service.export_to_excel(file_path)
+
 
 def initialize_app(
     argv: Optional[Sequence[str]] = None,
@@ -622,6 +652,15 @@ def main() -> None:
         config.CONNECTION_CHECK_TIMEOUT_SECONDS,
     )
 
+    # Initialize dashboard service for multi-station reports (Issue #27)
+    # Uses the same Cloud API as sync service (no direct Neon connection needed)
+    dashboard_service = DashboardService(
+        db_manager=service._db,
+        api_url=config.CLOUD_API_URL,
+        api_key=config.CLOUD_API_KEY,
+    )
+    LOGGER.info("Dashboard service initialized with Cloud API")
+
     roster_missing = not service.employees_loaded()
     example_workbook_path: Optional[Path] = None
     if roster_missing:
@@ -636,6 +675,7 @@ def main() -> None:
             quit_callback=quit_callback,
             sync_service=sync_service,
             auto_sync_manager=auto_sync_manager_ref[0],
+            dashboard_service=dashboard_service,
         )
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)
