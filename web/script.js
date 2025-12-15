@@ -864,13 +864,16 @@ ${destination}` : message;
     const showDashboardOverlay = () => {
         if (!dashboardOverlay) return;
 
-        // Show loading state
+        dashboardOverlay.classList.add('dashboard-overlay--visible');
+        dashboardOverlay.setAttribute('aria-hidden', 'false');
+
+        // Initialize with loading state
+        if (dashboardRegistered) dashboardRegistered.textContent = '--';
+        if (dashboardScanned) dashboardScanned.textContent = '--';
+        if (dashboardRate) dashboardRate.textContent = '--';
         if (dashboardStationsBody) {
             dashboardStationsBody.innerHTML = '<tr><td colspan="4" class="dashboard-overlay__loading">Loading...</td></tr>';
         }
-
-        dashboardOverlay.classList.add('dashboard-overlay--visible');
-        dashboardOverlay.setAttribute('aria-hidden', 'false');
 
         // Fetch data from Python bridge
         fetchDashboardData();

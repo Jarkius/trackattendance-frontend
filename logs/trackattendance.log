@@ -5028,3 +5028,687 @@
 2025-12-12 23:44:24 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
 2025-12-12 23:44:24 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
 2025-12-12 23:44:24 [DEBUG   ] __main__ - Emitting signal from main thread
+2025-12-12 23:47:17 [INFO    ] logging_config - Logging configured - Level: DEBUG, File: logs/trackattendance.log
+2025-12-12 23:47:17 [DEBUG   ] logging_config - Secret redaction enabled
+2025-12-12 23:47:17 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-12 23:47:29 [INFO    ] __main__ - UI requested cloud health check
+2025-12-12 23:47:29 [INFO    ] __main__ - Dispatching async health check...
+2025-12-12 23:47:29 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-12 23:47:29 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-12 23:47:29 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET / HTTP/1.1" 200 105
+2025-12-12 23:47:29 [INFO    ] sync - Health check success
+2025-12-12 23:47:29 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-12 23:47:29 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-12 23:47:29 [DEBUG   ] __main__ - Emitting signal from main thread
+2025-12-12 23:48:35 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T16:43:35Z
+2025-12-12 23:48:35 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=419)
+2025-12-12 23:48:35 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T16:48:35Z
+2025-12-12 23:48:42 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T16:43:42Z
+2025-12-12 23:48:42 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=420)
+2025-12-12 23:48:42 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T16:48:42Z
+2025-12-12 23:48:48 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T16:43:48Z
+2025-12-12 23:48:48 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=421)
+2025-12-12 23:48:48 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T16:48:48Z
+2025-12-12 23:48:55 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T16:43:55Z
+2025-12-12 23:48:55 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=422)
+2025-12-12 23:48:55 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T16:48:55Z
+2025-12-12 23:49:00 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T16:44:00Z
+2025-12-12 23:49:00 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=423)
+2025-12-12 23:49:00 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T16:49:00Z
+2025-12-12 23:49:03 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-12 23:49:03 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-12 23:49:04 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET / HTTP/1.1" 200 105
+2025-12-12 23:49:04 [INFO    ] sync - Health check success
+2025-12-12 23:49:04 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-12 23:49:04 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "POST /v1/scans/batch HTTP/1.1" 200 37
+2025-12-12 23:49:04 [INFO    ] sync - Attempting to sync 5 scans
+2025-12-12 23:49:04 [INFO    ] sync - Syncing 5 scans to cloud API (attempt 1/3)...
+2025-12-12 23:49:04 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-12 23:49:05 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "POST /v1/scans/batch HTTP/1.1" 200 37
+2025-12-12 23:49:05 [INFO    ] sync - Cloud API response received in 0.73s
+2025-12-12 23:49:05 [INFO    ] sync - Successfully synced 5 scans (saved: 5, duplicates: 0)
+2025-12-12 23:49:05 [INFO    ] __main__ - UI requested cloud health check
+2025-12-12 23:49:05 [INFO    ] __main__ - Dispatching async health check...
+2025-12-12 23:49:05 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-12 23:49:05 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-12 23:49:06 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET / HTTP/1.1" 200 105
+2025-12-12 23:49:06 [INFO    ] sync - Health check success
+2025-12-12 23:49:06 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-12 23:49:06 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-12 23:49:06 [DEBUG   ] __main__ - Emitting signal from main thread
+2025-12-12 23:49:35 [INFO    ] __main__ - UI requested cloud health check
+2025-12-12 23:49:35 [INFO    ] __main__ - Dispatching async health check...
+2025-12-12 23:49:35 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-12 23:49:35 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-12 23:49:36 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET / HTTP/1.1" 200 105
+2025-12-12 23:49:36 [INFO    ] sync - Health check success
+2025-12-12 23:49:36 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-12 23:49:36 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-12 23:49:36 [DEBUG   ] __main__ - Emitting signal from main thread
+2025-12-12 23:49:42 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-12 23:49:42 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-12 23:49:50 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T16:44:50Z
+2025-12-12 23:49:50 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=424)
+2025-12-12 23:49:50 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T16:49:50Z
+2025-12-12 23:49:54 [INFO    ] __main__ - UI requested cloud health check
+2025-12-12 23:49:54 [INFO    ] __main__ - Dispatching async health check...
+2025-12-12 23:49:54 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-12 23:49:54 [INFO    ] sync - Health check success
+2025-12-12 23:49:54 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-12 23:49:54 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-12 23:49:54 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T16:44:54Z
+2025-12-12 23:49:54 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=425)
+2025-12-12 23:49:54 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T16:49:54Z
+2025-12-12 23:49:57 [INFO    ] database - DuplicateCheck: badge=JKDSALFJ;SA, station=Stadium 1, window=300s, cutoff=2025-12-12T16:44:57Z
+2025-12-12 23:49:57 [INFO    ] database - DuplicateCheck: No duplicate found for JKDSALFJ;SA at Stadium 1
+2025-12-12 23:49:57 [INFO    ] database - RecordingScan: badge=JKDSALFJ;SA, station=Stadium 1, time=2025-12-12T16:49:57Z
+2025-12-12 23:49:58 [INFO    ] database - DuplicateCheck: badge=FDSAJKLFJSD;FADS, station=Stadium 1, window=300s, cutoff=2025-12-12T16:44:58Z
+2025-12-12 23:49:58 [INFO    ] database - DuplicateCheck: No duplicate found for FDSAJKLFJSD;FADS at Stadium 1
+2025-12-12 23:49:58 [INFO    ] database - RecordingScan: badge=FDSAJKLFJSD;FADS, station=Stadium 1, time=2025-12-12T16:49:58Z
+2025-12-12 23:49:59 [INFO    ] database - DuplicateCheck: badge=FJDSKL;FJ;AJVDSA, station=Stadium 1, window=300s, cutoff=2025-12-12T16:44:59Z
+2025-12-12 23:49:59 [INFO    ] database - DuplicateCheck: No duplicate found for FJDSKL;FJ;AJVDSA at Stadium 1
+2025-12-12 23:49:59 [INFO    ] database - RecordingScan: badge=FJDSKL;FJ;AJVDSA, station=Stadium 1, time=2025-12-12T16:49:59Z
+2025-12-12 23:50:00 [INFO    ] database - DuplicateCheck: badge=FJSDFDSA, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:00Z
+2025-12-12 23:50:00 [INFO    ] database - DuplicateCheck: No duplicate found for FJSDFDSA at Stadium 1
+2025-12-12 23:50:00 [INFO    ] database - RecordingScan: badge=FJSDFDSA, station=Stadium 1, time=2025-12-12T16:50:00Z
+2025-12-12 23:50:00 [INFO    ] database - DuplicateCheck: badge=FJDKAL;SFJ;DAS, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:00Z
+2025-12-12 23:50:00 [INFO    ] database - DuplicateCheck: No duplicate found for FJDKAL;SFJ;DAS at Stadium 1
+2025-12-12 23:50:00 [INFO    ] database - RecordingScan: badge=FJDKAL;SFJ;DAS, station=Stadium 1, time=2025-12-12T16:50:00Z
+2025-12-12 23:50:01 [INFO    ] database - DuplicateCheck: badge=JADKLF;DAJ;SF, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:01Z
+2025-12-12 23:50:01 [INFO    ] database - DuplicateCheck: No duplicate found for JADKLF;DAJ;SF at Stadium 1
+2025-12-12 23:50:01 [INFO    ] database - RecordingScan: badge=JADKLF;DAJ;SF, station=Stadium 1, time=2025-12-12T16:50:01Z
+2025-12-12 23:50:02 [INFO    ] database - DuplicateCheck: badge=FJASDK;FJ;ASD, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:02Z
+2025-12-12 23:50:02 [INFO    ] database - DuplicateCheck: No duplicate found for FJASDK;FJ;ASD at Stadium 1
+2025-12-12 23:50:02 [INFO    ] database - RecordingScan: badge=FJASDK;FJ;ASD, station=Stadium 1, time=2025-12-12T16:50:02Z
+2025-12-12 23:50:02 [INFO    ] database - DuplicateCheck: badge=FJADSKFJA;SD, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:02Z
+2025-12-12 23:50:02 [INFO    ] database - DuplicateCheck: No duplicate found for FJADSKFJA;SD at Stadium 1
+2025-12-12 23:50:02 [INFO    ] database - RecordingScan: badge=FJADSKFJA;SD, station=Stadium 1, time=2025-12-12T16:50:02Z
+2025-12-12 23:50:03 [INFO    ] database - DuplicateCheck: badge=FJAKLSDFJ;ASF, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:03Z
+2025-12-12 23:50:03 [INFO    ] database - DuplicateCheck: No duplicate found for FJAKLSDFJ;ASF at Stadium 1
+2025-12-12 23:50:03 [INFO    ] database - RecordingScan: badge=FJAKLSDFJ;ASF, station=Stadium 1, time=2025-12-12T16:50:03Z
+2025-12-12 23:50:03 [INFO    ] database - DuplicateCheck: badge=FAJSD, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:03Z
+2025-12-12 23:50:03 [INFO    ] database - DuplicateCheck: No duplicate found for FAJSD at Stadium 1
+2025-12-12 23:50:03 [INFO    ] database - RecordingScan: badge=FAJSD, station=Stadium 1, time=2025-12-12T16:50:03Z
+2025-12-12 23:50:03 [INFO    ] database - DuplicateCheck: badge=F, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:03Z
+2025-12-12 23:50:03 [INFO    ] database - DuplicateCheck: No duplicate found for F at Stadium 1
+2025-12-12 23:50:03 [INFO    ] database - RecordingScan: badge=F, station=Stadium 1, time=2025-12-12T16:50:03Z
+2025-12-12 23:50:04 [INFO    ] database - DuplicateCheck: badge=ASJKFL;DAS, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:04Z
+2025-12-12 23:50:04 [INFO    ] database - DuplicateCheck: No duplicate found for ASJKFL;DAS at Stadium 1
+2025-12-12 23:50:04 [INFO    ] database - RecordingScan: badge=ASJKFL;DAS, station=Stadium 1, time=2025-12-12T16:50:04Z
+2025-12-12 23:50:05 [INFO    ] database - DuplicateCheck: badge=FJASDK;FJASD'F, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:05Z
+2025-12-12 23:50:05 [INFO    ] database - DuplicateCheck: No duplicate found for FJASDK;FJASD'F at Stadium 1
+2025-12-12 23:50:05 [INFO    ] database - RecordingScan: badge=FJASDK;FJASD'F, station=Stadium 1, time=2025-12-12T16:50:05Z
+2025-12-12 23:50:06 [INFO    ] database - DuplicateCheck: badge=FJADSKL;FJASD;F, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:06Z
+2025-12-12 23:50:06 [INFO    ] database - DuplicateCheck: No duplicate found for FJADSKL;FJASD;F at Stadium 1
+2025-12-12 23:50:06 [INFO    ] database - RecordingScan: badge=FJADSKL;FJASD;F, station=Stadium 1, time=2025-12-12T16:50:06Z
+2025-12-12 23:50:07 [INFO    ] database - DuplicateCheck: badge=FJADSKL;AJ;SAD, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:07Z
+2025-12-12 23:50:07 [INFO    ] database - DuplicateCheck: No duplicate found for FJADSKL;AJ;SAD at Stadium 1
+2025-12-12 23:50:07 [INFO    ] database - RecordingScan: badge=FJADSKL;AJ;SAD, station=Stadium 1, time=2025-12-12T16:50:07Z
+2025-12-12 23:50:07 [INFO    ] database - DuplicateCheck: badge=VJK;JZXCVJF, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:07Z
+2025-12-12 23:50:07 [INFO    ] database - DuplicateCheck: No duplicate found for VJK;JZXCVJF at Stadium 1
+2025-12-12 23:50:07 [INFO    ] database - RecordingScan: badge=VJK;JZXCVJF, station=Stadium 1, time=2025-12-12T16:50:07Z
+2025-12-12 23:50:08 [INFO    ] database - DuplicateCheck: badge=ASDJFL;JAD;SF, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:08Z
+2025-12-12 23:50:08 [INFO    ] database - DuplicateCheck: No duplicate found for ASDJFL;JAD;SF at Stadium 1
+2025-12-12 23:50:08 [INFO    ] database - RecordingScan: badge=ASDJFL;JAD;SF, station=Stadium 1, time=2025-12-12T16:50:08Z
+2025-12-12 23:50:09 [INFO    ] database - DuplicateCheck: badge=REWIORUPQWERR, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:09Z
+2025-12-12 23:50:09 [INFO    ] database - DuplicateCheck: No duplicate found for REWIORUPQWERR at Stadium 1
+2025-12-12 23:50:09 [INFO    ] database - RecordingScan: badge=REWIORUPQWERR, station=Stadium 1, time=2025-12-12T16:50:09Z
+2025-12-12 23:50:10 [INFO    ] database - DuplicateCheck: badge=EWQKRJ;FSD, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:10Z
+2025-12-12 23:50:10 [INFO    ] database - DuplicateCheck: No duplicate found for EWQKRJ;FSD at Stadium 1
+2025-12-12 23:50:10 [INFO    ] database - RecordingScan: badge=EWQKRJ;FSD, station=Stadium 1, time=2025-12-12T16:50:10Z
+2025-12-12 23:50:11 [INFO    ] database - DuplicateCheck: badge=GAKFL;J'fasd, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:11Z
+2025-12-12 23:50:11 [INFO    ] database - DuplicateCheck: No duplicate found for GAKFL;J'fasd at Stadium 1
+2025-12-12 23:50:11 [INFO    ] database - RecordingScan: badge=GAKFL;J'fasd, station=Stadium 1, time=2025-12-12T16:50:11Z
+2025-12-12 23:50:11 [INFO    ] database - DuplicateCheck: badge=fjadsklfjadsjfadsf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:11Z
+2025-12-12 23:50:11 [INFO    ] database - DuplicateCheck: No duplicate found for fjadsklfjadsjfadsf at Stadium 1
+2025-12-12 23:50:11 [INFO    ] database - RecordingScan: badge=fjadsklfjadsjfadsf, station=Stadium 1, time=2025-12-12T16:50:11Z
+2025-12-12 23:50:12 [INFO    ] database - DuplicateCheck: badge=asjf'asf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:12Z
+2025-12-12 23:50:12 [INFO    ] database - DuplicateCheck: No duplicate found for asjf'asf at Stadium 1
+2025-12-12 23:50:12 [INFO    ] database - RecordingScan: badge=asjf'asf, station=Stadium 1, time=2025-12-12T16:50:12Z
+2025-12-12 23:50:13 [INFO    ] database - DuplicateCheck: badge=ajsdfk;ljasd;fasd, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:13Z
+2025-12-12 23:50:13 [INFO    ] database - DuplicateCheck: No duplicate found for ajsdfk;ljasd;fasd at Stadium 1
+2025-12-12 23:50:13 [INFO    ] database - RecordingScan: badge=ajsdfk;ljasd;fasd, station=Stadium 1, time=2025-12-12T16:50:13Z
+2025-12-12 23:50:14 [INFO    ] database - DuplicateCheck: badge=fja'sfad;lsfja;lsfasd, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:14Z
+2025-12-12 23:50:14 [INFO    ] database - DuplicateCheck: No duplicate found for fja'sfad;lsfja;lsfasd at Stadium 1
+2025-12-12 23:50:14 [INFO    ] database - RecordingScan: badge=fja'sfad;lsfja;lsfasd, station=Stadium 1, time=2025-12-12T16:50:14Z
+2025-12-12 23:50:14 [INFO    ] database - DuplicateCheck: badge=f, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:14Z
+2025-12-12 23:50:14 [INFO    ] database - DuplicateCheck: No duplicate found for f at Stadium 1
+2025-12-12 23:50:14 [INFO    ] database - RecordingScan: badge=f, station=Stadium 1, time=2025-12-12T16:50:14Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: badge=asdfdasf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:15Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: No duplicate found for asdfdasf at Stadium 1
+2025-12-12 23:50:15 [INFO    ] database - RecordingScan: badge=asdfdasf, station=Stadium 1, time=2025-12-12T16:50:15Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: badge=ads, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:15Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: No duplicate found for ads at Stadium 1
+2025-12-12 23:50:15 [INFO    ] database - RecordingScan: badge=ads, station=Stadium 1, time=2025-12-12T16:50:15Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: badge=fasdf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:15Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: No duplicate found for fasdf at Stadium 1
+2025-12-12 23:50:15 [INFO    ] database - RecordingScan: badge=fasdf, station=Stadium 1, time=2025-12-12T16:50:15Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: badge=ads, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:15Z
+2025-12-12 23:50:15 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=453)
+2025-12-12 23:50:15 [INFO    ] database - RecordingScan: badge=ads, station=Stadium 1, time=2025-12-12T16:50:15Z
+2025-12-12 23:50:19 [INFO    ] database - DuplicateCheck: badge=fadsfdasf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:19Z
+2025-12-12 23:50:19 [INFO    ] database - DuplicateCheck: No duplicate found for fadsfdasf at Stadium 1
+2025-12-12 23:50:19 [INFO    ] database - RecordingScan: badge=fadsfdasf, station=Stadium 1, time=2025-12-12T16:50:19Z
+2025-12-12 23:50:19 [INFO    ] database - DuplicateCheck: badge=fadsfas, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:19Z
+2025-12-12 23:50:19 [INFO    ] database - DuplicateCheck: No duplicate found for fadsfas at Stadium 1
+2025-12-12 23:50:19 [INFO    ] database - RecordingScan: badge=fadsfas, station=Stadium 1, time=2025-12-12T16:50:19Z
+2025-12-12 23:50:19 [INFO    ] database - DuplicateCheck: badge=fa, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:19Z
+2025-12-12 23:50:19 [INFO    ] database - DuplicateCheck: No duplicate found for fa at Stadium 1
+2025-12-12 23:50:19 [INFO    ] database - RecordingScan: badge=fa, station=Stadium 1, time=2025-12-12T16:50:19Z
+2025-12-12 23:50:20 [INFO    ] database - DuplicateCheck: badge=d, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:20Z
+2025-12-12 23:50:20 [INFO    ] database - DuplicateCheck: No duplicate found for d at Stadium 1
+2025-12-12 23:50:20 [INFO    ] database - RecordingScan: badge=d, station=Stadium 1, time=2025-12-12T16:50:20Z
+2025-12-12 23:50:20 [INFO    ] database - DuplicateCheck: badge=fasdfadsf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:20Z
+2025-12-12 23:50:20 [INFO    ] database - DuplicateCheck: No duplicate found for fasdfadsf at Stadium 1
+2025-12-12 23:50:20 [INFO    ] database - RecordingScan: badge=fasdfadsf, station=Stadium 1, time=2025-12-12T16:50:20Z
+2025-12-12 23:50:21 [INFO    ] database - DuplicateCheck: badge=fadsafadsfas, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:21Z
+2025-12-12 23:50:21 [INFO    ] database - DuplicateCheck: No duplicate found for fadsafadsfas at Stadium 1
+2025-12-12 23:50:21 [INFO    ] database - RecordingScan: badge=fadsafadsfas, station=Stadium 1, time=2025-12-12T16:50:21Z
+2025-12-12 23:50:23 [INFO    ] database - DuplicateCheck: badge=adsfasfadfads, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:23Z
+2025-12-12 23:50:23 [INFO    ] database - DuplicateCheck: No duplicate found for adsfasfadfads at Stadium 1
+2025-12-12 23:50:23 [INFO    ] database - RecordingScan: badge=adsfasfadfads, station=Stadium 1, time=2025-12-12T16:50:23Z
+2025-12-12 23:50:24 [INFO    ] database - DuplicateCheck: badge=fadsfasdfsadfasdf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:24Z
+2025-12-12 23:50:24 [INFO    ] database - DuplicateCheck: No duplicate found for fadsfasdfsadfasdf at Stadium 1
+2025-12-12 23:50:24 [INFO    ] database - RecordingScan: badge=fadsfasdfsadfasdf, station=Stadium 1, time=2025-12-12T16:50:24Z
+2025-12-12 23:50:25 [INFO    ] database - DuplicateCheck: badge=adsfadsfadsfasdff, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:25Z
+2025-12-12 23:50:25 [INFO    ] database - DuplicateCheck: No duplicate found for adsfadsfadsfasdff at Stadium 1
+2025-12-12 23:50:25 [INFO    ] database - RecordingScan: badge=adsfadsfadsfasdff, station=Stadium 1, time=2025-12-12T16:50:25Z
+2025-12-12 23:50:27 [INFO    ] database - DuplicateCheck: badge=adfasdfasdfasdf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:27Z
+2025-12-12 23:50:27 [INFO    ] database - DuplicateCheck: No duplicate found for adfasdfasdfasdf at Stadium 1
+2025-12-12 23:50:27 [INFO    ] database - RecordingScan: badge=adfasdfasdfasdf, station=Stadium 1, time=2025-12-12T16:50:27Z
+2025-12-12 23:50:28 [INFO    ] database - DuplicateCheck: badge=fadadsfasfsadfasf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:28Z
+2025-12-12 23:50:28 [INFO    ] database - DuplicateCheck: No duplicate found for fadadsfasfsadfasf at Stadium 1
+2025-12-12 23:50:28 [INFO    ] database - RecordingScan: badge=fadadsfasfsadfasf, station=Stadium 1, time=2025-12-12T16:50:28Z
+2025-12-12 23:50:29 [INFO    ] database - DuplicateCheck: badge=asdfasdfsadfasdf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:29Z
+2025-12-12 23:50:29 [INFO    ] database - DuplicateCheck: No duplicate found for asdfasdfsadfasdf at Stadium 1
+2025-12-12 23:50:29 [INFO    ] database - RecordingScan: badge=asdfasdfsadfasdf, station=Stadium 1, time=2025-12-12T16:50:29Z
+2025-12-12 23:50:31 [INFO    ] database - DuplicateCheck: badge=fadsfasdfasdfasdf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:31Z
+2025-12-12 23:50:31 [INFO    ] database - DuplicateCheck: No duplicate found for fadsfasdfasdfasdf at Stadium 1
+2025-12-12 23:50:31 [INFO    ] database - RecordingScan: badge=fadsfasdfasdfasdf, station=Stadium 1, time=2025-12-12T16:50:31Z
+2025-12-12 23:50:32 [INFO    ] database - DuplicateCheck: badge=asdfasdfadsf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:32Z
+2025-12-12 23:50:32 [INFO    ] database - DuplicateCheck: No duplicate found for asdfasdfadsf at Stadium 1
+2025-12-12 23:50:32 [INFO    ] database - RecordingScan: badge=asdfasdfadsf, station=Stadium 1, time=2025-12-12T16:50:32Z
+2025-12-12 23:50:33 [INFO    ] database - DuplicateCheck: badge=asdfasdfasdfasdf, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:33Z
+2025-12-12 23:50:33 [INFO    ] database - DuplicateCheck: No duplicate found for asdfasdfasdfasdf at Stadium 1
+2025-12-12 23:50:33 [INFO    ] database - RecordingScan: badge=asdfasdfasdfasdf, station=Stadium 1, time=2025-12-12T16:50:33Z
+2025-12-12 23:50:34 [INFO    ] database - DuplicateCheck: badge=asdfasdfasfads, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:34Z
+2025-12-12 23:50:34 [INFO    ] database - DuplicateCheck: No duplicate found for asdfasdfasfads at Stadium 1
+2025-12-12 23:50:34 [INFO    ] database - RecordingScan: badge=asdfasdfasfads, station=Stadium 1, time=2025-12-12T16:50:34Z
+2025-12-12 23:50:34 [INFO    ] database - DuplicateCheck: badge=fasd, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:34Z
+2025-12-12 23:50:34 [INFO    ] database - DuplicateCheck: No duplicate found for fasd at Stadium 1
+2025-12-12 23:50:34 [INFO    ] database - RecordingScan: badge=fasd, station=Stadium 1, time=2025-12-12T16:50:34Z
+2025-12-12 23:50:36 [INFO    ] database - DuplicateCheck: badge=fadsfdasfdsafdas, station=Stadium 1, window=300s, cutoff=2025-12-12T16:45:36Z
+2025-12-12 23:50:36 [INFO    ] database - DuplicateCheck: No duplicate found for fadsfdasfdsafdas at Stadium 1
+2025-12-12 23:50:36 [INFO    ] database - RecordingScan: badge=fadsfdasfdsafdas, station=Stadium 1, time=2025-12-12T16:50:36Z
+2025-12-12 23:51:46 [INFO    ] sync - Attempting to sync 49 scans
+2025-12-12 23:51:46 [INFO    ] sync - Syncing 49 scans to cloud API (attempt 1/3)...
+2025-12-12 23:51:47 [INFO    ] sync - Cloud API response received in 0.97s
+2025-12-12 23:51:47 [INFO    ] sync - Successfully synced 49 scans (saved: 49, duplicates: 0)
+2025-12-13 00:01:38 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:01:38 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:01:38 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:01:39 [INFO    ] sync - Health check success
+2025-12-13 00:01:39 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:01:39 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:45:53 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-13 00:45:53 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-13 00:46:06 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T17:41:06Z
+2025-12-13 00:46:06 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at Stadium 1
+2025-12-13 00:46:06 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T17:46:06Z
+2025-12-13 00:46:09 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T17:41:09Z
+2025-12-13 00:46:09 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=474)
+2025-12-13 00:46:09 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T17:46:09Z
+2025-12-13 00:46:10 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:46:10 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:46:10 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:46:12 [INFO    ] sync - Health check success
+2025-12-13 00:46:12 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:46:12 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:46:40 [INFO    ] database - DuplicateCheck: badge=T&T Ariya Phuefon, station=Stadium 1, window=300s, cutoff=2025-12-12T17:41:40Z
+2025-12-13 00:46:40 [INFO    ] database - DuplicateCheck: No duplicate found for T&T Ariya Phuefon at Stadium 1
+2025-12-13 00:46:40 [INFO    ] database - RecordingScan: badge=T&T Ariya Phuefon, station=Stadium 1, time=2025-12-12T17:46:40Z
+2025-12-13 00:46:54 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:46:54 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:46:54 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:46:56 [INFO    ] sync - Health check success
+2025-12-13 00:46:56 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:46:56 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:47:00 [INFO    ] database - DuplicateCheck: badge=101117, station=Stadium 1, window=300s, cutoff=2025-12-12T17:42:00Z
+2025-12-13 00:47:00 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=475)
+2025-12-13 00:47:00 [INFO    ] database - RecordingScan: badge=101117, station=Stadium 1, time=2025-12-12T17:47:00Z
+2025-12-13 00:47:12 [INFO    ] sync - Attempting to sync 4 scans
+2025-12-13 00:47:12 [INFO    ] sync - Syncing 4 scans to cloud API (attempt 1/3)...
+2025-12-13 00:47:14 [INFO    ] sync - Cloud API response received in 1.20s
+2025-12-13 00:47:14 [INFO    ] sync - Successfully synced 4 scans (saved: 4, duplicates: 0)
+2025-12-13 00:47:14 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-13 00:47:39 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-13 00:47:39 [INFO    ] attendance - Imported 1714 employees from workbook
+2025-12-13 00:47:39 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-13 00:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:47:58 [INFO    ] sync - Health check success
+2025-12-13 00:47:58 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:47:58 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:48:02 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-12T17:43:02Z
+2025-12-13 00:48:02 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at One Bangkok
+2025-12-13 00:48:02 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-12T17:48:02Z
+2025-12-13 00:48:16 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-12T17:43:16Z
+2025-12-13 00:48:16 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=1)
+2025-12-13 00:48:16 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-12T17:48:16Z
+2025-12-13 00:48:21 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-12T17:43:21Z
+2025-12-13 00:48:21 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=2)
+2025-12-13 00:48:21 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-12T17:48:21Z
+2025-12-13 00:48:25 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-12T17:43:25Z
+2025-12-13 00:48:25 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=3)
+2025-12-13 00:48:25 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-12T17:48:25Z
+2025-12-13 00:48:30 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-12T17:43:30Z
+2025-12-13 00:48:30 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=4)
+2025-12-13 00:48:30 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-12T17:48:30Z
+2025-12-13 00:48:36 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-12T17:43:36Z
+2025-12-13 00:48:36 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=5)
+2025-12-13 00:48:36 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-12T17:48:36Z
+2025-12-13 00:48:45 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-12T17:43:45Z
+2025-12-13 00:48:45 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=6)
+2025-12-13 00:48:45 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-12T17:48:45Z
+2025-12-13 00:49:12 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:49:12 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:49:12 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:49:13 [INFO    ] sync - Health check success
+2025-12-13 00:49:13 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:49:13 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:49:37 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:49:37 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:49:37 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:49:38 [INFO    ] sync - Health check success
+2025-12-13 00:49:38 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:49:38 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:49:48 [INFO    ] sync - Attempting to sync 7 scans
+2025-12-13 00:49:48 [INFO    ] sync - Syncing 7 scans to cloud API (attempt 1/3)...
+2025-12-13 00:49:49 [INFO    ] sync - Cloud API response received in 0.71s
+2025-12-13 00:49:49 [INFO    ] sync - Successfully synced 7 scans (saved: 7, duplicates: 0)
+2025-12-13 00:49:49 [INFO    ] database - DuplicateCheck: badge=T&T Urunida Nedphokeaw, station=One Bangkok, window=300s, cutoff=2025-12-12T17:44:49Z
+2025-12-13 00:49:49 [INFO    ] database - DuplicateCheck: No duplicate found for T&T Urunida Nedphokeaw at One Bangkok
+2025-12-13 00:49:49 [INFO    ] database - RecordingScan: badge=T&T Urunida Nedphokeaw, station=One Bangkok, time=2025-12-12T17:49:49Z
+2025-12-13 00:49:59 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:49:59 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:49:59 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:50:00 [INFO    ] sync - Health check success
+2025-12-13 00:50:00 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:50:00 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:50:44 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:50:44 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:50:44 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:50:45 [INFO    ] sync - Health check success
+2025-12-13 00:50:45 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:50:45 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:50:48 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-13 00:50:48 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-13 00:50:49 [INFO    ] sync - Cloud API response received in 0.85s
+2025-12-13 00:50:49 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-13 00:50:53 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:50:53 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:50:53 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:50:54 [INFO    ] sync - Health check success
+2025-12-13 00:50:54 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:50:54 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:51:02 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:51:02 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:51:02 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:51:03 [INFO    ] sync - Health check success
+2025-12-13 00:51:03 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:51:03 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:51:12 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:51:12 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:51:12 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:51:13 [INFO    ] sync - Health check success
+2025-12-13 00:51:13 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:51:13 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 00:54:03 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 00:54:03 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 00:54:03 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 00:54:04 [INFO    ] sync - Health check success
+2025-12-13 00:54:04 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 00:54:04 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 01:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 01:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 01:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 01:47:59 [INFO    ] sync - Health check success
+2025-12-13 01:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 01:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 02:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 02:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 02:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 02:47:59 [INFO    ] sync - Health check success
+2025-12-13 02:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 02:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 03:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 03:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 03:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 03:47:59 [INFO    ] sync - Health check success
+2025-12-13 03:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 03:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 04:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 04:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 04:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 04:47:59 [INFO    ] sync - Health check success
+2025-12-13 04:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 04:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 05:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 05:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 05:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 05:47:59 [INFO    ] sync - Health check success
+2025-12-13 05:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 05:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 06:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 06:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 06:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 06:47:59 [INFO    ] sync - Health check success
+2025-12-13 06:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 06:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 07:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 07:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 07:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 07:47:59 [INFO    ] sync - Health check success
+2025-12-13 07:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 07:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 08:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 08:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 08:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 08:47:59 [INFO    ] sync - Health check success
+2025-12-13 08:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 08:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 09:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 09:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 09:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 09:48:01 [INFO    ] sync - Health check success
+2025-12-13 09:48:01 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 09:48:01 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-13 10:47:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-13 10:47:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-13 10:47:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-13 10:47:59 [INFO    ] sync - Health check success
+2025-12-13 10:47:59 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-13 10:47:59 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-14 20:05:14 [INFO    ] __main__ - UI requested cloud health check
+2025-12-14 20:05:15 [INFO    ] __main__ - Dispatching async health check...
+2025-12-14 20:05:15 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-14 20:05:30 [WARNING ] sync - Health check failed: Cannot connect to API (network error)
+2025-12-14 20:05:30 [INFO    ] __main__ - Cloud health check result: ok=False, message=Cannot connect to API (network error)
+2025-12-14 20:05:31 [INFO    ] __main__ - Emitting connection status to UI: ok=False, message=Cannot connect to API (network error)
+2025-12-14 20:08:21 [INFO    ] __main__ - UI requested cloud health check
+2025-12-14 20:08:21 [INFO    ] __main__ - Dispatching async health check...
+2025-12-14 20:08:21 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-14 20:08:24 [INFO    ] sync - Health check success
+2025-12-14 20:08:24 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-14 20:08:24 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-14 20:15:30 [INFO    ] __main__ - UI requested cloud health check
+2025-12-14 20:15:30 [INFO    ] __main__ - Dispatching async health check...
+2025-12-14 20:15:30 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-14 20:15:32 [INFO    ] sync - Health check success
+2025-12-14 20:15:32 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-14 20:15:32 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-14 20:16:00 [INFO    ] __main__ - UI requested cloud health check
+2025-12-14 20:16:00 [INFO    ] __main__ - Dispatching async health check...
+2025-12-14 20:16:00 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-14 20:16:01 [INFO    ] sync - Health check success
+2025-12-14 20:16:01 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-14 20:16:01 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-14 20:18:57 [INFO    ] __main__ - UI requested cloud health check
+2025-12-14 20:18:57 [INFO    ] __main__ - Dispatching async health check...
+2025-12-14 20:18:57 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-14 20:18:58 [INFO    ] sync - Health check success
+2025-12-14 20:18:58 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-14 20:18:58 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-14 20:18:59 [INFO    ] database - DuplicateCheck: badge=1011117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:13:59Z
+2025-12-14 20:18:59 [INFO    ] database - DuplicateCheck: No duplicate found for 1011117 at One Bangkok
+2025-12-14 20:18:59 [INFO    ] database - RecordingScan: badge=1011117, station=One Bangkok, time=2025-12-14T13:18:59Z
+2025-12-14 20:19:02 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:02Z
+2025-12-14 20:19:02 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at One Bangkok
+2025-12-14 20:19:02 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-14T13:19:02Z
+2025-12-14 20:19:05 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:05Z
+2025-12-14 20:19:05 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=10)
+2025-12-14 20:19:05 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-14T13:19:05Z
+2025-12-14 20:19:14 [INFO    ] database - DuplicateCheck: badge=1011117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:14Z
+2025-12-14 20:19:14 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=9)
+2025-12-14 20:19:14 [INFO    ] database - RecordingScan: badge=1011117, station=One Bangkok, time=2025-12-14T13:19:14Z
+2025-12-14 20:19:19 [INFO    ] database - DuplicateCheck: badge=1011117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:19Z
+2025-12-14 20:19:19 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=12)
+2025-12-14 20:19:19 [INFO    ] database - RecordingScan: badge=1011117, station=One Bangkok, time=2025-12-14T13:19:19Z
+2025-12-14 20:19:24 [INFO    ] database - DuplicateCheck: badge=1011117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:24Z
+2025-12-14 20:19:24 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=13)
+2025-12-14 20:19:24 [INFO    ] database - RecordingScan: badge=1011117, station=One Bangkok, time=2025-12-14T13:19:24Z
+2025-12-14 20:19:30 [INFO    ] database - DuplicateCheck: badge=1011117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:30Z
+2025-12-14 20:19:30 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=14)
+2025-12-14 20:19:30 [INFO    ] database - RecordingScan: badge=1011117, station=One Bangkok, time=2025-12-14T13:19:30Z
+2025-12-14 20:19:35 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:35Z
+2025-12-14 20:19:35 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=11)
+2025-12-14 20:19:35 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-14T13:19:35Z
+2025-12-14 20:19:39 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-14T13:14:39Z
+2025-12-14 20:19:39 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=16)
+2025-12-14 20:19:39 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-14T13:19:39Z
+2025-12-14 20:20:14 [INFO    ] sync - Attempting to sync 9 scans
+2025-12-14 20:20:14 [INFO    ] sync - Syncing 9 scans to cloud API (attempt 1/3)...
+2025-12-14 20:20:17 [INFO    ] sync - Cloud API response received in 3.70s
+2025-12-14 20:20:17 [INFO    ] sync - Successfully synced 9 scans (saved: 9, duplicates: 0)
+2025-12-15 13:29:45 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 13:29:45 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 13:30:06 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 13:30:06 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 13:30:06 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:30:09 [INFO    ] sync - Health check success
+2025-12-15 13:30:09 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 13:30:09 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 13:30:10 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T06:25:10Z
+2025-12-15 13:30:10 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at One Bangkok
+2025-12-15 13:30:10 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T06:30:10Z
+2025-12-15 13:30:12 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T06:25:12Z
+2025-12-15 13:30:12 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=18)
+2025-12-15 13:30:12 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T06:30:12Z
+2025-12-15 13:30:59 [INFO    ] sync - Attempting to sync 2 scans
+2025-12-15 13:30:59 [INFO    ] sync - Syncing 2 scans to cloud API (attempt 1/3)...
+2025-12-15 13:31:00 [INFO    ] sync - Cloud API response received in 1.45s
+2025-12-15 13:31:00 [INFO    ] sync - Successfully synced 2 scans (saved: 2, duplicates: 0)
+2025-12-15 13:31:23 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T06:26:23Z
+2025-12-15 13:31:23 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=19)
+2025-12-15 13:31:23 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T06:31:23Z
+2025-12-15 13:31:58 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-15 13:31:58 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-15 13:31:59 [INFO    ] sync - Cloud API response received in 0.68s
+2025-12-15 13:31:59 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-15 13:33:46 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T06:28:46Z
+2025-12-15 13:33:46 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=20)
+2025-12-15 13:33:46 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T06:33:46Z
+2025-12-15 13:34:01 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:34:02 [INFO    ] sync - Health check success
+2025-12-15 13:34:03 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-15 13:34:03 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-15 13:34:04 [INFO    ] sync - Cloud API response received in 0.81s
+2025-12-15 13:34:04 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-15 13:34:04 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 13:34:04 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 13:34:04 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:34:05 [INFO    ] sync - Health check success
+2025-12-15 13:34:05 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 13:34:05 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 13:35:21 [INFO    ] database - DuplicateCheck: badge=Juckrit Saniteareeephon, station=One Bangkok, window=300s, cutoff=2025-12-15T06:30:21Z
+2025-12-15 13:35:21 [INFO    ] database - DuplicateCheck: No duplicate found for Juckrit Saniteareeephon at One Bangkok
+2025-12-15 13:35:21 [INFO    ] database - RecordingScan: badge=Juckrit Saniteareeephon, station=One Bangkok, time=2025-12-15T06:35:21Z
+2025-12-15 13:35:40 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:35:40 [INFO    ] sync - Health check success
+2025-12-15 13:35:41 [INFO    ] sync - Attempting to sync 1 scans
+2025-12-15 13:35:41 [INFO    ] sync - Syncing 1 scans to cloud API (attempt 1/3)...
+2025-12-15 13:35:42 [INFO    ] sync - Cloud API response received in 0.74s
+2025-12-15 13:35:42 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
+2025-12-15 13:35:42 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 13:35:42 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 13:35:42 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:35:43 [INFO    ] sync - Health check success
+2025-12-15 13:35:43 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 13:35:43 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 13:35:44 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:35:45 [INFO    ] sync - Health check success
+2025-12-15 13:35:46 [INFO    ] sync - No pending scans to sync
+2025-12-15 13:35:46 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 13:35:46 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 13:35:46 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:35:47 [INFO    ] sync - Health check success
+2025-12-15 13:35:47 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 13:35:47 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 13:37:52 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 13:37:52 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 13:37:52 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:37:53 [INFO    ] sync - Health check success
+2025-12-15 13:37:53 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 13:37:53 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 13:38:37 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 13:38:37 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 13:38:49 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 13:38:49 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 13:38:49 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:38:50 [INFO    ] sync - Health check success
+2025-12-15 13:38:50 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 13:38:50 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 13:50:13 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 13:50:13 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 13:50:31 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 13:50:31 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 13:50:31 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 13:50:32 [INFO    ] sync - Health check success
+2025-12-15 13:50:32 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 13:50:32 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:34:31 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 15:34:31 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 15:34:31 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 15:34:46 [INFO    ] dashboard - Dashboard: total_scans=14, unique_badges=3, stations=1
+2025-12-15 15:34:47 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:34:47 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:34:47 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:34:47 [INFO    ] sync - Health check success
+2025-12-15 15:34:47 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:34:47 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:35:11 [INFO    ] dashboard - Dashboard: total_scans=14, unique_badges=3, stations=1
+2025-12-15 15:36:05 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:36:05 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:36:05 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:36:06 [INFO    ] sync - Health check success
+2025-12-15 15:36:06 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:36:06 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:36:06 [INFO    ] dashboard - Dashboard: total_scans=14, unique_badges=3, stations=1
+2025-12-15 15:36:14 [INFO    ] dashboard - Dashboard: total_scans=14, unique_badges=3, stations=1
+2025-12-15 15:36:16 [INFO    ] dashboard - Dashboard: total_scans=14, unique_badges=3, stations=1
+2025-12-15 15:36:20 [INFO    ] database - DuplicateCheck: badge=1011117, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:20Z
+2025-12-15 15:36:20 [INFO    ] database - DuplicateCheck: No duplicate found for 1011117 at One Bangkok
+2025-12-15 15:36:20 [INFO    ] database - RecordingScan: badge=1011117, station=One Bangkok, time=2025-12-15T08:36:20Z
+2025-12-15 15:36:22 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:22Z
+2025-12-15 15:36:22 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at One Bangkok
+2025-12-15 15:36:22 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T08:36:22Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: badge=fsdfdsa, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: No duplicate found for fsdfdsa at One Bangkok
+2025-12-15 15:36:24 [INFO    ] database - RecordingScan: badge=fsdfdsa, station=One Bangkok, time=2025-12-15T08:36:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: badge=f, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: No duplicate found for f at One Bangkok
+2025-12-15 15:36:24 [INFO    ] database - RecordingScan: badge=f, station=One Bangkok, time=2025-12-15T08:36:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: badge=dsa, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: No duplicate found for dsa at One Bangkok
+2025-12-15 15:36:24 [INFO    ] database - RecordingScan: badge=dsa, station=One Bangkok, time=2025-12-15T08:36:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: badge=fs, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: No duplicate found for fs at One Bangkok
+2025-12-15 15:36:24 [INFO    ] database - RecordingScan: badge=fs, station=One Bangkok, time=2025-12-15T08:36:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: badge=adf, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: No duplicate found for adf at One Bangkok
+2025-12-15 15:36:24 [INFO    ] database - RecordingScan: badge=adf, station=One Bangkok, time=2025-12-15T08:36:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: badge=asd, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:24Z
+2025-12-15 15:36:24 [INFO    ] database - DuplicateCheck: No duplicate found for asd at One Bangkok
+2025-12-15 15:36:24 [INFO    ] database - RecordingScan: badge=asd, station=One Bangkok, time=2025-12-15T08:36:24Z
+2025-12-15 15:36:25 [INFO    ] database - DuplicateCheck: badge=f, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:25Z
+2025-12-15 15:36:25 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=26)
+2025-12-15 15:36:25 [INFO    ] database - RecordingScan: badge=f, station=One Bangkok, time=2025-12-15T08:36:25Z
+2025-12-15 15:36:28 [INFO    ] database - DuplicateCheck: badge=fsdafsadfsa, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:28Z
+2025-12-15 15:36:28 [INFO    ] database - DuplicateCheck: No duplicate found for fsdafsadfsa at One Bangkok
+2025-12-15 15:36:28 [INFO    ] database - RecordingScan: badge=fsdafsadfsa, station=One Bangkok, time=2025-12-15T08:36:28Z
+2025-12-15 15:36:28 [INFO    ] database - DuplicateCheck: badge=sdaf, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:28Z
+2025-12-15 15:36:28 [INFO    ] database - DuplicateCheck: No duplicate found for sdaf at One Bangkok
+2025-12-15 15:36:28 [INFO    ] database - RecordingScan: badge=sdaf, station=One Bangkok, time=2025-12-15T08:36:28Z
+2025-12-15 15:36:28 [INFO    ] database - DuplicateCheck: badge=asd, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:28Z
+2025-12-15 15:36:28 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=30)
+2025-12-15 15:36:28 [INFO    ] database - RecordingScan: badge=asd, station=One Bangkok, time=2025-12-15T08:36:28Z
+2025-12-15 15:36:32 [INFO    ] database - DuplicateCheck: badge=fsdafsdafasdfas, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:32Z
+2025-12-15 15:36:32 [INFO    ] database - DuplicateCheck: No duplicate found for fsdafsdafasdfas at One Bangkok
+2025-12-15 15:36:32 [INFO    ] database - RecordingScan: badge=fsdafsdafasdfas, station=One Bangkok, time=2025-12-15T08:36:32Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: badge=fdsafasdfa, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:33Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: No duplicate found for fdsafasdfa at One Bangkok
+2025-12-15 15:36:33 [INFO    ] database - RecordingScan: badge=fdsafasdfa, station=One Bangkok, time=2025-12-15T08:36:33Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: badge=sdf, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:33Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: No duplicate found for sdf at One Bangkok
+2025-12-15 15:36:33 [INFO    ] database - RecordingScan: badge=sdf, station=One Bangkok, time=2025-12-15T08:36:33Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: badge=a, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:33Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: No duplicate found for a at One Bangkok
+2025-12-15 15:36:33 [INFO    ] database - RecordingScan: badge=a, station=One Bangkok, time=2025-12-15T08:36:33Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: badge=sdf, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:33Z
+2025-12-15 15:36:33 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=37)
+2025-12-15 15:36:33 [INFO    ] database - RecordingScan: badge=sdf, station=One Bangkok, time=2025-12-15T08:36:33Z
+2025-12-15 15:36:37 [INFO    ] database - DuplicateCheck: badge=fsdafsadfasdf, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:37Z
+2025-12-15 15:36:37 [INFO    ] database - DuplicateCheck: No duplicate found for fsdafsadfasdf at One Bangkok
+2025-12-15 15:36:37 [INFO    ] database - RecordingScan: badge=fsdafsadfasdf, station=One Bangkok, time=2025-12-15T08:36:37Z
+2025-12-15 15:36:38 [INFO    ] database - DuplicateCheck: badge=fsdafsadfasdf, station=One Bangkok, window=300s, cutoff=2025-12-15T08:31:38Z
+2025-12-15 15:36:38 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=40)
+2025-12-15 15:36:38 [INFO    ] database - RecordingScan: badge=fsdafsadfasdf, station=One Bangkok, time=2025-12-15T08:36:38Z
+2025-12-15 15:36:42 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:36:43 [INFO    ] sync - Health check success
+2025-12-15 15:36:44 [INFO    ] sync - Attempting to sync 19 scans
+2025-12-15 15:36:44 [INFO    ] sync - Syncing 19 scans to cloud API (attempt 1/3)...
+2025-12-15 15:36:45 [INFO    ] sync - Cloud API response received in 0.89s
+2025-12-15 15:36:45 [INFO    ] sync - Successfully synced 19 scans (saved: 19, duplicates: 0)
+2025-12-15 15:36:45 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:36:45 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:36:45 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:36:46 [INFO    ] sync - Health check success
+2025-12-15 15:36:46 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:36:46 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:36:47 [INFO    ] dashboard - Dashboard: total_scans=33, unique_badges=16, stations=1
+2025-12-15 15:37:08 [ERROR   ] dashboard - Missing dependency: No module named 'pandas'. Run: pip install pandas openpyxl
+2025-12-15 15:37:11 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:37:11 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:37:11 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:37:12 [INFO    ] sync - Health check success
+2025-12-15 15:37:12 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:37:12 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:39:07 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:39:07 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:39:07 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:39:08 [INFO    ] sync - Health check success
+2025-12-15 15:39:08 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:39:08 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:39:17 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 15:39:17 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 15:39:17 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 15:39:23 [INFO    ] dashboard - Dashboard: total_scans=33, unique_badges=16, stations=1
+2025-12-15 15:39:28 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:39:28 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:39:28 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:39:29 [INFO    ] sync - Health check success
+2025-12-15 15:39:29 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:39:29 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:39:36 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:39:36 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:39:36 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:39:38 [INFO    ] sync - Health check success
+2025-12-15 15:39:38 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:39:38 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:39:38 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:39:38 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:39:38 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:39:38 [INFO    ] sync - Health check success
+2025-12-15 15:39:38 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:39:38 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:41:01 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 15:41:02 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 15:41:02 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 15:41:14 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:41:14 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:41:14 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:41:15 [INFO    ] sync - Health check success
+2025-12-15 15:41:15 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:41:15 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:41:56 [INFO    ] dashboard - Dashboard: total_scans=33, unique_badges=16, stations=1

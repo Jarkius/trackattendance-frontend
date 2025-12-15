@@ -932,7 +932,6 @@ header h1 {
     z-index: 2000;
     pointer-events: none;
     opacity: 0;
-    transition: opacity 0.3s ease;
 }
 
 .dashboard-overlay--visible {
@@ -951,12 +950,6 @@ header h1 {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    transform: scale(0.9) translateY(-20px);
-    transition: transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-}
-
-.dashboard-overlay--visible .dashboard-overlay__dialog {
-    transform: scale(1) translateY(0);
 }
 
 .dashboard-overlay__header {
