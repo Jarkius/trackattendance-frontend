@@ -930,12 +930,16 @@ header h1 {
     justify-content: center;
     background: rgba(0, 0, 0, 0.7);
     z-index: 2000;
+    visibility: hidden;
     pointer-events: none;
-    opacity: 0;
+    /* Force GPU layer to prevent repaints */
+    transform: translateZ(0);
+    will-change: visibility;
+    contain: layout style;
 }
 
 .dashboard-overlay--visible {
-    opacity: 1;
+    visibility: visible;
     pointer-events: auto;
 }
 
