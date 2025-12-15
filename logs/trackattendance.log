@@ -5732,3 +5732,29 @@
 2025-12-15 15:46:05 [INFO    ] sync - Health check success
 2025-12-15 15:46:05 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
 2025-12-15 15:46:05 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:48:33 [INFO    ] logging_config - Logging configured - Level: DEBUG, File: logs/trackattendance.log
+2025-12-15 15:48:33 [DEBUG   ] logging_config - Secret redaction enabled
+2025-12-15 15:48:33 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 15:48:33 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 15:48:53 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:48:53 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:48:53 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:48:53 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-15 15:48:54 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET / HTTP/1.1" 200 105
+2025-12-15 15:48:54 [INFO    ] sync - Health check success
+2025-12-15 15:48:54 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:48:54 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:48:54 [DEBUG   ] __main__ - Emitting signal from main thread
+2025-12-15 15:48:55 [DEBUG   ] dashboard - Dashboard: Local employee count = 1714
+2025-12-15 15:48:55 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-15 15:48:56 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET /v1/dashboard/stats HTTP/1.1" 200 174
+2025-12-15 15:48:56 [INFO    ] dashboard - Dashboard: total_scans=33, unique_badges=16, stations=1
+2025-12-15 15:49:01 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:49:01 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:49:01 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:49:01 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-15 15:49:01 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET / HTTP/1.1" 200 105
+2025-12-15 15:49:01 [INFO    ] sync - Health check success
+2025-12-15 15:49:01 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:49:01 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:49:01 [DEBUG   ] __main__ - Emitting signal from main thread

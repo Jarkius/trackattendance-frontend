@@ -155,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let connectionStatusIntervalId = null;
     let connectionCheckInFlight = false;
     let connectionCheckTimeoutId = null;
+    let dashboardOpen = false;  // Flag to skip connection checks while dashboard is open
     const apiQueue = [];
     let overlayHideTimer = null;
     const overlayIntent = {
@@ -247,6 +248,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const refreshConnectionStatus = () => {
+        if (dashboardOpen) {
+            console.debug('[ConnectionSignal] Dashboard open, skipping connection check');
+            return;
+        }
         if (!connectionStatusDot) {
             return;
         }
@@ -864,6 +869,10 @@ ${destination}` : message;
     const showDashboardOverlay = () => {
         if (!dashboardOverlay) return;
 
+        // Set flag to skip connection checks while dashboard is open
+        dashboardOpen = true;
+        console.debug('[Dashboard] Dashboard opened - connection checks paused');
+
         dashboardOverlay.classList.add('dashboard-overlay--visible');
         dashboardOverlay.setAttribute('aria-hidden', 'false');
 
@@ -871,7 +880,7 @@ ${destination}` : message;
         if (connectionStatusIntervalId !== null) {
             window.clearInterval(connectionStatusIntervalId);
             connectionStatusIntervalId = null;
-            console.debug('[Dashboard] Paused connection polling');
+            console.debug('[Dashboard] Paused connection polling interval');
         }
 
         // Disable barcode input to prevent accidental scans while viewing dashboard
@@ -900,13 +909,18 @@ ${destination}` : message;
 
     const hideDashboardOverlay = () => {
         if (!dashboardOverlay) return;
+
+        // Clear flag to resume connection checks
+        dashboardOpen = false;
+        console.debug('[Dashboard] Dashboard closed - connection checks resumed');
+
         dashboardOverlay.classList.remove('dashboard-overlay--visible');
         dashboardOverlay.setAttribute('aria-hidden', 'true');
 
         // Resume connection polling
         if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
             startConnectionStatusPolling();
-            console.debug('[Dashboard] Resumed connection polling');
+            console.debug('[Dashboard] Resumed connection polling interval');
         }
 
         // Re-enable barcode input
