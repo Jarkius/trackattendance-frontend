@@ -5758,3 +5758,35 @@
 2025-12-15 15:49:01 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
 2025-12-15 15:49:01 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
 2025-12-15 15:49:01 [DEBUG   ] __main__ - Emitting signal from main thread
+2025-12-15 15:52:30 [INFO    ] logging_config - Logging configured - Level: DEBUG, File: logs/trackattendance.log
+2025-12-15 15:52:30 [DEBUG   ] logging_config - Secret redaction enabled
+2025-12-15 15:52:30 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 15:52:30 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 15:52:39 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T08:47:39Z
+2025-12-15 15:52:39 [INFO    ] database - DuplicateCheck: No duplicate found for 101117 at One Bangkok
+2025-12-15 15:52:39 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T08:52:39Z
+2025-12-15 15:52:41 [INFO    ] database - DuplicateCheck: badge=101117, station=One Bangkok, window=300s, cutoff=2025-12-15T08:47:41Z
+2025-12-15 15:52:41 [INFO    ] database - DuplicateCheck: FOUND duplicate scan (id=42)
+2025-12-15 15:52:41 [INFO    ] database - RecordingScan: badge=101117, station=One Bangkok, time=2025-12-15T08:52:41Z
+2025-12-15 15:52:42 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 15:52:42 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 15:52:42 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 15:52:42 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-15 15:52:42 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET / HTTP/1.1" 200 105
+2025-12-15 15:52:42 [INFO    ] sync - Health check success
+2025-12-15 15:52:42 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 15:52:42 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 15:52:42 [DEBUG   ] __main__ - Emitting signal from main thread
+2025-12-15 15:52:45 [DEBUG   ] dashboard - Dashboard: Local employee count = 1714
+2025-12-15 15:52:45 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-15 15:52:46 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "GET /v1/dashboard/stats HTTP/1.1" 200 174
+2025-12-15 15:52:46 [INFO    ] dashboard - Dashboard: total_scans=33, unique_badges=16, stations=1
+2025-12-15 15:52:55 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-15 15:52:56 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "POST /v1/scans/batch HTTP/1.1" 200 37
+2025-12-15 15:52:56 [INFO    ] sync - Attempting to sync 2 scans
+2025-12-15 15:52:56 [INFO    ] sync - Syncing 2 scans to cloud API (attempt 1/3)...
+2025-12-15 15:52:56 [DEBUG   ] urllib3.connectionpool - Starting new HTTPS connection (1): trackattendance-api-969370105809.asia-southeast1.run.app:443
+2025-12-15 15:52:56 [DEBUG   ] urllib3.connectionpool - https://trackattendance-api-969370105809.asia-southeast1.run.app:443 "POST /v1/scans/batch HTTP/1.1" 200 37
+2025-12-15 15:52:56 [INFO    ] sync - Cloud API response received in 0.60s
+2025-12-15 15:52:57 [INFO    ] sync - Successfully synced 2 scans (saved: 2, duplicates: 0)
+2025-12-15 15:52:57 [INFO    ] sync - All scans synced after 1 batch(es)

@@ -512,6 +512,10 @@ ${destination}` : message;
         if (debugMode) {
             return;
         }
+        // Skip auto-focus while dashboard is open
+        if (dashboardOpen) {
+            return;
+        }
         window.setTimeout(() => {
             if (document.body.contains(barcodeInput)) {
                 barcodeInput.focus();
