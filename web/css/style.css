@@ -967,6 +967,15 @@ body.dashboard-open {
     overflow: hidden;
 }
 
+/* Pause all animations while dashboard is open to prevent conflicts */
+body.dashboard-open .connection-status {
+    animation: none !important;
+}
+
+body.dashboard-open .sync-status {
+    animation: none !important;
+}
+
 .dashboard-overlay__dialog {
     background-color: var(--background);
     border-radius: 12px;
