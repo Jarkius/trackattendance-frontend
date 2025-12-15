@@ -1043,28 +1043,40 @@ ${destination}` : message;
     const handleDashboardExport = () => {
         queueOrRun((bridge) => {
             if (!bridge.export_dashboard_excel) {
-                alert('Export service not available');
+                showExportOverlay({
+                    ok: false,
+                    message: 'Export service not available',
+                    title: 'Export Failed',
+                    showConfirm: true,
+                    autoHideMs: 0,
+                });
                 return;
             }
 
-            // Disable button during export
+            // Disable button during export (icon-only button)
             if (dashboardExportBtn) {
                 dashboardExportBtn.disabled = true;
-                dashboardExportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i> Exporting...';
+                dashboardExportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>';
+                dashboardExportBtn.title = 'Exporting...';
             }
 
             bridge.export_dashboard_excel((result) => {
-                // Re-enable button
+                // Re-enable button (restore icon-only state)
                 if (dashboardExportBtn) {
                     dashboardExportBtn.disabled = false;
-                    dashboardExportBtn.innerHTML = '<i class="material-icons">file_download</i> Export to Excel';
+                    dashboardExportBtn.innerHTML = '<i class="material-icons">download</i>';
+                    dashboardExportBtn.title = 'Export';
                 }
 
-                if (result?.ok) {
-                    alert(`Export complete!\n\n${result.message}\n\nSaved to: ${result.file_path}`);
-                } else {
-                    alert(`Export failed: ${result?.message || 'Unknown error'}`);
-                }
+                const success = Boolean(result?.ok);
+                showExportOverlay({
+                    ok: success,
+                    message: success ? (result.message || 'Dashboard exported successfully.') : (result?.message || 'Unknown error'),
+                    destination: success ? result.file_path : '',
+                    title: success ? 'Export Complete' : 'Export Failed',
+                    showConfirm: !success,
+                    autoHideMs: success ? 2500 : 0,
+                });
             });
         });
     };
