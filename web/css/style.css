@@ -939,6 +939,11 @@ header h1 {
     pointer-events: auto;
 }
 
+/* Prevent scrolling when dashboard is open */
+body.dashboard-open {
+    overflow: hidden;
+}
+
 .dashboard-overlay__dialog {
     background-color: var(--background);
     border-radius: 12px;

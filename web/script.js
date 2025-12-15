@@ -877,6 +877,10 @@ ${destination}` : message;
         dashboardOpen = true;
         console.debug('[Dashboard] Dashboard opened - connection checks paused');
 
+        // Prevent scrolling on background page
+        document.body.classList.add('dashboard-open');
+        console.debug('[Dashboard] Prevented background scrolling');
+
         dashboardOverlay.classList.add('dashboard-overlay--visible');
         dashboardOverlay.setAttribute('aria-hidden', 'false');
 
@@ -917,6 +921,10 @@ ${destination}` : message;
         // Clear flag to resume connection checks
         dashboardOpen = false;
         console.debug('[Dashboard] Dashboard closed - connection checks resumed');
+
+        // Restore background scrolling
+        document.body.classList.remove('dashboard-open');
+        console.debug('[Dashboard] Restored background scrolling');
 
         dashboardOverlay.classList.remove('dashboard-overlay--visible');
         dashboardOverlay.setAttribute('aria-hidden', 'true');
