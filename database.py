@@ -196,6 +196,20 @@ class DatabaseManager:
         cursor = self._connection.execute("SELECT COUNT(1) FROM employees")
         return int(cursor.fetchone()[0])
 
+    def get_employees_by_bu(self) -> list[dict]:
+        """Get employee count grouped by Business Unit (SL L1 Desc).
+
+        Returns:
+            List of dicts with 'bu_name' and 'count' keys, sorted by BU name.
+        """
+        cursor = self._connection.execute("""
+            SELECT sl_l1_desc AS bu_name, COUNT(*) AS count
+            FROM employees
+            GROUP BY sl_l1_desc
+            ORDER BY sl_l1_desc
+        """)
+        return [{"bu_name": row["bu_name"], "count": row["count"]} for row in cursor.fetchall()]
+
     def count_scans_total(self) -> int:
         cursor = self._connection.execute("SELECT COUNT(1) FROM scans")
         return int(cursor.fetchone()[0])

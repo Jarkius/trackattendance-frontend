@@ -524,16 +524,17 @@ class Api(QObject):
             }
         return self._dashboard_service.get_dashboard_data()
 
-    @pyqtSlot(str, result="QVariant")
-    def export_dashboard_excel(self, file_path: str) -> dict:
-        """Export dashboard data to Excel file."""
+    @pyqtSlot(result="QVariant")
+    def export_dashboard_excel(self) -> dict:
+        """Export dashboard data to Excel file (auto-generates filename)."""
         if not self._dashboard_service:
             return {
                 "ok": False,
                 "message": "Dashboard service not configured",
-                "file_path": file_path,
+                "file_path": "",
+                "fileName": "",
             }
-        return self._dashboard_service.export_to_excel(file_path)
+        return self._dashboard_service.export_to_excel()
 
 
 def initialize_app(
@@ -658,8 +659,9 @@ def main() -> None:
         db_manager=service._db,
         api_url=config.CLOUD_API_URL,
         api_key=config.CLOUD_API_KEY,
+        export_directory=EXPORT_DIRECTORY,
     )
-    LOGGER.info("Dashboard service initialized with Cloud API")
+    LOGGER.info("Dashboard service initialized with Cloud API and export directory")
 
     roster_missing = not service.employees_loaded()
     example_workbook_path: Optional[Path] = None

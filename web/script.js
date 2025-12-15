@@ -141,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const dashboardScanned = document.getElementById('dashboard-scanned');
     const dashboardRate = document.getElementById('dashboard-rate');
     const dashboardStationsBody = document.getElementById('dashboard-stations-body');
+    const dashboardBuBody = document.getElementById('dashboard-bu-body');
     const dashboardUpdated = document.getElementById('dashboard-updated');
     const dashboardExportBtn = document.getElementById('dashboard-export');
     const dashboardRefreshBtn = document.getElementById('dashboard-refresh');
@@ -996,23 +997,42 @@ ${destination}` : message;
             dashboardRate.textContent = `${rate.toFixed(1)}%`;
         }
         if (dashboardUpdated) {
-            dashboardUpdated.textContent = `Last updated: ${data?.last_updated || '--'}`;
+            dashboardUpdated.textContent = data?.last_updated || '--';
         }
 
-        // Update station table
+        // Update station cards
         if (dashboardStationsBody) {
             const stations = data?.stations || [];
             if (stations.length === 0) {
                 const errorMsg = data?.error || 'No scan data available';
-                dashboardStationsBody.innerHTML = `<tr><td colspan="4" class="dashboard-overlay__loading">${errorMsg}</td></tr>`;
+                dashboardStationsBody.innerHTML = `<div class="dash__empty">${errorMsg}</div>`;
             } else {
                 dashboardStationsBody.innerHTML = stations.map(station => `
-                    <tr>
-                        <td>${station.name || '--'}</td>
-                        <td>${Number(station.scans || 0).toLocaleString()}</td>
-                        <td>${Number(station.unique || 0).toLocaleString()}</td>
-                        <td>${station.last_scan || '--'}</td>
-                    </tr>
+                    <div class="dash__card">
+                        <div class="dash__card-name">${station.name || '--'}</div>
+                        <div class="dash__card-row">
+                            <div class="dash__card-value">${Number(station.unique || 0).toLocaleString()}</div>
+                            <div class="dash__card-sub">${station.last_scan || '--'}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Update BU breakdown cards (Issue #28)
+        if (dashboardBuBody) {
+            const businessUnits = data?.business_units || [];
+            if (businessUnits.length === 0) {
+                dashboardBuBody.innerHTML = `<div class="dash__empty">No BU data available</div>`;
+            } else {
+                dashboardBuBody.innerHTML = businessUnits.map(bu => `
+                    <div class="dash__card">
+                        <div class="dash__card-name">${bu.bu_name || '--'}</div>
+                        <div class="dash__card-row">
+                            <div class="dash__card-value">${Number(bu.scanned || 0).toLocaleString()}</div>
+                            <div class="dash__card-pct">${(bu.attendance_rate || 0).toFixed(1)}%</div>
+                        </div>
+                    </div>
                 `).join('');
             }
         }
@@ -1027,17 +1047,13 @@ ${destination}` : message;
                 return;
             }
 
-            // Generate default file path with timestamp
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const fileName = `attendance_report_${timestamp}.xlsx`;
-
             // Disable button during export
             if (dashboardExportBtn) {
                 dashboardExportBtn.disabled = true;
                 dashboardExportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i> Exporting...';
             }
 
-            bridge.export_dashboard_excel(fileName, (result) => {
+            bridge.export_dashboard_excel((result) => {
                 // Re-enable button
                 if (dashboardExportBtn) {
                     dashboardExportBtn.disabled = false;

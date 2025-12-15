@@ -35,6 +35,7 @@ class DashboardService:
         db_manager: "DatabaseManager",
         api_url: str,
         api_key: str,
+        export_directory: Optional[Path] = None,
     ) -> None:
         """Initialize the dashboard service.
 
@@ -42,10 +43,12 @@ class DashboardService:
             db_manager: Local SQLite database manager (for employee count)
             api_url: Cloud API base URL
             api_key: Cloud API authentication key
+            export_directory: Directory where Excel exports will be saved
         """
         self._db_manager = db_manager
         self._api_url = api_url.rstrip("/")
         self._api_key = api_key
+        self._export_directory = export_directory or Path.cwd() / "exports"
         self._timeout = 15  # seconds
 
     def _get_headers(self) -> Dict[str, str]:
@@ -65,6 +68,7 @@ class DashboardService:
             - total_scans: int (total scans from cloud)
             - attendance_rate: float (percentage)
             - stations: list of station data
+            - business_units: list of BU data with registered, scanned, and percentage
             - last_updated: str (ISO timestamp)
             - error: str (if any error occurred)
         """
@@ -74,6 +78,7 @@ class DashboardService:
             "total_scans": 0,
             "attendance_rate": 0.0,
             "stations": [],
+            "business_units": [],
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "error": None,
         }
@@ -137,6 +142,56 @@ class DashboardService:
                 (result["scanned"] / result["registered"]) * 100, 1
             )
 
+        # Get BU breakdown
+        try:
+            # Get registered employees by BU from local DB
+            bu_registered = {bu["bu_name"]: bu["count"] for bu in self._db_manager.get_employees_by_bu()}
+
+            # Get all scanned badge IDs from Cloud API
+            response = requests.get(
+                f"{self._api_url}/v1/dashboard/export",
+                headers=self._get_headers(),
+                timeout=self._timeout,
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                scans = data.get("scans", [])
+
+                # Build lookup of badge_id to BU from local employee cache
+                employee_cache = self._db_manager.load_employee_cache()
+                badge_to_bu = {emp.legacy_id: emp.sl_l1_desc for emp in employee_cache.values()}
+
+                # Count unique scanned badges per BU
+                bu_scanned: Dict[str, set] = {}
+                for scan in scans:
+                    # Handle both dict and list formats from API
+                    badge_id = scan.get("badge_id") if isinstance(scan, dict) else scan[0]
+                    bu_name = badge_to_bu.get(badge_id)
+                    if bu_name:
+                        if bu_name not in bu_scanned:
+                            bu_scanned[bu_name] = set()
+                        bu_scanned[bu_name].add(badge_id)
+
+                # Build BU breakdown list
+                result["business_units"] = [
+                    {
+                        "bu_name": bu_name,
+                        "registered": bu_registered.get(bu_name, 0),
+                        "scanned": len(bu_scanned.get(bu_name, set())),
+                        "attendance_rate": round(
+                            (len(bu_scanned.get(bu_name, set())) / bu_registered.get(bu_name, 1)) * 100, 1
+                        ) if bu_registered.get(bu_name, 0) > 0 else 0.0,
+                    }
+                    for bu_name in sorted(bu_registered.keys())
+                ]
+
+                logger.info(f"Dashboard: BU breakdown calculated for {len(result['business_units'])} BUs")
+        except Exception as e:
+            logger.error(f"Dashboard: Failed to calculate BU breakdown: {e}")
+            # Don't fail the whole dashboard if BU breakdown fails
+            result["business_units"] = []
+
         return result
 
     def _format_time(self, iso_timestamp: Optional[str]) -> str:
@@ -149,22 +204,31 @@ class DashboardService:
         except Exception:
             return "--"
 
-    def export_to_excel(self, file_path: str) -> Dict[str, Any]:
+    def export_to_excel(self) -> Dict[str, Any]:
         """Export dashboard data to Excel file.
 
-        Args:
-            file_path: Path where Excel file will be saved
+        Automatically generates filename and saves to export directory.
 
         Returns:
             Dictionary with:
             - ok: bool (success status)
             - message: str (success/error message)
-            - file_path: str (path to created file)
+            - file_path: str (absolute path to created file)
+            - fileName: str (just the filename)
         """
+        # Build export path with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"Dashboard_Report_{timestamp}.xlsx"
+        file_path = self._export_directory / filename
+
+        # Ensure export directory exists
+        self._export_directory.mkdir(parents=True, exist_ok=True)
+
         result = {
             "ok": False,
             "message": "",
-            "file_path": file_path,
+            "file_path": str(file_path),
+            "fileName": filename,
         }
 
         # Fetch export data from API
@@ -203,8 +267,19 @@ class DashboardService:
             from openpyxl.styles import Font, PatternFill, Alignment
 
             # Create DataFrame from API data
-            df = pd.DataFrame(scans)
-            df.columns = ["Badge ID", "Station", "Scanned At", "Matched"]
+            # Handle both dict and list formats from API
+            if scans and isinstance(scans[0], dict):
+                df = pd.DataFrame(scans)
+                df = df.rename(columns={
+                    "badge_id": "Badge ID",
+                    "station_name": "Station",
+                    "scanned_at": "Scanned At",
+                    "matched": "Matched",
+                })
+                # Ensure column order
+                df = df[["Badge ID", "Station", "Scanned At", "Matched"]]
+            else:
+                df = pd.DataFrame(scans, columns=["Badge ID", "Station", "Scanned At", "Matched"])
 
             # Create Excel workbook
             wb = Workbook()
@@ -284,6 +359,26 @@ class DashboardService:
                 for col in ws_stations.columns:
                     max_length = max(len(str(cell.value or "")) for cell in col)
                     ws_stations.column_dimensions[col[0].column_letter].width = max_length + 2
+
+            # Add BU breakdown sheet (Issue #28)
+            if dashboard_data["business_units"]:
+                ws_bu = wb.create_sheet("By Business Unit")
+                bu_headers = ["Business Unit", "Registered", "Scanned", "Attendance %"]
+
+                for col_idx, col_name in enumerate(bu_headers, start=1):
+                    cell = ws_bu.cell(row=1, column=col_idx, value=col_name)
+                    cell.fill = header_fill
+                    cell.font = header_font
+
+                for row_idx, bu in enumerate(dashboard_data["business_units"], start=2):
+                    ws_bu.cell(row=row_idx, column=1, value=bu["bu_name"])
+                    ws_bu.cell(row=row_idx, column=2, value=bu["registered"])
+                    ws_bu.cell(row=row_idx, column=3, value=bu["scanned"])
+                    ws_bu.cell(row=row_idx, column=4, value=f"{bu['attendance_rate']}%")
+
+                for col in ws_bu.columns:
+                    max_length = max(len(str(cell.value or "")) for cell in col)
+                    ws_bu.column_dimensions[col[0].column_letter].width = max_length + 2
 
             # Save file
             wb.save(file_path)

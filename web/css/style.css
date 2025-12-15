@@ -921,223 +921,296 @@ header h1 {
     text-align: center;
 }
 
-/* Multi-Station Dashboard Overlay (Issue #27) */
-.dashboard-overlay {
+/* ============================================
+   DASHBOARD - Clean Editorial Design
+   ============================================ */
+
+.dash {
     position: fixed;
     inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 2000;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0);
-    z-index: 2000;
-    visibility: hidden;
-    pointer-events: none;
-    /* Force GPU layer to prevent repaints */
-    transform: translateZ(0);
-    will-change: visibility, background;
-    contain: layout style;
-    transition: background 0.3s ease, visibility 0s linear 0.3s;
+    transition: opacity 0.25s ease;
 }
 
 .dashboard-overlay--visible {
     visibility: visible;
-    pointer-events: auto;
-    background: rgba(0, 0, 0, 0.85);
-}
-
-.dashboard-overlay__dialog {
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.dashboard-overlay--visible .dashboard-overlay__dialog {
     opacity: 1;
+    pointer-events: auto;
 }
 
-/* Exit animation - fade out */
-.dashboard-overlay--closing .dashboard-overlay__dialog {
-    opacity: 0;
-}
-
-/* Prevent scrolling when dashboard is open */
 body.dashboard-open {
     overflow: hidden;
 }
 
-
-.dashboard-overlay__dialog {
-    background-color: var(--background);
+/* Modal container */
+.dash__modal {
+    background: #FAFAFA;
     border-radius: 12px;
-    padding: 0;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.3);
-    max-width: 600px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
     width: 90%;
-    max-height: 80vh;
-    overflow: hidden;
+    max-width: 1100px;
+    max-height: 85vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.95);
+    transition: transform 0.25s ease;
 }
 
-.dashboard-overlay__header {
+.dashboard-overlay--visible .dash__modal {
+    transform: scale(1);
+}
+
+/* Header bar */
+.dash__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
-    background: var(--deloitte-black);
-    color: white;
-}
-
-.dashboard-overlay__title {
-    margin: 0;
-    font-size: 1.2rem;
-    font-weight: 600;
-}
-
-.dashboard-overlay__close {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 1.8rem;
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
-}
-
-.dashboard-overlay__close:hover {
-    opacity: 1;
-}
-
-.dashboard-overlay__metrics {
-    display: flex;
-    justify-content: space-around;
-    padding: 20px;
-    background: var(--deloitte-grey-light);
-    border-bottom: 1px solid var(--border);
-}
-
-.dashboard-metric {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-}
-
-.dashboard-metric__value {
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: var(--deloitte-black);
-    line-height: 1.2;
-}
-
-.dashboard-metric__label {
-    font-size: 0.75rem;
-    color: var(--deloitte-grey-medium);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 4px;
-}
-
-.dashboard-overlay__table-container {
-    flex: 1;
-    overflow-y: auto;
     padding: 0 20px;
-    max-height: 300px;
+    height: 52px;
+    background: white;
+    border-bottom: 1px solid #E5E5E5;
+    flex-shrink: 0;
 }
 
-.dashboard-overlay__table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85rem;
-}
-
-.dashboard-overlay__table thead {
-    position: sticky;
-    top: 0;
-    background: var(--background);
-}
-
-.dashboard-overlay__table th {
-    text-align: left;
-    padding: 12px 8px;
-    font-weight: 600;
-    color: var(--deloitte-grey-medium);
-    text-transform: uppercase;
-    font-size: 0.7rem;
-    letter-spacing: 0.05em;
-    border-bottom: 2px solid var(--border);
-}
-
-.dashboard-overlay__table td {
-    padding: 10px 8px;
-    border-bottom: 1px solid var(--border);
-    color: var(--deloitte-grey-dark);
-}
-
-.dashboard-overlay__table tr:last-child td {
-    border-bottom: none;
-}
-
-.dashboard-overlay__table tr:hover td {
-    background: var(--deloitte-grey-light);
-}
-
-.dashboard-overlay__loading {
-    text-align: center;
-    color: var(--deloitte-grey-medium);
-    padding: 20px !important;
-}
-
-.dashboard-overlay__actions {
+.dash__brand {
     display: flex;
+    align-items: baseline;
     gap: 12px;
-    padding: 16px 20px;
-    border-top: 1px solid var(--border);
-    background: var(--background);
 }
 
-.dashboard-overlay__btn {
-    flex: 1;
+.dash__logo {
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: #1D1D1D;
+}
+
+.dash__subtitle {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+/* Stats in header */
+.dash__stats {
+    display: flex;
+    gap: 32px;
+}
+
+.dash__stat {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.dash__stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #1D1D1D;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash__stat-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.dash__stat--primary .dash__stat-value {
+    color: var(--deloitte-green);
+}
+
+.dash__stat--accent .dash__stat-value {
+    color: #0066CC;
+}
+
+/* Actions */
+.dash__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dash__time {
+    font-size: 0.7rem;
+    color: #999;
+    margin-right: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash__btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border: 1px solid var(--border);
+    width: 36px;
+    height: 36px;
+    border: 1px solid #E0E0E0;
     border-radius: 6px;
-    background: var(--background);
-    color: var(--deloitte-grey-dark);
-    font-size: 0.85rem;
-    font-weight: 500;
+    background: white;
+    color: #666;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
 }
 
-.dashboard-overlay__btn:hover {
-    background: var(--deloitte-grey-light);
-    border-color: var(--deloitte-grey-medium);
+.dash__btn:hover {
+    background: #F5F5F5;
+    border-color: #CCC;
+    color: #333;
 }
 
-.dashboard-overlay__btn--primary {
+.dash__btn .material-icons {
+    font-size: 1.15rem;
+}
+
+.dash__btn--export {
     background: var(--deloitte-green);
     border-color: var(--deloitte-green);
     color: white;
 }
 
-.dashboard-overlay__btn--primary:hover {
+.dash__btn--export:hover {
     background: #75a820;
     border-color: #75a820;
+    color: white;
 }
 
-.dashboard-overlay__btn .material-icons {
-    font-size: 1.1rem;
+.dash__btn--close:hover {
+    background: #FEE;
+    border-color: #E88;
+    color: #C44;
 }
 
-.dashboard-overlay__footer {
+/* Main body - two columns */
+.dash__body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 16px;
+    overflow: hidden;
+}
+
+/* Column sections */
+.dash__col {
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #E5E5E5;
+    overflow: hidden;
+}
+
+.dash__col-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin: 0;
-    padding: 8px 20px 16px;
-    font-size: 0.75rem;
-    color: var(--deloitte-grey-medium);
-    text-align: center;
+    padding: 12px 16px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    background: #F8F8F8;
+    border-bottom: 1px solid #EEE;
+}
+
+.dash__col-title .material-icons {
+    font-size: 1rem;
+    color: var(--deloitte-green);
+}
+
+/* Card grids */
+.dash__grid {
+    flex: 1;
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    overflow-y: auto;
+    align-content: start;
+}
+
+.dash__grid--stations {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.dash__grid--bu {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+/* Individual cards */
+.dash__card {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px;
+    background: #FAFAFA;
+    border-radius: 6px;
+    border: 1px solid #EFEFEF;
+    transition: all 0.15s ease;
+}
+
+.dash__card:hover {
+    background: white;
+    border-color: var(--deloitte-green);
+    box-shadow: 0 2px 8px rgba(134, 188, 37, 0.15);
+}
+
+.dash__card-name {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dash__card-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.dash__card-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--deloitte-green);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash__card-sub {
+    font-size: 0.6rem;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.dash__card-pct {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+}
+
+/* Loading state */
+.dash__empty {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: #AAA;
+    font-size: 0.8rem;
 }

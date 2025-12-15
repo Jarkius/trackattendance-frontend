@@ -349,6 +349,95 @@ python tests/debug_sync_performance.py
 
 ---
 
+---
+
+### 3. Dashboard Stats
+
+**Endpoint**: `GET /v1/dashboard/stats`
+
+**Purpose**: Retrieve multi-station attendance statistics for dashboard display.
+
+**Authentication**: Required (Bearer token)
+
+**Request Headers**:
+```
+Authorization: Bearer <API_KEY>
+```
+
+**Response** (Success - HTTP 200):
+```json
+{
+  "total_scans": 350,
+  "unique_badges": 285,
+  "stations": [
+    {
+      "name": "Main Gate",
+      "scans": 180,
+      "unique": 150,
+      "last_scan": "2025-12-15T08:45:30Z"
+    },
+    {
+      "name": "Side Entrance",
+      "scans": 170,
+      "unique": 135,
+      "last_scan": "2025-12-15T08:44:15Z"
+    }
+  ]
+}
+```
+
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_scans` | integer | Total number of scan events across all stations |
+| `unique_badges` | integer | Number of unique badge IDs scanned (deduplicated across all stations) |
+| `stations` | array | Per-station breakdown |
+| `stations[].name` | string | Station name |
+| `stations[].scans` | integer | Total scans at this station |
+| `stations[].unique` | integer | Unique badges at this station |
+| `stations[].last_scan` | string (ISO 8601) | Timestamp of most recent scan at this station |
+
+---
+
+### 4. Dashboard Export
+
+**Endpoint**: `GET /v1/dashboard/export`
+
+**Purpose**: Retrieve detailed scan records for Excel export functionality.
+
+**Authentication**: Required (Bearer token)
+
+**Request Headers**:
+```
+Authorization: Bearer <API_KEY>
+```
+
+**Response** (Success - HTTP 200):
+```json
+{
+  "scans": [
+    ["101117", "Main Gate", "2025-12-15T08:30:00Z", true],
+    ["102345", "Side Entrance", "2025-12-15T08:31:15Z", true],
+    ["999999", "Main Gate", "2025-12-15T08:32:00Z", false]
+  ]
+}
+```
+
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `scans` | array of arrays | Each inner array represents one scan record with 4 elements |
+| `scans[][0]` | string | Badge ID that was scanned |
+| `scans[][1]` | string | Station name where scan occurred |
+| `scans[][2]` | string (ISO 8601) | Timestamp when scan occurred (UTC) |
+| `scans[][3]` | boolean | Whether badge was matched in employee roster |
+
+**Note**: The client matches badge IDs against the local employee database to enrich with employee names, Business Units (SL L1 Desc), and positions before exporting to Excel.
+
+---
+
 ## Version & Status
 
 - **Current API Version**: v1
