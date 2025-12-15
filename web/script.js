@@ -867,6 +867,13 @@ ${destination}` : message;
         dashboardOverlay.classList.add('dashboard-overlay--visible');
         dashboardOverlay.setAttribute('aria-hidden', 'false');
 
+        // Pause connection polling while dashboard is open to prevent conflicts
+        if (connectionStatusIntervalId !== null) {
+            window.clearInterval(connectionStatusIntervalId);
+            connectionStatusIntervalId = null;
+            console.debug('[Dashboard] Paused connection polling');
+        }
+
         // Initialize with loading state
         if (dashboardRegistered) dashboardRegistered.textContent = '--';
         if (dashboardScanned) dashboardScanned.textContent = '--';
@@ -883,6 +890,13 @@ ${destination}` : message;
         if (!dashboardOverlay) return;
         dashboardOverlay.classList.remove('dashboard-overlay--visible');
         dashboardOverlay.setAttribute('aria-hidden', 'true');
+
+        // Resume connection polling
+        if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
+            startConnectionStatusPolling();
+            console.debug('[Dashboard] Resumed connection polling');
+        }
+
         returnFocusToInput();
     };
 
