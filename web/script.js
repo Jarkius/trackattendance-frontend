@@ -943,8 +943,11 @@ ${destination}` : message;
     };
 
     const fetchDashboardData = () => {
+        console.debug('[Dashboard] Fetch data started');
         queueOrRun((bridge) => {
+            console.debug('[Dashboard] Bridge callback executing');
             if (!bridge.get_dashboard_data) {
+                console.warn('[Dashboard] get_dashboard_data not available');
                 updateDashboardUI({
                     registered: 0,
                     scanned: 0,
@@ -955,13 +958,17 @@ ${destination}` : message;
                 });
                 return;
             }
+            console.debug('[Dashboard] Calling bridge.get_dashboard_data');
             bridge.get_dashboard_data((data) => {
+                console.debug('[Dashboard] Data received from bridge:', data);
                 updateDashboardUI(data);
             });
         });
     };
 
     const updateDashboardUI = (data) => {
+        console.debug('[Dashboard] updateDashboardUI called with:', data);
+
         // Update metric cards
         if (dashboardRegistered) {
             dashboardRegistered.textContent = Number(data?.registered ?? 0).toLocaleString();
@@ -994,6 +1001,8 @@ ${destination}` : message;
                 `).join('');
             }
         }
+
+        console.debug('[Dashboard] UI update complete');
     };
 
     const handleDashboardExport = () => {
