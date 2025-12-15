@@ -6051,3 +6051,18 @@
 2025-12-15 16:32:37 [INFO    ] sync - Cloud API response received in 0.55s
 2025-12-15 16:32:37 [INFO    ] sync - Successfully synced 1 scans (saved: 1, duplicates: 0)
 2025-12-15 16:32:37 [INFO    ] sync - All scans synced after 1 batch(es)
+2025-12-15 16:33:45 [INFO    ] logging_config - Logging configured - Level: INFO, File: logs/trackattendance.log
+2025-12-15 16:33:45 [INFO    ] __main__ - Connection status checks: interval=3600000ms, timeout=10.00s
+2025-12-15 16:33:45 [INFO    ] __main__ - Dashboard service initialized with Cloud API
+2025-12-15 16:34:00 [INFO    ] dashboard - Dashboard: total_scans=43, unique_badges=16, stations=1
+2025-12-15 16:34:41 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:34:41 [INFO    ] sync - Health check success
+2025-12-15 16:34:42 [INFO    ] sync - No pending scans to sync
+2025-12-15 16:34:42 [INFO    ] __main__ - UI requested cloud health check
+2025-12-15 16:34:42 [INFO    ] __main__ - Dispatching async health check...
+2025-12-15 16:34:42 [INFO    ] sync - Health check: GET https://trackattendance-api-969370105809.asia-southeast1.run.app/ (timeout=10.00s)
+2025-12-15 16:34:43 [INFO    ] sync - Health check success
+2025-12-15 16:34:43 [INFO    ] __main__ - Cloud health check result: ok=True, message=Connected to cloud API
+2025-12-15 16:34:43 [INFO    ] __main__ - Emitting connection status to UI: ok=True, message=Connected to cloud API
+2025-12-15 16:34:46 [INFO    ] dashboard - Dashboard: total_scans=43, unique_badges=16, stations=1
+2025-12-15 16:34:52 [ERROR   ] dashboard - Missing dependency: No module named 'pandas'. Run: pip install pandas openpyxl

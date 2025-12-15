@@ -74,7 +74,7 @@ class DashboardService:
             "total_scans": 0,
             "attendance_rate": 0.0,
             "stations": [],
-            "last_updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "error": None,
         }
 
