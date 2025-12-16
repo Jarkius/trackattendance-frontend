@@ -404,10 +404,13 @@ pyinstaller --noconfirm --onefile `
   --icon "assets/greendot.ico" `
   --add-data ".env;." `
   --add-data "web;web" `
+  --hidden-import "certifi" `
   "main.py"
 ```
 
 **Output**: `dist/TrackAttendance.exe`
+
+> **Note**: The `--hidden-import "certifi"` flag is required for SSL/HTTPS connections to work in the compiled executable.
 
 ### Using Spec File (Recommended for Production)
 
@@ -426,7 +429,8 @@ pyinstaller --noconfirm TrackAttendance.spec
 3. Create `data/` folder next to executable
 4. Place `employee.xlsx` in `data/` folder (required for name matching)
 5. Create `.env` file with `CLOUD_API_KEY` for cloud sync
-6. Run the application
+6. Ensure Windows Firewall allows the application
+7. Run the application
 
 ### Folder Structure After Deployment
 
@@ -438,6 +442,37 @@ TrackAttendance/
 │   ├── employee.xlsx      # Employee roster (required)
 │   └── database.db        # Created automatically on first run
 └── exports/               # Excel reports saved here
+```
+
+### Build Troubleshooting
+
+#### "Cannot connect to API (network error)" after build
+
+**Cause**: SSL certificates not bundled correctly in the executable.
+
+**Solution**:
+1. Ensure `--hidden-import "certifi"` is in your build command
+2. The app automatically sets `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE` environment variables for frozen builds (see `main.py` lines 12-17)
+3. Rebuild and redeploy
+
+#### Connection indicator shows red
+
+**Possible causes**:
+1. `.env` file missing or not next to `.exe`
+2. `CLOUD_API_KEY` not set in `.env`
+3. Windows Firewall blocking the application
+4. Network/proxy issues
+
+**Debug steps**:
+```powershell
+# Check if .env exists
+dir .env
+
+# Verify API key is set (should show your key)
+type .env | findstr CLOUD_API_KEY
+
+# Test network connectivity
+ping trackattendance-api-969370105809.asia-southeast1.run.app
 ```
 
 ## Repository Layout
