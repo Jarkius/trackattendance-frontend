@@ -329,10 +329,11 @@ class SyncService:
                 self.db.mark_scans_as_failed(scan_ids, error_msg)
                 LOGGER.error(f"Sync failed: {error_msg}")
 
+                stats = self.db.get_sync_statistics()
                 return {
                     "synced": 0,
                     "failed": len(pending_scans),
-                    "pending": len(pending_scans),
+                    "pending": stats["pending"],
                 }
 
         # All retries exhausted with no success
@@ -342,10 +343,11 @@ class SyncService:
             self.db.mark_scans_as_failed(scan_ids, error_msg)
             LOGGER.error(error_msg)
 
+        stats = self.db.get_sync_statistics()
         return {
             "synced": 0,
             "failed": len(pending_scans),
-            "pending": len(pending_scans),
+            "pending": stats["pending"],
         }
 
     def _generate_idempotency_key(self, scan: ScanRecord) -> str:
