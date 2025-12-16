@@ -20,6 +20,7 @@ Production-ready desktop application for scanning QR/1D barcodes, matching them 
 - 🔄 Manual sync button (spinning icon during sync) and idle-triggered auto-sync.
 - 🔍 Unknowns captured as "Not matched" for later reconciliation.
 - 🛑 **Duplicate badge detection** (v1.3.0+): Prevents accidental duplicate scans within configurable time window; configurable actions (warn, block, or silent).
+- 📊 **Dashboard with BU breakdown** (v1.3.0+): View scan statistics by business unit with unmatched badge tracking.
 - 📈 One-click exports plus automatic export on shutdown (after a sync attempt).
 - 🌐 Offline-first assets; runs without network access.
 - 🛡 Graceful error handling and fallback UI if web assets fail to load.
@@ -382,7 +383,7 @@ pyinstaller TrackAttendance.spec
 - `data/`, `exports/` — runtime storage (ignored by git); `Backup/` — archived experiments.
 
 ## Version History (high level)
-- **Current (Dec 2025)** — Shutdown sync before export (Issue #8), sync-all option for cloud uploads (`sync_pending_scans(sync_all=True)`), and stress harness improvements (connection test before sync, maximized window by default, 10s post-sync hold to view results). **Known Issue**: UI pending counter may not update to 0 before window closes in stress test (Issue #11, under investigation).
+- **v1.3.0 (Dec 2025)** — Dashboard BU breakdown with unmatched badge tracking (#28), duplicate badge detection with configurable actions (#20, #21), fixed sync statistics in error handlers (#26), improved export UX with inline feedback for empty exports.
 - **v1.2.0** — Auto-Sync Intelligence: idle detection, connectivity check, inline status updates, configurable via `config.py`.
 - **v1.1.0** — Sync status UI redesign: compact layout, spinning sync icon, space optimization.
 - **v1.0.0** — Initial production cloud sync: batch uploads, idempotency, offline-first.
@@ -421,3 +422,53 @@ pyinstaller TrackAttendance.spec
 
 ## Data Privacy
 - Do not commit `data/database.db`, `data/employee.xlsx`, or generated exports. Keep sensitive rosters local.
+
+
+1) Bundle the web\ folder into the build
+
+Run from C:\Workspace\Dev\Python\QR:
+
+cd "C:\Workspace\Dev\Python\QR"
+
+pyinstaller --noconfirm --onefile `
+  --name "QRApp" `
+  --icon "C:\Workspace\Dev\Python\greendot.ico" `
+  --add-data ".env;." `
+  --add-data "web;web" `
+  "main.py"
+
+2) Load the web\ folder from the correct runtime base path
+
+In main.py, use this pattern and build all file paths from it:
+
+from pathlib import Path
+import sys
+
+BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+WEB_DIR = BASE_DIR / "web"
+
+
+Wherever you previously referenced:
+C:\Workspace\Dev\Python\QR\web
+replace with:
+WEB_DIR
+
+Example for an entry file:
+
+index_html = WEB_DIR / "index.html"
+
+3) If you build via .spec file, add a Tree for the web folder
+
+Edit QRApp.spec:
+
+from PyInstaller.utils.hooks import Tree
+
+datas = [
+    (".env", "."),
+    Tree("web", prefix="web"),
+]
+
+
+Rebuild:
+
+pyinstaller --noconfirm QRApp.spec
