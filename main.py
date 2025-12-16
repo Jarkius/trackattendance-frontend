@@ -9,6 +9,13 @@ import os
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple, Dict
 
+# Fix SSL certificates for PyInstaller frozen builds
+# Must be done before importing requests
+if getattr(sys, 'frozen', False):
+    import certifi
+    os.environ['SSL_CERT_FILE'] = certifi.where()
+    os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+
 from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt6.QtWebChannel import QWebChannel
