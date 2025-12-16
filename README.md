@@ -1,12 +1,41 @@
 # Track Attendance
 
-Production-ready desktop application for scanning QR/1D barcodes, matching them against a roster, logging to SQLite, exporting to XLSX, and syncing to a cloud API. Built with Python and a PyQt6-hosted web UI for a kiosk-style experience.
+A desktop kiosk application for tracking employee attendance using barcode/QR code scanners.
 
-## Project Overview
-- 🚀 **Production-ready**: Offline-first desktop shell, packaged for Windows 10/11 via PyInstaller.
-- ✅ **Cloud Sync Enabled**: Optional sync to a Google Cloud Run API; runs fully offline if no network is available.
-- 🔒 **Privacy-first**: Only badge/timestamp/station are synced; employee names stay local.
-- 🖥️ **Kiosk UX**: Frameless PyQt window hosting a modern web UI with live feedback, counters, and recent history.
+## What It Does
+
+**Track Attendance** turns any Windows PC with a barcode scanner into a check-in station:
+
+1. **Employee scans their badge** → App reads the barcode
+2. **Instant feedback** → Shows employee name and confirms the scan
+3. **Data saved locally** → All scans stored in SQLite database
+4. **Auto-sync to cloud** → Uploads to central server when online
+5. **Export to Excel** → One-click report generation
+
+### Who Is This For?
+
+- **Event organizers** tracking attendee check-ins
+- **HR departments** monitoring daily attendance
+- **Security teams** logging building access
+- **Training coordinators** recording session participation
+
+### Key Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Works offline** | No internet? No problem. Scans save locally and sync later. |
+| **Multi-station** | Deploy multiple kiosks; all data syncs to one dashboard. |
+| **Privacy-first** | Employee names stay local; only badge IDs sync to cloud. |
+| **Zero training** | Plug in scanner, run app, start scanning. |
+
+---
+
+## Technical Overview
+
+- **Platform**: Windows 10/11 desktop application
+- **Technology**: Python 3.11+, PyQt6, SQLite, Cloud API
+- **Interface**: Frameless kiosk-style web UI
+- **Sync**: Automatic background sync with retry logic
 
 ## System Requirements
 - Windows 10/11 (packaged build target).
@@ -362,13 +391,54 @@ AUTO_SYNC_ENABLED=True
 SHOW_FULL_SCREEN=False
 ```
 
-## Packaging
+## Building & Packaging
+
+### Quick Build (Single Executable)
+
+Build a standalone `.exe` file using PyInstaller:
+
+```powershell
+# Run from project root (PowerShell)
+pyinstaller --noconfirm --onefile `
+  --name "TrackAttendance" `
+  --icon "assets/greendot.ico" `
+  --add-data ".env;." `
+  --add-data "web;web" `
+  "main.py"
+```
+
+**Output**: `dist/TrackAttendance.exe`
+
+### Using Spec File (Recommended for Production)
+
+For more control, use the spec file:
 
 ```bash
-pyinstaller TrackAttendance.spec
+pyinstaller --noconfirm TrackAttendance.spec
 ```
-- Output: `dist/TrackAttendance/TrackAttendance.exe`; keep `data/` alongside the executable so scans/exports persist.
-- Before packaging, update version numbers in `TrackAttendance.spec` and commit changes.
+
+**Output**: `dist/TrackAttendance/TrackAttendance.exe`
+
+### Deployment Checklist
+
+1. Build the executable using one of the methods above
+2. Copy `dist/TrackAttendance.exe` (or `dist/TrackAttendance/` folder) to target machine
+3. Create `data/` folder next to executable
+4. Place `employee.xlsx` in `data/` folder (required for name matching)
+5. Create `.env` file with `CLOUD_API_KEY` for cloud sync
+6. Run the application
+
+### Folder Structure After Deployment
+
+```
+TrackAttendance/
+├── TrackAttendance.exe    # Main application
+├── .env                   # API configuration (create this)
+├── data/
+│   ├── employee.xlsx      # Employee roster (required)
+│   └── database.db        # Created automatically on first run
+└── exports/               # Excel reports saved here
+```
 
 ## Repository Layout
 - `main.py` — PyQt6 entry, window lifecycle, shutdown sync/export, AutoSyncManager wiring.
@@ -422,53 +492,3 @@ pyinstaller TrackAttendance.spec
 
 ## Data Privacy
 - Do not commit `data/database.db`, `data/employee.xlsx`, or generated exports. Keep sensitive rosters local.
-
-
-1) Bundle the web\ folder into the build
-
-Run from C:\Workspace\Dev\Python\QR:
-
-cd "C:\Workspace\Dev\Python\QR"
-
-pyinstaller --noconfirm --onefile `
-  --name "QRApp" `
-  --icon "C:\Workspace\Dev\Python\greendot.ico" `
-  --add-data ".env;." `
-  --add-data "web;web" `
-  "main.py"
-
-2) Load the web\ folder from the correct runtime base path
-
-In main.py, use this pattern and build all file paths from it:
-
-from pathlib import Path
-import sys
-
-BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-WEB_DIR = BASE_DIR / "web"
-
-
-Wherever you previously referenced:
-C:\Workspace\Dev\Python\QR\web
-replace with:
-WEB_DIR
-
-Example for an entry file:
-
-index_html = WEB_DIR / "index.html"
-
-3) If you build via .spec file, add a Tree for the web folder
-
-Edit QRApp.spec:
-
-from PyInstaller.utils.hooks import Tree
-
-datas = [
-    (".env", "."),
-    Tree("web", prefix="web"),
-]
-
-
-Rebuild:
-
-pyinstaller --noconfirm QRApp.spec
