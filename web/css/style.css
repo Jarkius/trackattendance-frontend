@@ -20,7 +20,8 @@ body, html {
     -moz-osx-font-smoothing: grayscale;
 }
 
-header {
+/* Main page header - use child combinator to avoid affecting dashboard header */
+body > header {
     background-color: var(--deloitte-black);
     color: white;
     padding: 0 20px;
@@ -36,7 +37,7 @@ header {
     justify-content: center;
 }
 
-header h1 {
+body > header h1 {
     margin: 0;
     font-size: 1.8rem;
     font-weight: 500;
@@ -371,7 +372,7 @@ header h1 {
 }
 
 /* Sync spinning animation */
-@keyframes sync-spin {
+@keyframes spin {
     from {
         transform: rotate(0deg);
     }
@@ -380,8 +381,12 @@ header h1 {
     }
 }
 
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
 .sync-spinning {
-    animation: sync-spin 1s linear infinite;
+    animation: spin 1s linear infinite;
 }
 
 .dashboard-section {
@@ -928,7 +933,7 @@ header h1 {
 .dash {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(255, 255, 255, 0.92);
     z-index: 2000;
     visibility: hidden;
     opacity: 0;
@@ -936,7 +941,6 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.25s ease;
 }
 
 .dashboard-overlay--visible {
@@ -956,12 +960,12 @@ body.dashboard-open {
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
     width: 90%;
     max-width: 1100px;
-    max-height: 85vh;
+    max-height: 80vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     transform: scale(0.95);
-    transition: transform 0.25s ease;
+    transition: transform 0.2s ease;
 }
 
 .dashboard-overlay--visible .dash__modal {
@@ -974,7 +978,7 @@ body.dashboard-open {
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
-    height: 52px;
+    height: 72px;
     background: white;
     border-bottom: 1px solid #E5E5E5;
     flex-shrink: 0;
@@ -982,8 +986,9 @@ body.dashboard-open {
 
 .dash__brand {
     display: flex;
-    align-items: baseline;
-    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
 }
 
 .dash__logo {
@@ -1014,7 +1019,7 @@ body.dashboard-open {
 }
 
 .dash__stat-value {
-    font-size: 1.6rem;
+    font-size: 2.5rem;
     font-weight: 700;
     color: #1D1D1D;
     font-variant-numeric: tabular-nums;
@@ -1095,11 +1100,14 @@ body.dashboard-open {
 /* Main body - two columns */
 .dash__body {
     flex: 1;
+    min-height: 0;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
-    padding: 16px;
-    overflow: hidden;
+    padding: 20px;
+    padding-top: 16px;
+    overflow: auto;
+    background: #FAFAFA;
 }
 
 /* Column sections */
@@ -1109,7 +1117,7 @@ body.dashboard-open {
     background: white;
     border-radius: 8px;
     border: 1px solid #E5E5E5;
-    overflow: hidden;
+    min-height: 0;
 }
 
 .dash__col-title {
@@ -1138,6 +1146,7 @@ body.dashboard-open {
     display: grid;
     gap: 8px;
     padding: 12px;
+    padding-top: 8px;
     overflow-y: auto;
     align-content: start;
 }

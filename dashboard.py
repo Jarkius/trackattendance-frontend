@@ -164,6 +164,7 @@ class DashboardService:
 
                 # Count unique scanned badges per BU
                 bu_scanned: Dict[str, set] = {}
+                unmatched_badges: set = set()
                 for scan in scans:
                     # Handle both dict and list formats from API
                     badge_id = scan.get("badge_id") if isinstance(scan, dict) else scan[0]
@@ -172,9 +173,12 @@ class DashboardService:
                         if bu_name not in bu_scanned:
                             bu_scanned[bu_name] = set()
                         bu_scanned[bu_name].add(badge_id)
+                    else:
+                        # Track unmatched badges separately
+                        unmatched_badges.add(badge_id)
 
                 # Build BU breakdown list
-                result["business_units"] = [
+                bu_list = [
                     {
                         "bu_name": bu_name,
                         "registered": bu_registered.get(bu_name, 0),
@@ -185,6 +189,17 @@ class DashboardService:
                     }
                     for bu_name in sorted(bu_registered.keys())
                 ]
+
+                # Add unmatched category if there are unmatched badges
+                if unmatched_badges:
+                    bu_list.append({
+                        "bu_name": "(Unmatched)",
+                        "registered": 0,
+                        "scanned": len(unmatched_badges),
+                        "attendance_rate": 0.0,
+                    })
+
+                result["business_units"] = bu_list
 
                 logger.info(f"Dashboard: BU breakdown calculated for {len(result['business_units'])} BUs")
         except Exception as e:
@@ -248,6 +263,7 @@ class DashboardService:
 
             if not scans:
                 result["message"] = "No scan data to export"
+                result["noData"] = True
                 return result
 
         except requests.exceptions.ConnectionError:

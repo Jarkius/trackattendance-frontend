@@ -17,8 +17,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+import sqlite3
 import requests
-from openpyxl import load_workbook
 import config
 
 STATION_NAMES = [
@@ -37,36 +37,24 @@ STATION_NAMES = [
 ]
 
 
-def load_employee_badges(workbook_path: Path, sample_size: int = 50) -> list[str]:
-    """Load employee badge IDs from the workbook."""
-    if not workbook_path.exists():
-        print(f"[ERROR] Employee workbook not found: {workbook_path}")
+def load_employee_badges(db_path: Path, sample_size: int = 50) -> list[str]:
+    """Load employee badge IDs from the SQLite database."""
+    if not db_path.exists():
+        print(f"[ERROR] Database not found: {db_path}")
         return []
 
-    workbook = load_workbook(workbook_path, read_only=True, data_only=True)
+    conn = sqlite3.connect(db_path)
     try:
-        sheet = workbook.active
-        header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
-        header_map = {
-            str(name).strip(): idx
-            for idx, name in enumerate(header_row)
-            if name and str(name).strip()
-        }
-        legacy_index = header_map.get("Legacy ID")
-        if legacy_index is None:
-            return []
-
-        badges = []
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            cell = row[legacy_index]
-            if cell:
-                badges.append(str(cell).strip())
+        cursor = conn.execute(
+            "SELECT legacy_id FROM employees WHERE legacy_id IS NOT NULL AND legacy_id != ''"
+        )
+        badges = [row[0] for row in cursor.fetchall()]
 
         if len(badges) > sample_size:
             badges = random.sample(badges, sample_size)
         return badges
     finally:
-        workbook.close()
+        conn.close()
 
 
 def send_scans_to_api(station_name: str, badge_ids: list[str]) -> dict:
@@ -129,18 +117,20 @@ def main():
     parser = argparse.ArgumentParser(description="Simulate multi-station scans for dashboard testing")
     parser.add_argument("--stations", type=int, default=10, help="Number of stations to simulate")
     parser.add_argument("--scans-per-station", type=int, default=15, help="Scans per station")
+    parser.add_argument("--sample-size", type=int, default=100, help="Number of employee badges to sample (0 = all)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be sent without sending")
     args = parser.parse_args()
 
-    # Load employee badges
-    workbook_path = ROOT_DIR / "data" / "employee.xlsx"
-    badges = load_employee_badges(workbook_path, sample_size=100)
+    # Load employee badges from SQLite database
+    db_path = ROOT_DIR / "data" / "database.db"
+    sample_size = args.sample_size if args.sample_size > 0 else 999999
+    badges = load_employee_badges(db_path, sample_size=sample_size)
 
     if not badges:
-        print("[ERROR] No employee badges found")
+        print("[ERROR] No employee badges found in database")
         return 1
 
-    print(f"Loaded {len(badges)} employee badges")
+    print(f"Loaded {len(badges)} employee badges from database")
 
     # Select stations
     stations = STATION_NAMES[:args.stations]
