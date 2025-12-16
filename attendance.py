@@ -283,6 +283,13 @@ class AttendanceService:
 
     def export_scans(self) -> Dict[str, object]:
         scans = self._db.fetch_all_scans()
+        if not scans:
+            return {
+                "ok": False,
+                "noData": True,
+                "message": "No scan data to export.",
+                "records": 0,
+            }
         export_path = self._build_export_path()
         workbook = Workbook()
         sheet = workbook.active

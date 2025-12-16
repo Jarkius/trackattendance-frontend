@@ -819,33 +819,30 @@ ${destination}` : message;
             exportBtn.disabled = true;
             exportBtn.innerHTML = '<i class="material-icons">hourglass_empty</i>Exporting...';
 
-            showExportOverlay({
-                ok: true,
-                message: 'Generating attendance report...',
-                title: 'Exporting attendance report...',
-                destination: '',
-                showConfirm: false,
-                autoHideMs: 0,
-            });
-
             bridge.export_scans((result) => {
                 exportBtn.disabled = false;
                 exportBtn.innerHTML = '<i class="material-icons">file_download</i>Export Data';
 
+                // No data - just show feedback, no modal
+                if (result?.noData) {
+                    setLiveFeedback('No scan data to export', 'var(--deloitte-grey-medium)', 2000);
+                    returnFocusToInput();
+                    return;
+                }
+
+                // Show result in modal
                 const success = Boolean(result && result.ok);
                 const destination = typeof result?.absolutePath === 'string'
                     ? result.absolutePath
                     : (typeof result?.fileName === 'string' ? result.fileName : '');
-                const payload = {
-                    ok: success,
-                    message: success ? (result?.message || '') : (result?.message || 'Unable to export attendance report.'),
-                    destination,
-                    showConfirm: success ? false : true,
-                    autoHideMs: success ? 2500 : 0,
-                    shouldClose: false,
-                };
 
-                window.__handleExportShutdown(payload);
+                showExportOverlay({
+                    ok: success,
+                    message: success ? 'Attendance report exported successfully.' : (result?.message || 'Unable to export attendance report.'),
+                    destination,
+                    showConfirm: !success,
+                    autoHideMs: success ? 2500 : 0,
+                });
                 returnFocusToInput();
             });
         });
@@ -909,7 +906,14 @@ ${destination}` : message;
         if (dashboardScanned) dashboardScanned.textContent = '--';
         if (dashboardRate) dashboardRate.textContent = '--';
         if (dashboardStationsBody) {
-            dashboardStationsBody.innerHTML = '<tr><td colspan="4" class="dashboard-overlay__loading">Loading...</td></tr>';
+            dashboardStationsBody.innerHTML = '<div class="dash__empty">Loading...</div>';
+        }
+        if (dashboardBuBody) {
+            dashboardBuBody.innerHTML = '<div class="dash__empty">Loading...</div>';
+        }
+        // Show spinning icon in message area
+        if (dashboardUpdated) {
+            dashboardUpdated.innerHTML = '<i class="material-icons sync-spinning" style="font-size: 14px; vertical-align: middle;">sync</i> Loading...';
         }
 
         // Fetch data from Python bridge
@@ -921,41 +925,31 @@ ${destination}` : message;
 
         // Clear flag to resume connection checks
         dashboardOpen = false;
-        console.debug('[Dashboard] Dashboard closing - playing exit animation');
 
-        // Trigger exit animation
-        dashboardOverlay.classList.add('dashboard-overlay--closing');
+        // Hide immediately (no animation to prevent flickering on app close)
+        dashboardOverlay.classList.remove('dashboard-overlay--visible');
+        dashboardOverlay.setAttribute('aria-hidden', 'true');
 
-        // Wait for animation to complete before hiding
-        setTimeout(() => {
-            dashboardOverlay.classList.remove('dashboard-overlay--visible');
-            dashboardOverlay.classList.remove('dashboard-overlay--closing');
-            dashboardOverlay.setAttribute('aria-hidden', 'true');
+        // Restore background scrolling
+        document.body.classList.remove('dashboard-open');
+        console.debug('[Dashboard] Dashboard closed');
 
-            // Restore background scrolling
-            document.body.classList.remove('dashboard-open');
-            console.debug('[Dashboard] Dashboard closed - connection checks resumed');
+        // Resume connection polling
+        if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
+            startConnectionStatusPolling();
+        }
 
-            // Resume connection polling
-            if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
-                startConnectionStatusPolling();
-                console.debug('[Dashboard] Resumed connection polling interval');
-            }
+        // Re-enable barcode input
+        if (barcodeInput) {
+            barcodeInput.disabled = false;
+        }
 
-            // Re-enable barcode input
-            if (barcodeInput) {
-                barcodeInput.disabled = false;
-                console.debug('[Dashboard] Enabled barcode input');
-            }
+        // Restore sync status message
+        if (syncStatusMessage) {
+            syncStatusMessage.style.display = '';
+        }
 
-            // Restore sync status message
-            if (syncStatusMessage) {
-                syncStatusMessage.style.display = '';
-                console.debug('[Dashboard] Restored sync status message');
-            }
-
-            returnFocusToInput();
-        }, 200); // Match scale-down animation duration
+        returnFocusToInput();
     };
 
     const fetchDashboardData = () => {
@@ -1043,13 +1037,10 @@ ${destination}` : message;
     const handleDashboardExport = () => {
         queueOrRun((bridge) => {
             if (!bridge.export_dashboard_excel) {
-                showExportOverlay({
-                    ok: false,
-                    message: 'Export service not available',
-                    title: 'Export Failed',
-                    showConfirm: true,
-                    autoHideMs: 0,
-                });
+                if (dashboardUpdated) {
+                    dashboardUpdated.textContent = 'Export service not available';
+                    dashboardUpdated.style.color = 'red';
+                }
                 return;
             }
 
@@ -1068,15 +1059,27 @@ ${destination}` : message;
                     dashboardExportBtn.title = 'Export';
                 }
 
-                const success = Boolean(result?.ok);
-                showExportOverlay({
-                    ok: success,
-                    message: success ? (result.message || 'Dashboard exported successfully.') : (result?.message || 'Unknown error'),
-                    destination: success ? result.file_path : '',
-                    title: success ? 'Export Complete' : 'Export Failed',
-                    showConfirm: !success,
-                    autoHideMs: success ? 2500 : 0,
-                });
+                // Show feedback in dashboard header
+                if (dashboardUpdated) {
+                    const originalText = dashboardUpdated.textContent;
+                    const success = Boolean(result?.ok);
+
+                    if (result?.noData) {
+                        dashboardUpdated.textContent = 'No scan data to export';
+                        dashboardUpdated.style.color = 'var(--deloitte-grey-medium)';
+                    } else if (success) {
+                        dashboardUpdated.textContent = 'Export complete';
+                        dashboardUpdated.style.color = 'var(--deloitte-green)';
+                    } else {
+                        dashboardUpdated.textContent = result?.message || 'Export failed';
+                        dashboardUpdated.style.color = 'red';
+                    }
+
+                    setTimeout(() => {
+                        dashboardUpdated.textContent = originalText;
+                        dashboardUpdated.style.color = '';
+                    }, 2500);
+                }
             });
         });
     };
@@ -1185,6 +1188,10 @@ ${destination}` : message;
     if (dashboardRefreshBtn) {
         dashboardRefreshBtn.addEventListener('click', (event) => {
             event.preventDefault();
+            // Show spinning in message area
+            if (dashboardUpdated) {
+                dashboardUpdated.innerHTML = '<i class="material-icons sync-spinning" style="font-size: 14px; vertical-align: middle;">sync</i> Loading...';
+            }
             fetchDashboardData();
         });
     }

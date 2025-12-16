@@ -864,6 +864,14 @@ def main() -> None:
                 time.sleep(0.5)
 
         # === EXPORT PHASE ===
+        # Check if there are any scans to export
+        scan_count = service._db.count_scans_total() if hasattr(service, '_db') else 0
+
+        if scan_count == 0:
+            # No scans to export - close immediately without overlay
+            original_close_event(event)
+            return
+
         # Show "exporting" overlay
         export_start_payload = {
             'stage': 'export',
