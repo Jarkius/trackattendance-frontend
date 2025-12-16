@@ -12,9 +12,22 @@ from typing import Callable, Optional, Sequence, Tuple, Dict
 # Fix SSL certificates for PyInstaller frozen builds
 # Must be done before importing requests
 if getattr(sys, 'frozen', False):
+    # In frozen builds, certifi's cacert.pem is bundled in _MEIPASS
     import certifi
-    os.environ['SSL_CERT_FILE'] = certifi.where()
-    os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+    _meipass = getattr(sys, '_MEIPASS', None)
+    if _meipass:
+        # Try bundled certificate first
+        bundled_cert = os.path.join(_meipass, 'certifi', 'cacert.pem')
+        if os.path.exists(bundled_cert):
+            os.environ['SSL_CERT_FILE'] = bundled_cert
+            os.environ['REQUESTS_CA_BUNDLE'] = bundled_cert
+        else:
+            # Fallback to certifi.where()
+            os.environ['SSL_CERT_FILE'] = certifi.where()
+            os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+    else:
+        os.environ['SSL_CERT_FILE'] = certifi.where()
+        os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
 from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox

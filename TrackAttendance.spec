@@ -1,11 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import certifi
+from PyInstaller.utils.hooks import collect_data_files
+
+# Collect certifi's certificate bundle
+certifi_datas = collect_data_files('certifi')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('.env', '.'), ('web', 'web')],
+    datas=[('.env', '.'), ('web', 'web')] + certifi_datas,
     hiddenimports=['certifi'],
     hookspath=[],
     hooksconfig={},
