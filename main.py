@@ -10,29 +10,32 @@ from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple, Dict
 
 # Fix SSL certificates for PyInstaller frozen builds
-# Must be done before importing requests
+# Use truststore to leverage Windows system certificate store
 if getattr(sys, 'frozen', False):
-    # In frozen builds, certifi's cacert.pem is bundled in _MEIPASS
-    import certifi
-    _meipass = getattr(sys, '_MEIPASS', None)
-    if _meipass:
-        # Try bundled certificate first
-        bundled_cert = os.path.join(_meipass, 'certifi', 'cacert.pem')
-        if os.path.exists(bundled_cert):
-            os.environ['SSL_CERT_FILE'] = bundled_cert
-            os.environ['REQUESTS_CA_BUNDLE'] = bundled_cert
-            print(f"[SSL] Using bundled certificate: {bundled_cert}")
+    try:
+        import truststore
+        truststore.inject_into_ssl()
+        print("[SSL] Using Windows system certificate store (truststore)")
+    except ImportError:
+        # Fallback to certifi if truststore not available
+        import certifi
+        _meipass = getattr(sys, '_MEIPASS', None)
+        if _meipass:
+            bundled_cert = os.path.join(_meipass, 'certifi', 'cacert.pem')
+            if os.path.exists(bundled_cert):
+                os.environ['SSL_CERT_FILE'] = bundled_cert
+                os.environ['REQUESTS_CA_BUNDLE'] = bundled_cert
+                print(f"[SSL] Using bundled certificate: {bundled_cert}")
+            else:
+                cert_path = certifi.where()
+                os.environ['SSL_CERT_FILE'] = cert_path
+                os.environ['REQUESTS_CA_BUNDLE'] = cert_path
+                print(f"[SSL] Bundled cert not found, using certifi: {cert_path}")
         else:
-            # Fallback to certifi.where()
             cert_path = certifi.where()
             os.environ['SSL_CERT_FILE'] = cert_path
             os.environ['REQUESTS_CA_BUNDLE'] = cert_path
-            print(f"[SSL] Bundled cert not found, using certifi: {cert_path}")
-    else:
-        cert_path = certifi.where()
-        os.environ['SSL_CERT_FILE'] = cert_path
-        os.environ['REQUESTS_CA_BUNDLE'] = cert_path
-        print(f"[SSL] Using certifi: {cert_path}")
+            print(f"[SSL] Using certifi: {cert_path}")
 
 from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
