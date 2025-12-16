@@ -21,13 +21,18 @@ if getattr(sys, 'frozen', False):
         if os.path.exists(bundled_cert):
             os.environ['SSL_CERT_FILE'] = bundled_cert
             os.environ['REQUESTS_CA_BUNDLE'] = bundled_cert
+            print(f"[SSL] Using bundled certificate: {bundled_cert}")
         else:
             # Fallback to certifi.where()
-            os.environ['SSL_CERT_FILE'] = certifi.where()
-            os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+            cert_path = certifi.where()
+            os.environ['SSL_CERT_FILE'] = cert_path
+            os.environ['REQUESTS_CA_BUNDLE'] = cert_path
+            print(f"[SSL] Bundled cert not found, using certifi: {cert_path}")
     else:
-        os.environ['SSL_CERT_FILE'] = certifi.where()
-        os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
+        cert_path = certifi.where()
+        os.environ['SSL_CERT_FILE'] = cert_path
+        os.environ['REQUESTS_CA_BUNDLE'] = cert_path
+        print(f"[SSL] Using certifi: {cert_path}")
 
 from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox

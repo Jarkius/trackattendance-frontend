@@ -83,8 +83,8 @@ class SyncService:
             else:
                 LOGGER.warning("Health check failed: API returned %s", response.status_code)
                 return False, f"API returned status {response.status_code}"
-        except requests.exceptions.ConnectionError:
-            LOGGER.warning("Health check failed: Cannot connect to API (network error)")
+        except requests.exceptions.ConnectionError as e:
+            LOGGER.warning("Health check failed: Cannot connect to API (network error): %s", e)
             return False, "Cannot connect to API (network error)"
         except requests.exceptions.Timeout:
             LOGGER.warning("Health check failed: Connection timeout after %.2fs", self.connection_timeout)
