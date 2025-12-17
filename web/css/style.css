@@ -163,22 +163,23 @@ body > header h1 {
     box-sizing: border-box;
     padding: 80px;
     width: 100%;
-    background: url('../images/party-bg.png') center center / cover no-repeat;
+    overflow: hidden;
 }
 
-/* Fade overlay for background */
-#main-panel::before {
-    content: '';
+/* Background image element */
+.panel-bg {
     position: absolute;
     top: 0;
     left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.85);
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
     z-index: 0;
+    pointer-events: none;
 }
 
-#main-panel > * {
+#main-panel > *:not(.panel-bg) {
     position: relative;
     z-index: 1;
 }
