@@ -116,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let initialDelayCompleted = false;  // Track if initial delay has passed
     const barcodeInput = document.getElementById('barcode-input');
     const liveFeedbackName = document.getElementById('live-feedback-name');
+    const welcomeHeading = document.querySelector('.feedback-section h5');
     const stationNameLabel = document.getElementById('station-name');
     const totalEmployeesCounter = document.getElementById('total-employees');
     const totalScannedCounter = document.getElementById('total-scanned');
@@ -576,6 +577,21 @@ ${destination}` : message;
         }
     };
 
+    // Welcome heading animation helpers
+    const animateWelcomeSuccess = () => {
+        if (!welcomeHeading) return;
+        // Remove and re-add class to restart animation on consecutive scans
+        welcomeHeading.classList.remove('welcome--success');
+        // Force reflow to restart animation
+        void welcomeHeading.offsetWidth;
+        welcomeHeading.classList.add('welcome--success');
+    };
+
+    const resetWelcomeStyle = () => {
+        if (!welcomeHeading) return;
+        welcomeHeading.classList.remove('welcome--success');
+    };
+
     function adjustFeedbackSizing(content) {
         const message = typeof content === 'string' ? content : '';
         liveFeedbackName.style.fontSize = '';
@@ -612,6 +628,8 @@ ${destination}` : message;
                 liveFeedbackName.textContent = defaultMessage;
                 adjustFeedbackSizing(defaultMessage);
                 liveFeedbackName.style.color = 'var(--deloitte-green)';
+                // Reset welcome heading animation when feedback resets
+                resetWelcomeStyle();
             }, resetDelayMs);
         }
     }
@@ -786,6 +804,11 @@ ${destination}` : message;
             ? (response.fullName || badgeValue || 'Unknown')
             : 'Not matched';
         setLiveFeedback(message, found ? 'var(--deloitte-black)' : 'red');
+
+        // Animate welcome heading on successful matched scan
+        if (found) {
+            animateWelcomeSuccess();
+        }
 
         // Show duplicate badge alert if this is a duplicate scan (warn mode - accepted but flagged)
         if (response?.is_duplicate) {

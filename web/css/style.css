@@ -250,6 +250,32 @@ body > header h1 {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--deloitte-grey-medium);
+    transition: color 0.3s ease, transform 0.3s ease, text-shadow 0.3s ease;
+}
+
+/* Welcome text animation on successful scan */
+.feedback-section h5.welcome--success {
+    color: var(--deloitte-green);
+    transform: scale(1.05);
+    text-shadow: 0 0 20px rgba(134, 188, 37, 0.4);
+    animation: welcome-pulse 0.6s ease-out;
+}
+
+@keyframes welcome-pulse {
+    0% {
+        transform: scale(1);
+        color: var(--deloitte-grey-medium);
+        text-shadow: 0 0 0 rgba(134, 188, 37, 0);
+    }
+    50% {
+        transform: scale(1.08);
+        text-shadow: 0 0 30px rgba(134, 188, 37, 0.6);
+    }
+    100% {
+        transform: scale(1.05);
+        color: var(--deloitte-green);
+        text-shadow: 0 0 20px rgba(134, 188, 37, 0.4);
+    }
 }
 
 #live-feedback-name {
