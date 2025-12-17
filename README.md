@@ -417,13 +417,34 @@ pyinstaller --noconfirm --onefile `
 
 ### Using Spec File (Recommended for Production)
 
-For more control, use the spec file:
+For more control and faster rebuilds, use the spec file:
 
 ```bash
 pyinstaller --noconfirm TrackAttendance.spec
 ```
 
 **Output**: `dist/TrackAttendance/TrackAttendance.exe`
+
+### Build Tips for Faster Compilation
+
+**Use `--onedir` during development** for faster iteration:
+```powershell
+pyinstaller --noconfirm --onedir `
+  --name "TrackAttendance" `
+  --icon "assets/greendot.ico" `
+  --add-data ".env;." `
+  --add-data "web;web" `
+  "main.py"
+```
+
+**For release builds**, use the spec file:
+```bash
+pyinstaller --noconfirm TrackAttendance.spec
+```
+
+**Add antivirus exclusions** for build speed - exclude these folders in Windows Security:
+- `build\`
+- `dist\`
 
 ### Deployment Checklist
 
