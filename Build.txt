@@ -1,0 +1,92 @@
+
+1) Install build tools (PowerShell)
+cd "C:\Workspace\Dev\Python\QR"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+pip install pyinstaller python-dotenv
+
+2) Load .env correctly in both normal run and EXE
+
+Add this near the top of C:\Workspace\Dev\Python\QR\main.py:
+
+from pathlib import Path
+import sys
+from dotenv import load_dotenv
+
+base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+load_dotenv(base_dir / ".env")
+
+3) Build EXE with icon and bundled .env
+cd "C:\Workspace\Dev\Python\QR"
+pyinstaller --clean --noconfirm --onefile `
+  --name "QRApp" `
+  --icon "C:\Workspace\Dev\Python\greendot.ico" `
+  --add-data ".env;." `
+  "C:\Workspace\Dev\Python\QR\main.py"
+
+
+Output:
+
+C:\Workspace\Dev\Python\QR\dist\QRApp.exe
+
+4) Run
+& "C:\Workspace\Dev\Python\QR\dist\QRApp.exe"
+
+how to make next round compile faster
+Thought for 15s
+
+Do this.
+
+1) Stop deleting the build cache
+
+Remove --clean. Keep the build\ folder.
+
+Next builds:
+
+cd "C:\Workspace\Dev\Python\QR"
+pyinstaller --noconfirm QRApp.spec
+
+
+If you do not have a spec yet, run one build once (no --clean), PyInstaller will create QRApp.spec.
+
+2) Use --onedir during development
+
+--onefile is slower to build. Use --onedir for fast iterations, switch to --onefile for release.
+
+Dev build:
+
+pyinstaller --noconfirm --onedir `
+  --name "QRApp" `
+  --icon "C:\Workspace\Dev\Python\greendot.ico" `
+  --add-data ".env;." `
+  "C:\Workspace\Dev\Python\QR\main.py"
+
+
+Release build:
+
+pyinstaller --noconfirm --onefile QRApp.spec
+
+3) Reduce what PyInstaller scans and bundles
+
+Edit QRApp.spec and add excludes for unused heavy modules.
+
+Example:
+
+a = Analysis(
+    ...,
+    excludes=["pytest", "pandas", "matplotlib", "tkinter"],
+)
+
+4) Add antivirus exclusions for build speed
+
+Exclude these folders in Windows Security:
+
+C:\Workspace\Dev\Python\QR\build
+
+C:\Workspace\Dev\Python\QR\dist
+
+This removes repeated scanning overhead and speeds rebuilds.
+
+
+
