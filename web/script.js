@@ -116,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let initialDelayCompleted = false;  // Track if initial delay has passed
     const barcodeInput = document.getElementById('barcode-input');
     const liveFeedbackName = document.getElementById('live-feedback-name');
+    const welcomeHeading = document.getElementById('welcome-heading');
     const stationNameLabel = document.getElementById('station-name');
     const totalEmployeesCounter = document.getElementById('total-employees');
     const totalScannedCounter = document.getElementById('total-scanned');
@@ -576,6 +577,41 @@ ${destination}` : message;
         }
     };
 
+    // Welcome heading animation helpers - using inline styles for PyQt compatibility
+    const animateWelcomeSuccess = () => {
+        if (!welcomeHeading) return;
+
+        // Apply green color and pulse animation via inline styles
+        welcomeHeading.style.color = '#86bc25';
+        welcomeHeading.style.transform = 'scale(1)';
+        welcomeHeading.style.textShadow = '0 0 0 rgba(134, 188, 37, 0)';
+
+        // Force reflow then animate
+        void welcomeHeading.offsetWidth;
+
+        // Animate to scaled state with glow
+        welcomeHeading.style.transition = 'all 0.3s ease-out';
+        welcomeHeading.style.transform = 'scale(1.08)';
+        welcomeHeading.style.textShadow = '0 0 25px rgba(134, 188, 37, 0.6)';
+
+        // Settle to final state after pulse
+        setTimeout(() => {
+            if (welcomeHeading) {
+                welcomeHeading.style.transform = 'scale(1.05)';
+                welcomeHeading.style.textShadow = '0 0 15px rgba(134, 188, 37, 0.4)';
+            }
+        }, 300);
+    };
+
+    const resetWelcomeStyle = () => {
+        if (!welcomeHeading) return;
+        // Reset to original grey color
+        welcomeHeading.style.transition = 'all 0.3s ease-out';
+        welcomeHeading.style.color = '#8c8c8c';
+        welcomeHeading.style.transform = 'scale(1)';
+        welcomeHeading.style.textShadow = 'none';
+    };
+
     function adjustFeedbackSizing(content) {
         const message = typeof content === 'string' ? content : '';
         liveFeedbackName.style.fontSize = '';
@@ -612,6 +648,8 @@ ${destination}` : message;
                 liveFeedbackName.textContent = defaultMessage;
                 adjustFeedbackSizing(defaultMessage);
                 liveFeedbackName.style.color = 'var(--deloitte-green)';
+                // Reset welcome heading animation when feedback resets
+                resetWelcomeStyle();
             }, resetDelayMs);
         }
     }
@@ -786,6 +824,11 @@ ${destination}` : message;
             ? (response.fullName || badgeValue || 'Unknown')
             : 'Not matched';
         setLiveFeedback(message, found ? 'var(--deloitte-black)' : 'red');
+
+        // Animate welcome heading on successful matched scan
+        if (found) {
+            animateWelcomeSuccess();
+        }
 
         // Show duplicate badge alert if this is a duplicate scan (warn mode - accepted but flagged)
         if (response?.is_duplicate) {

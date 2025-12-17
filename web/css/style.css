@@ -250,6 +250,7 @@ body > header h1 {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: var(--deloitte-grey-medium);
+    transition: color 0.3s ease, transform 0.3s ease, text-shadow 0.3s ease;
 }
 
 #live-feedback-name {
