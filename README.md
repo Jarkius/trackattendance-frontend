@@ -449,19 +449,41 @@ pyinstaller --noconfirm TrackAttendance.spec
 ### Deployment Checklist
 
 1. Build the executable using one of the methods above
-2. Copy `dist/TrackAttendance.exe` (or `dist/TrackAttendance/` folder) to target machine
+2. Copy `dist/TrackAttendance.exe` to target machine
 3. Create `data/` folder next to executable
 4. Place `employee.xlsx` in `data/` folder (required for name matching)
-5. Create `.env` file with `CLOUD_API_KEY` for cloud sync
+5. Create `.env` file next to exe with your settings (see below)
 6. Ensure Windows Firewall allows the application
 7. Run the application
+
+### Configuration (.env file)
+
+The app looks for `.env` in this order:
+1. **Next to the exe** (user-editable, takes priority)
+2. **Bundled in exe** (fallback defaults)
+
+Place `.env` next to `TrackAttendance.exe` to customize settings:
+
+```ini
+# Required for cloud sync
+CLOUD_API_KEY=your-api-key-here
+
+# Optional: Enable party/event background (disco balls)
+SHOW_PARTY_BACKGROUND=True
+
+# Optional: Duplicate detection settings
+DUPLICATE_BADGE_DETECTION_ENABLED=True
+DUPLICATE_BADGE_ACTION=block
+```
+
+See `.env.example` for all available settings.
 
 ### Folder Structure After Deployment
 
 ```
 TrackAttendance/
 ├── TrackAttendance.exe    # Main application
-├── .env                   # API configuration (create this)
+├── .env                   # Your configuration (create this)
 ├── data/
 │   ├── employee.xlsx      # Employee roster (required)
 │   └── database.db        # Created automatically on first run
