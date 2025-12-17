@@ -50,6 +50,8 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - 🔍 Unknowns captured as "Not matched" for later reconciliation.
 - 🛑 **Duplicate badge detection** (v1.3.0+): Prevents accidental duplicate scans within configurable time window; configurable actions (warn, block, or silent).
 - 📊 **Dashboard with BU breakdown** (v1.3.0+): View scan statistics by business unit with unmatched badge tracking.
+- ✨ **Welcome animation** (v1.4.0+): Animated green bounce effect on successful badge scans for visual confirmation.
+- 🎉 **Party background** (v1.4.0+): Configurable festive background image for events; toggle via `SHOW_PARTY_BACKGROUND` setting.
 - 📈 One-click exports plus automatic export on shutdown (after a sync attempt).
 - 🌐 Offline-first assets; runs without network access.
 - 🛡 Graceful error handling and fallback UI if web assets fail to load.
@@ -389,6 +391,7 @@ CLOUD_API_KEY=<your-api-key>
 CLOUD_SYNC_BATCH_SIZE=100
 AUTO_SYNC_ENABLED=True
 SHOW_FULL_SCREEN=False
+SHOW_PARTY_BACKGROUND=False           # Enable festive background image
 ```
 
 ## Building & Packaging
@@ -488,6 +491,7 @@ ping trackattendance-api-969370105809.asia-southeast1.run.app
 - `data/`, `exports/` — runtime storage (ignored by git); `Backup/` — archived experiments.
 
 ## Version History (high level)
+- **v1.4.0 (Dec 2025)** — Welcome animation with green bounce effect on successful scans (#29), configurable party/event background image (#31), fixed `DUPLICATE_BADGE_ACTION=silent` not suppressing alerts (#32).
 - **v1.3.0 (Dec 2025)** — Dashboard BU breakdown with unmatched badge tracking (#28), duplicate badge detection with configurable actions (#20, #21), fixed sync statistics in error handlers (#26), improved export UX with inline feedback for empty exports.
 - **v1.2.0** — Auto-Sync Intelligence: idle detection, connectivity check, inline status updates, configurable via `config.py`.
 - **v1.1.0** — Sync status UI redesign: compact layout, spinning sync icon, space optimization.
