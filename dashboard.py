@@ -282,20 +282,44 @@ class DashboardService:
             from openpyxl import Workbook
             from openpyxl.styles import Font, PatternFill, Alignment
 
-            # Create DataFrame from API data
-            # Handle both dict and list formats from API
-            if scans and isinstance(scans[0], dict):
-                df = pd.DataFrame(scans)
-                df = df.rename(columns={
-                    "badge_id": "Badge ID",
-                    "station_name": "Station",
-                    "scanned_at": "Scanned At",
-                    "matched": "Matched",
+            # Load employee cache for enriching scan data with employee details
+            employee_cache = self._db_manager.load_employee_cache()
+            logger.debug(f"Dashboard export: Loaded {len(employee_cache)} employees for enrichment")
+
+            # Enrich scans with employee details from local database
+            enriched_scans = []
+            for scan in scans:
+                # Handle both dict and list formats from API
+                if isinstance(scan, dict):
+                    badge_id = scan.get("badge_id", "")
+                    station = scan.get("station_name", "")
+                    scanned_at = scan.get("scanned_at", "")
+                    matched = scan.get("matched", False)
+                else:
+                    badge_id, station, scanned_at, matched = scan[0], scan[1], scan[2], scan[3]
+
+                # Lookup employee details from local cache
+                employee = employee_cache.get(badge_id)
+                if employee:
+                    full_name = employee.full_name
+                    business_unit = employee.sl_l1_desc or "--"
+                    position = employee.position_desc or "--"
+                else:
+                    full_name = "Unknown"
+                    business_unit = "--"
+                    position = "--"
+
+                enriched_scans.append({
+                    "Badge ID": badge_id,
+                    "Full Name": full_name,
+                    "Business Unit": business_unit,
+                    "Position": position,
+                    "Station": station,
+                    "Scanned At": scanned_at,
+                    "Matched": "Yes" if matched else "No",
                 })
-                # Ensure column order
-                df = df[["Badge ID", "Station", "Scanned At", "Matched"]]
-            else:
-                df = pd.DataFrame(scans, columns=["Badge ID", "Station", "Scanned At", "Matched"])
+
+            df = pd.DataFrame(enriched_scans)
 
             # Create Excel workbook
             wb = Workbook()
@@ -306,7 +330,7 @@ class DashboardService:
             header_fill = PatternFill(start_color="86bc25", end_color="86bc25", fill_type="solid")
             header_font = Font(bold=True, color="FFFFFF")
 
-            columns = ["Badge ID", "Station", "Scanned At", "Matched"]
+            columns = ["Badge ID", "Full Name", "Business Unit", "Position", "Station", "Scanned At", "Matched"]
             for col_idx, col_name in enumerate(columns, start=1):
                 cell = ws.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill
