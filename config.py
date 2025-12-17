@@ -10,11 +10,27 @@ import sys
 from pathlib import Path
 
 # Load environment variables from .env file if it exists
+# For frozen exe: check next to exe first, then bundled location
 try:
     from dotenv import load_dotenv
-    env_file = Path(__file__).parent / ".env"
-    if env_file.exists():
-        load_dotenv(env_file)
+
+    env_loaded = False
+
+    # For frozen builds, check next to the exe first (user-editable)
+    if getattr(sys, 'frozen', False):
+        exe_dir = Path(sys.executable).parent
+        exe_env = exe_dir / ".env"
+        if exe_env.exists():
+            load_dotenv(exe_env)
+            env_loaded = True
+            print(f"[Config] Loaded .env from: {exe_env}")
+
+    # Fall back to script/bundled location
+    if not env_loaded:
+        script_env = Path(__file__).parent / ".env"
+        if script_env.exists():
+            load_dotenv(script_env)
+            print(f"[Config] Loaded .env from: {script_env}")
 except ImportError:
     # python-dotenv not available, will use system environment only
     pass

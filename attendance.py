@@ -366,10 +366,16 @@ def _safe_string(value: Optional[object]) -> str:
 
 
 def _format_timestamp(value: Optional[str]) -> str:
+    """Convert UTC timestamp to local time for display."""
     if not value:
         return ""
     try:
-        return datetime.fromisoformat(value).strftime(DISPLAY_TIMESTAMP_FORMAT)
+        # Handle 'Z' suffix (UTC indicator) - replace with +00:00 for fromisoformat
+        iso_value = value.replace('Z', '+00:00')
+        utc_dt = datetime.fromisoformat(iso_value)
+        # Convert to local timezone
+        local_dt = utc_dt.astimezone()
+        return local_dt.strftime(DISPLAY_TIMESTAMP_FORMAT)
     except ValueError:
         return value
 
