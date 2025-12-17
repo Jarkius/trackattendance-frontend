@@ -581,7 +581,7 @@ ${destination}` : message;
     const animateWelcomeSuccess = () => {
         if (!welcomeHeading) return;
 
-        // Apply green color and pulse animation via inline styles
+        // Apply green color and start animation via inline styles
         welcomeHeading.style.color = '#86bc25';
         welcomeHeading.style.transform = 'scale(1)';
         welcomeHeading.style.textShadow = '0 0 0 rgba(134, 188, 37, 0)';
@@ -589,18 +589,28 @@ ${destination}` : message;
         // Force reflow then animate
         void welcomeHeading.offsetWidth;
 
-        // Animate to scaled state with glow
-        welcomeHeading.style.transition = 'all 0.3s ease-out';
-        welcomeHeading.style.transform = 'scale(1.08)';
-        welcomeHeading.style.textShadow = '0 0 25px rgba(134, 188, 37, 0.6)';
+        // Phase 1: Quick overshoot (bounce up)
+        welcomeHeading.style.transition = 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.5)';
+        welcomeHeading.style.transform = 'scale(1.2)';
+        welcomeHeading.style.textShadow = '0 0 35px rgba(134, 188, 37, 0.8)';
 
-        // Settle to final state after pulse
+        // Phase 2: Bounce back down
         setTimeout(() => {
             if (welcomeHeading) {
-                welcomeHeading.style.transform = 'scale(1.05)';
-                welcomeHeading.style.textShadow = '0 0 15px rgba(134, 188, 37, 0.4)';
+                welcomeHeading.style.transition = 'all 0.15s ease-out';
+                welcomeHeading.style.transform = 'scale(0.95)';
+                welcomeHeading.style.textShadow = '0 0 20px rgba(134, 188, 37, 0.5)';
             }
-        }, 300);
+        }, 200);
+
+        // Phase 3: Settle to final state
+        setTimeout(() => {
+            if (welcomeHeading) {
+                welcomeHeading.style.transition = 'all 0.2s ease-out';
+                welcomeHeading.style.transform = 'scale(1.08)';
+                welcomeHeading.style.textShadow = '0 0 25px rgba(134, 188, 37, 0.6)';
+            }
+        }, 350);
     };
 
     const resetWelcomeStyle = () => {
