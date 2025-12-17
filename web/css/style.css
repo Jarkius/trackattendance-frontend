@@ -162,7 +162,7 @@ body > header h1 {
     flex-direction: column;
     box-sizing: border-box;
     padding: 80px;
-    padding-bottom: 120px; /* Space for event banner */
+    padding-bottom: 80px; /* Space for event banner */
     width: 100%;
 }
 
@@ -193,17 +193,21 @@ body > header h1 {
 .event-banner {
     position: absolute;
     bottom: 0;
-    left: 0;
+    left: -80px;  /* Compensate for main-panel padding */
     right: 0;
-    width: 100%;
+    width: calc(100% + 80px);
+    height: 60px;  /* Match header height */
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 .event-banner img {
     width: 100%;
-    height: auto;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
     display: block;
-    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .scan-section {
