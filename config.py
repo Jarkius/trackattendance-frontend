@@ -190,6 +190,9 @@ EMPLOYEE_WORKBOOK_FILENAME = "employee.xlsx"
 SHOW_FULL_SCREEN = os.getenv("SHOW_FULL_SCREEN", "True").lower() in ("true", "1", "yes")
 ENABLE_FADE_ANIMATION = os.getenv("ENABLE_FADE_ANIMATION", "True").lower() in ("true", "1", "yes")
 
+# Party/Event background image
+SHOW_PARTY_BACKGROUND = os.getenv("SHOW_PARTY_BACKGROUND", "True").lower() in ("true", "1", "yes")
+
 # Export behavior
 AUTO_EXPORT_ON_SHUTDOWN = os.getenv("AUTO_EXPORT_ON_SHUTDOWN", "True").lower() in ("true", "1", "yes")
 

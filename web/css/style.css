@@ -14,11 +14,15 @@ body, html {
     width: 100vw;
     overflow-x: hidden; /* Prevent horizontal scroll */
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: url('../images/party-bg.png') center center / cover no-repeat fixed;
     background-color: var(--deloitte-grey-light);
     color: var(--deloitte-grey-dark);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+/* Party/Event background - enabled via SHOW_PARTY_BACKGROUND config */
+body.party-bg {
+    background: url('../images/party-bg.png') center center / cover no-repeat fixed;
 }
 
 /* Main page header - use child combinator to avoid affecting dashboard header */

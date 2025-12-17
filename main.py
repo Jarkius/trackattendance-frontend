@@ -608,6 +608,10 @@ def initialize_app(
 
     def handle_load_finished(ok: bool) -> None:
         if ok:
+            # Inject party background config
+            if config.SHOW_PARTY_BACKGROUND:
+                view.page().runJavaScript("document.body.classList.add('party-bg');")
+
             if not show_window:
                 window.setWindowOpacity(1.0)
             else:
