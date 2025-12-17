@@ -577,25 +577,45 @@ ${destination}` : message;
         }
     };
 
-    // Welcome heading animation helpers
+    // Welcome heading animation helpers - using inline styles for PyQt compatibility
     const animateWelcomeSuccess = () => {
-        console.log('[Welcome Animation] animateWelcomeSuccess called, element:', welcomeHeading);
+        console.log('[Welcome Animation] animateWelcomeSuccess called');
         if (!welcomeHeading) {
             console.warn('[Welcome Animation] welcomeHeading element not found!');
             return;
         }
-        // Remove and re-add class to restart animation on consecutive scans
-        welcomeHeading.classList.remove('welcome--success');
-        // Force reflow to restart animation
+        // Apply green color and pulse animation via inline styles
+        welcomeHeading.style.color = '#86bc25';
+        welcomeHeading.style.transform = 'scale(1)';
+        welcomeHeading.style.textShadow = '0 0 0 rgba(134, 188, 37, 0)';
+
+        // Force reflow then animate
         void welcomeHeading.offsetWidth;
-        welcomeHeading.classList.add('welcome--success');
-        console.log('[Welcome Animation] Added welcome--success class, classes now:', welcomeHeading.className);
+
+        // Animate to scaled state with glow
+        welcomeHeading.style.transition = 'all 0.3s ease-out';
+        welcomeHeading.style.transform = 'scale(1.08)';
+        welcomeHeading.style.textShadow = '0 0 25px rgba(134, 188, 37, 0.6)';
+
+        // Settle to final state after pulse
+        setTimeout(() => {
+            if (welcomeHeading) {
+                welcomeHeading.style.transform = 'scale(1.05)';
+                welcomeHeading.style.textShadow = '0 0 15px rgba(134, 188, 37, 0.4)';
+            }
+        }, 300);
+
+        console.log('[Welcome Animation] Applied green color and pulse animation');
     };
 
     const resetWelcomeStyle = () => {
         if (!welcomeHeading) return;
-        welcomeHeading.classList.remove('welcome--success');
-        console.log('[Welcome Animation] Reset - removed welcome--success class');
+        // Reset to original grey color
+        welcomeHeading.style.transition = 'all 0.3s ease-out';
+        welcomeHeading.style.color = '#8c8c8c';
+        welcomeHeading.style.transform = 'scale(1)';
+        welcomeHeading.style.textShadow = 'none';
+        console.log('[Welcome Animation] Reset to grey');
     };
 
     function adjustFeedbackSizing(content) {
