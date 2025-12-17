@@ -156,12 +156,31 @@ body > header h1 {
 }
 
 #main-panel {
+    position: relative;
     height: calc(100vh - 60px);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
     padding: 80px;
     width: 100%;
+    background: url('../images/party-bg.png') center center / cover no-repeat;
+}
+
+/* Fade overlay for background */
+#main-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.85);
+    z-index: 0;
+}
+
+#main-panel > * {
+    position: relative;
+    z-index: 1;
 }
 
 .main-content-wrapper {
