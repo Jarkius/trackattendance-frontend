@@ -268,6 +268,10 @@ class AttendanceService:
         timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         self._db.record_scan(sanitized, self.station_name, employee, timestamp)
         history = self._db.get_recent_scans()
+        # Only flag as duplicate for UI alert if action is 'warn' (not 'silent')
+        # 'silent' mode accepts duplicates without any UI alert
+        show_duplicate_alert = is_duplicate and config.DUPLICATE_BADGE_ACTION == 'warn'
+
         payload = {
             "ok": True,
             "badgeId": sanitized,
@@ -277,7 +281,7 @@ class AttendanceService:
             "totalScansToday": self._db.count_scans_today(),
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
-            "is_duplicate": is_duplicate,  # Include flag for UI alert
+            "is_duplicate": show_duplicate_alert,  # Only true for 'warn' mode
         }
         return payload
 
