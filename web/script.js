@@ -579,11 +579,8 @@ ${destination}` : message;
 
     // Welcome heading animation helpers - using inline styles for PyQt compatibility
     const animateWelcomeSuccess = () => {
-        console.log('[Welcome Animation] animateWelcomeSuccess called');
-        if (!welcomeHeading) {
-            console.warn('[Welcome Animation] welcomeHeading element not found!');
-            return;
-        }
+        if (!welcomeHeading) return;
+
         // Apply green color and pulse animation via inline styles
         welcomeHeading.style.color = '#86bc25';
         welcomeHeading.style.transform = 'scale(1)';
@@ -604,8 +601,6 @@ ${destination}` : message;
                 welcomeHeading.style.textShadow = '0 0 15px rgba(134, 188, 37, 0.4)';
             }
         }, 300);
-
-        console.log('[Welcome Animation] Applied green color and pulse animation');
     };
 
     const resetWelcomeStyle = () => {
@@ -615,7 +610,6 @@ ${destination}` : message;
         welcomeHeading.style.color = '#8c8c8c';
         welcomeHeading.style.transform = 'scale(1)';
         welcomeHeading.style.textShadow = 'none';
-        console.log('[Welcome Animation] Reset to grey');
     };
 
     function adjustFeedbackSizing(content) {
