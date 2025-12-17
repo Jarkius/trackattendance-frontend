@@ -116,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let initialDelayCompleted = false;  // Track if initial delay has passed
     const barcodeInput = document.getElementById('barcode-input');
     const liveFeedbackName = document.getElementById('live-feedback-name');
-    const welcomeHeading = document.querySelector('.feedback-section h5');
+    const welcomeHeading = document.getElementById('welcome-heading');
     const stationNameLabel = document.getElementById('station-name');
     const totalEmployeesCounter = document.getElementById('total-employees');
     const totalScannedCounter = document.getElementById('total-scanned');
@@ -579,17 +579,23 @@ ${destination}` : message;
 
     // Welcome heading animation helpers
     const animateWelcomeSuccess = () => {
-        if (!welcomeHeading) return;
+        console.log('[Welcome Animation] animateWelcomeSuccess called, element:', welcomeHeading);
+        if (!welcomeHeading) {
+            console.warn('[Welcome Animation] welcomeHeading element not found!');
+            return;
+        }
         // Remove and re-add class to restart animation on consecutive scans
         welcomeHeading.classList.remove('welcome--success');
         // Force reflow to restart animation
         void welcomeHeading.offsetWidth;
         welcomeHeading.classList.add('welcome--success');
+        console.log('[Welcome Animation] Added welcome--success class, classes now:', welcomeHeading.className);
     };
 
     const resetWelcomeStyle = () => {
         if (!welcomeHeading) return;
         welcomeHeading.classList.remove('welcome--success');
+        console.log('[Welcome Animation] Reset - removed welcome--success class');
     };
 
     function adjustFeedbackSizing(content) {
