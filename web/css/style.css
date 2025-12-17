@@ -156,11 +156,13 @@ body > header h1 {
 }
 
 #main-panel {
+    position: relative;
     height: calc(100vh - 60px);
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
     padding: 80px;
+    padding-bottom: 120px; /* Space for event banner */
     width: 100%;
 }
 
@@ -187,22 +189,21 @@ body > header h1 {
     display: block;
 }
 
-/* Event Banner Footer */
+/* Event Banner Footer - Full width at bottom of left pane */
 .event-banner {
-    flex-shrink: 0;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
     width: 100%;
-    max-width: 700px;
-    margin: 0 auto;
-    padding: 0 40px 20px;
     box-sizing: border-box;
 }
 
 .event-banner img {
     width: 100%;
     height: auto;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     display: block;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.3);
 }
 
 .scan-section {
