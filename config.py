@@ -61,7 +61,7 @@ if not CLOUD_API_KEY:
     print("  2. Edit .env and fill in your CLOUD_API_KEY:\n")
     print("     CLOUD_API_KEY=your-actual-api-key-here\n")
     print("  3. Restart the application\n")
-    print("For help, see: README.md → Cloud Synchronization → Configuration")
+    print("For help, see: README.md > Cloud Synchronization > Configuration")
     print("="*70 + "\n")
     sys.exit(1)
 
