@@ -50,7 +50,10 @@
       "Bash(git commit -m \"$(cat <<''EOF''\nfeat: animate Welcome text green on successful badge scan\n\n- Add CSS animation with pulse effect and green color transition\n- Add welcomeHeading element reference in script.js\n- Add animateWelcomeSuccess() and resetWelcomeStyle() helper functions\n- Trigger animation on successful matched scan in handleScanResponse()\n- Reset animation when feedback returns to \"Ready to scan...\"\n\nAnimation features:\n- Smooth scale (1.0 → 1.08 → 1.05) with green glow\n- 0.6s duration with ease-out timing\n- Supports consecutive scans (animation restarts cleanly)\n- Auto-resets after 2 seconds with feedback message\n\nCloses #29\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(gh pr create:*)",
       "Bash(gh pr merge:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(gh release:*)",
+      "Bash(pyinstaller:*)",
+      "Bash(./TrackAttendance.exe)"
     ],
     "deny": [],
     "ask": []

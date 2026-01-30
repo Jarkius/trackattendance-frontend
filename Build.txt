@@ -64,8 +64,8 @@ pyinstaller --noconfirm --onedir `
 
 
 Release build:
+pyinstaller --noconfirm rackAttendance.spec
 
-pyinstaller --noconfirm --onefile QRApp.spec
 
 3) Reduce what PyInstaller scans and bundles
 
