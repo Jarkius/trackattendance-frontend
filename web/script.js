@@ -1076,7 +1076,7 @@ ${destination}` : message;
                     <div class="dash__card">
                         <div class="dash__card-name">${bu.bu_name || '--'}</div>
                         <div class="dash__card-row">
-                            <div class="dash__card-value">${Number(bu.scanned || 0).toLocaleString()}</div>
+                            <div class="dash__card-value">${Number(bu.scanned || 0).toLocaleString()} <span class="dash__card-total">/ ${Number(bu.registered || 0).toLocaleString()}</span></div>
                             <div class="dash__card-pct">${(bu.attendance_rate || 0).toFixed(1)}%</div>
                         </div>
                     </div>

@@ -1206,6 +1206,12 @@ body.dashboard-open {
     font-variant-numeric: tabular-nums;
 }
 
+.dash__card-total {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #999;
+}
+
 .dash__card-sub {
     font-size: 0.6rem;
     color: #999;

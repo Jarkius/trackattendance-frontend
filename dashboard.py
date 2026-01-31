@@ -215,7 +215,8 @@ class DashboardService:
             return "--"
         try:
             dt = datetime.fromisoformat(iso_timestamp.replace("Z", "+00:00"))
-            return dt.strftime("%H:%M:%S")
+            local_dt = dt.astimezone()  # Convert UTC to local machine timezone
+            return local_dt.strftime("%H:%M:%S")
         except Exception:
             return "--"
 
