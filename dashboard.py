@@ -421,6 +421,41 @@ class DashboardService:
                     max_length = max(len(str(cell.value or "")) for cell in col)
                     ws_bu.column_dimensions[col[0].column_letter].width = max_length + 2
 
+            # Add "Not Yet Scanned" sheet - employees who haven't scanned
+            scanned_badge_ids = {scan.get("badge_id") if isinstance(scan, dict) else scan[0] for scan in scans}
+            not_scanned = [
+                emp for emp in employee_cache.values()
+                if emp.legacy_id not in scanned_badge_ids
+            ]
+            not_scanned.sort(key=lambda e: (e.sl_l1_desc or "", e.full_name or ""))
+
+            ws_missing = wb.create_sheet("Not Yet Scanned")
+            missing_headers = ["Badge ID", "Full Name", "Business Unit", "Position"]
+            for col_idx, col_name in enumerate(missing_headers, start=1):
+                cell = ws_missing.cell(row=1, column=col_idx, value=col_name)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+
+            for row_idx, emp in enumerate(not_scanned, start=2):
+                ws_missing.cell(row=row_idx, column=1, value=emp.legacy_id)
+                ws_missing.cell(row=row_idx, column=2, value=emp.full_name)
+                ws_missing.cell(row=row_idx, column=3, value=emp.sl_l1_desc or "--")
+                ws_missing.cell(row=row_idx, column=4, value=emp.position_desc or "--")
+
+            # Summary row
+            summary_row = len(not_scanned) + 2
+            ws_missing.cell(row=summary_row, column=1, value="Total Not Scanned:")
+            ws_missing.cell(row=summary_row, column=1).font = Font(bold=True)
+            ws_missing.cell(row=summary_row, column=2, value=len(not_scanned))
+            ws_missing.cell(row=summary_row, column=2).font = Font(bold=True)
+
+            for col in ws_missing.columns:
+                max_length = max(len(str(cell.value or "")) for cell in col)
+                ws_missing.column_dimensions[col[0].column_letter].width = max_length + 2
+
+            logger.info(f"Dashboard export: {len(not_scanned)} employees not yet scanned")
+
             # Save file
             wb.save(file_path)
             result["ok"] = True

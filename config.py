@@ -233,3 +233,7 @@ DUPLICATE_BADGE_ACTION = os.getenv("DUPLICATE_BADGE_ACTION", "warn").lower()
 
 # Duration in milliseconds to show duplicate badge alert before auto-dismiss
 DUPLICATE_BADGE_ALERT_DURATION_MS = int(os.getenv("DUPLICATE_BADGE_ALERT_DURATION_MS", "3000"))
+
+# Duration in milliseconds to show employee name and "THANK YOU" after scan
+# before returning to "Ready to scan..." state
+SCAN_FEEDBACK_DURATION_MS = int(os.getenv("SCAN_FEEDBACK_DURATION_MS", "2000"))

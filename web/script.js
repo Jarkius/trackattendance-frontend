@@ -103,6 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Duplicate badge alert configuration
     let duplicateBadgeAlertDurationMs = 3000;  // Default: 3 seconds
+    let scanFeedbackDurationMs = 2000;  // Default: 2 seconds
 
     // Connection status polling with hysteresis to prevent flicker and reduce API calls
     const DEFAULT_CONNECTION_CHECK_INTERVAL_MS = 60000;  // 60 seconds (not 10!) to reduce API cost
@@ -146,6 +147,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const dashboardUpdated = document.getElementById('dashboard-updated');
     const dashboardExportBtn = document.getElementById('dashboard-export');
     const dashboardRefreshBtn = document.getElementById('dashboard-refresh');
+    const dashboardFooter = document.getElementById('dashboard-footer');
+    const dashboardExportLink = document.getElementById('dashboard-export-link');
 
     if (!barcodeInput || !liveFeedbackName || !totalEmployeesCounter || !totalScannedCounter) {
         console.warn('Attendance UI missing required elements; event wiring skipped.');
@@ -581,7 +584,8 @@ ${destination}` : message;
     const animateWelcomeSuccess = () => {
         if (!welcomeHeading) return;
 
-        // Apply green color and start animation via inline styles
+        // Change text to "THANK YOU" and apply green color animation
+        welcomeHeading.textContent = 'THANK YOU';
         welcomeHeading.style.color = '#86bc25';
         welcomeHeading.style.transform = 'scale(1)';
         welcomeHeading.style.textShadow = '0 0 0 rgba(134, 188, 37, 0)';
@@ -615,7 +619,8 @@ ${destination}` : message;
 
     const resetWelcomeStyle = () => {
         if (!welcomeHeading) return;
-        // Reset to original grey color
+        // Reset to original "WELCOME" text and grey color
+        welcomeHeading.textContent = 'WELCOME';
         welcomeHeading.style.transition = 'all 0.3s ease-out';
         welcomeHeading.style.color = '#8c8c8c';
         welcomeHeading.style.transform = 'scale(1)';
@@ -782,6 +787,8 @@ ${destination}` : message;
                 }
                 duplicateBadgeAlertDurationMs = Math.max(0, Number(payload?.duplicateBadgeAlertDurationMs) || 3000);
                 console.info('[Config] Duplicate badge alert duration:', duplicateBadgeAlertDurationMs, 'ms');
+                scanFeedbackDurationMs = Math.max(0, Number(payload?.scanFeedbackDurationMs) || 2000);
+                console.info('[Config] Scan feedback duration:', scanFeedbackDurationMs, 'ms');
                 // Signal binding already done in QWebChannel setup, don't rebind here
                 state.totalEmployees = payload?.totalEmployees ?? 0;
                 state.totalScansToday = payload?.totalScansToday ?? 0;
@@ -833,7 +840,7 @@ ${destination}` : message;
         const message = found
             ? (response.fullName || badgeValue || 'Unknown')
             : 'Not matched';
-        setLiveFeedback(message, found ? 'var(--deloitte-black)' : 'red');
+        setLiveFeedback(message, found ? 'var(--deloitte-black)' : 'red', scanFeedbackDurationMs);
 
         // Animate welcome heading on successful matched scan
         if (found) {
@@ -992,6 +999,11 @@ ${destination}` : message;
             startConnectionStatusPolling();
         }
 
+        // Hide export footer
+        if (dashboardFooter) {
+            dashboardFooter.style.display = 'none';
+        }
+
         // Re-enable barcode input
         if (barcodeInput) {
             barcodeInput.disabled = false;
@@ -1123,6 +1135,13 @@ ${destination}` : message;
                     } else if (success) {
                         dashboardUpdated.textContent = 'Export complete';
                         dashboardUpdated.style.color = 'var(--deloitte-green)';
+
+                        // Show footer with file path
+                        if (dashboardFooter && dashboardExportLink) {
+                            dashboardExportLink.textContent = result.file_path || result.fileName || 'Exported file';
+                            dashboardExportLink.setAttribute('data-path', result.file_path || '');
+                            dashboardFooter.style.display = '';
+                        }
                     } else {
                         dashboardUpdated.textContent = result?.message || 'Export failed';
                         dashboardUpdated.style.color = 'red';
@@ -1136,6 +1155,21 @@ ${destination}` : message;
             });
         });
     };
+
+    // Export link click - open folder in Explorer
+    if (dashboardExportLink) {
+        dashboardExportLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            const filePath = dashboardExportLink.getAttribute('data-path');
+            if (filePath) {
+                queueOrRun((bridge) => {
+                    if (bridge.open_export_folder) {
+                        bridge.open_export_folder(filePath);
+                    }
+                });
+            }
+        });
+    }
 
     const handleSyncNow = () => {
         queueOrRun((bridge) => {

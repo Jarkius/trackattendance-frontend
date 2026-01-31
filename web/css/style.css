@@ -1225,6 +1225,33 @@ body.dashboard-open {
     color: #555;
 }
 
+/* Footer bar */
+.dash__footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 20px;
+    background: white;
+    border-top: 1px solid #E5E5E5;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: #999;
+}
+
+.dash__footer-link {
+    color: var(--deloitte-green);
+    text-decoration: none;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.dash__footer-link:hover {
+    text-decoration: underline;
+}
+
 /* Loading state */
 .dash__empty {
     grid-column: 1 / -1;

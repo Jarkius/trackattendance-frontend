@@ -564,6 +564,15 @@ class Api(QObject):
             }
         return self._dashboard_service.export_to_excel()
 
+    @pyqtSlot(str)
+    def open_export_folder(self, file_path: str) -> None:
+        """Open Windows Explorer with the exported file selected."""
+        import subprocess
+        try:
+            subprocess.Popen(["explorer", "/select,", file_path.replace("/", "\\")])
+        except Exception as e:
+            LOGGER.error("Failed to open export folder: %s", e)
+
 
 def initialize_app(
     argv: Optional[Sequence[str]] = None,
@@ -608,9 +617,9 @@ def initialize_app(
 
     def handle_load_finished(ok: bool) -> None:
         if ok:
-            # Inject party background config
-            if config.SHOW_PARTY_BACKGROUND:
-                view.page().runJavaScript("document.body.classList.add('party-bg');")
+            # Party background is on by default in HTML; remove if disabled
+            if not config.SHOW_PARTY_BACKGROUND:
+                view.page().runJavaScript("document.body.classList.remove('party-bg');")
 
             if not show_window:
                 window.setWindowOpacity(1.0)
