@@ -36,6 +36,35 @@ except ImportError:
     pass
 
 
+def _safe_int(key: str, default: int, min_val: int = None, max_val: int = None) -> int:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        val = int(raw)
+        if min_val is not None:
+            val = max(min_val, val)
+        if max_val is not None:
+            val = min(max_val, val)
+        return val
+    except (ValueError, TypeError):
+        return default
+
+def _safe_float(key: str, default: float, min_val: float = None, max_val: float = None) -> float:
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    try:
+        val = float(raw)
+        if min_val is not None:
+            val = max(min_val, val)
+        if max_val is not None:
+            val = min(max_val, val)
+        return val
+    except (ValueError, TypeError):
+        return default
+
+
 # =============================================================================
 # Cloud API Configuration
 # =============================================================================
@@ -66,7 +95,7 @@ if not CLOUD_API_KEY:
     sys.exit(1)
 
 # Number of scans to sync in each batch
-CLOUD_SYNC_BATCH_SIZE = int(os.getenv("CLOUD_SYNC_BATCH_SIZE", "100"))
+CLOUD_SYNC_BATCH_SIZE = _safe_int("CLOUD_SYNC_BATCH_SIZE", 100, min_val=1, max_val=1000)
 
 
 # =============================================================================
@@ -100,7 +129,7 @@ def _parse_connection_interval_ms() -> int:
 CONNECTION_CHECK_INTERVAL_MS = _parse_connection_interval_ms()
 
 # Timeout (seconds) for cloud API health checks triggered by the UI
-CONNECTION_CHECK_TIMEOUT_SECONDS = float(os.getenv("CONNECTION_CHECK_TIMEOUT_SECONDS", "1.5"))
+CONNECTION_CHECK_TIMEOUT_SECONDS = _safe_float("CONNECTION_CHECK_TIMEOUT_SECONDS", 1.5, min_val=0.5, max_val=30.0)
 
 # Initial connection check delay in milliseconds (converted from seconds)
 # Default: 15 seconds. Indicator starts black (invisible), so no rush to check during startup
@@ -116,15 +145,15 @@ AUTO_SYNC_ENABLED = os.getenv("AUTO_SYNC_ENABLED", "True").lower() in ("true", "
 
 # Time in seconds to wait after last scan before allowing auto-sync
 # This ensures auto-sync only happens during idle periods
-AUTO_SYNC_IDLE_SECONDS = int(os.getenv("AUTO_SYNC_IDLE_SECONDS", "30"))
+AUTO_SYNC_IDLE_SECONDS = _safe_int("AUTO_SYNC_IDLE_SECONDS", 30, min_val=5, max_val=3600)
 
 # Interval in seconds to check if auto-sync should run
 # Auto-sync will check every N seconds if conditions are met
-AUTO_SYNC_CHECK_INTERVAL_SECONDS = int(os.getenv("AUTO_SYNC_CHECK_INTERVAL_SECONDS", "60"))
+AUTO_SYNC_CHECK_INTERVAL_SECONDS = _safe_int("AUTO_SYNC_CHECK_INTERVAL_SECONDS", 60, min_val=10, max_val=3600)
 
 # Minimum number of pending scans required to trigger auto-sync
 # Set to 1 to sync as soon as any scan is pending
-AUTO_SYNC_MIN_PENDING_SCANS = int(os.getenv("AUTO_SYNC_MIN_PENDING_SCANS", "1"))
+AUTO_SYNC_MIN_PENDING_SCANS = _safe_int("AUTO_SYNC_MIN_PENDING_SCANS", 1, min_val=1, max_val=10000)
 
 # Show status message when auto-sync starts
 AUTO_SYNC_SHOW_START_MESSAGE = os.getenv("AUTO_SYNC_SHOW_START_MESSAGE", "True").lower() in ("true", "1", "yes")
@@ -133,10 +162,10 @@ AUTO_SYNC_SHOW_START_MESSAGE = os.getenv("AUTO_SYNC_SHOW_START_MESSAGE", "True")
 AUTO_SYNC_SHOW_COMPLETE_MESSAGE = os.getenv("AUTO_SYNC_SHOW_COMPLETE_MESSAGE", "True").lower() in ("true", "1", "yes")
 
 # Duration in milliseconds to show auto-sync messages
-AUTO_SYNC_MESSAGE_DURATION_MS = int(os.getenv("AUTO_SYNC_MESSAGE_DURATION_MS", "3000"))
+AUTO_SYNC_MESSAGE_DURATION_MS = _safe_int("AUTO_SYNC_MESSAGE_DURATION_MS", 3000, min_val=0, max_val=30000)
 
 # Network connection timeout in seconds for connectivity checks
-AUTO_SYNC_CONNECTION_TIMEOUT = int(os.getenv("AUTO_SYNC_CONNECTION_TIMEOUT", "5"))
+AUTO_SYNC_CONNECTION_TIMEOUT = _safe_int("AUTO_SYNC_CONNECTION_TIMEOUT", 5, min_val=1, max_val=30)
 
 
 # =============================================================================
@@ -145,12 +174,12 @@ AUTO_SYNC_CONNECTION_TIMEOUT = int(os.getenv("AUTO_SYNC_CONNECTION_TIMEOUT", "5"
 
 # Retry failed sync operations with exponential backoff
 SYNC_RETRY_ENABLED = os.getenv("SYNC_RETRY_ENABLED", "True").lower() in ("true", "1", "yes")
-SYNC_RETRY_MAX_ATTEMPTS = int(os.getenv("SYNC_RETRY_MAX_ATTEMPTS", "3"))
-SYNC_RETRY_BACKOFF_SECONDS = int(os.getenv("SYNC_RETRY_BACKOFF_SECONDS", "5"))
+SYNC_RETRY_MAX_ATTEMPTS = _safe_int("SYNC_RETRY_MAX_ATTEMPTS", 3, min_val=1, max_val=10)
+SYNC_RETRY_BACKOFF_SECONDS = _safe_int("SYNC_RETRY_BACKOFF_SECONDS", 5, min_val=1, max_val=60)
 
 # Auto-sync failure handling
-AUTO_SYNC_MAX_CONSECUTIVE_FAILURES = int(os.getenv("AUTO_SYNC_MAX_CONSECUTIVE_FAILURES", "5"))
-AUTO_SYNC_FAILURE_COOLDOWN_SECONDS = int(os.getenv("AUTO_SYNC_FAILURE_COOLDOWN_SECONDS", "300"))
+AUTO_SYNC_MAX_CONSECUTIVE_FAILURES = _safe_int("AUTO_SYNC_MAX_CONSECUTIVE_FAILURES", 5, min_val=1, max_val=100)
+AUTO_SYNC_FAILURE_COOLDOWN_SECONDS = _safe_int("AUTO_SYNC_FAILURE_COOLDOWN_SECONDS", 300, min_val=30, max_val=3600)
 
 
 # =============================================================================
@@ -223,7 +252,7 @@ DUPLICATE_BADGE_DETECTION_ENABLED = os.getenv("DUPLICATE_BADGE_DETECTION_ENABLED
 
 # Time window in seconds to consider scans as duplicates
 # Example: If set to 60, scanning same badge within 60s is considered duplicate
-DUPLICATE_BADGE_TIME_WINDOW_SECONDS = int(os.getenv("DUPLICATE_BADGE_TIME_WINDOW_SECONDS", "60"))
+DUPLICATE_BADGE_TIME_WINDOW_SECONDS = _safe_int("DUPLICATE_BADGE_TIME_WINDOW_SECONDS", 60, min_val=1, max_val=3600)
 
 # Action to take when duplicate badge is detected
 # 'warn': Accept scan + show yellow warning alert (default)
@@ -232,11 +261,11 @@ DUPLICATE_BADGE_TIME_WINDOW_SECONDS = int(os.getenv("DUPLICATE_BADGE_TIME_WINDOW
 DUPLICATE_BADGE_ACTION = os.getenv("DUPLICATE_BADGE_ACTION", "warn").lower()
 
 # Duration in milliseconds to show duplicate badge alert before auto-dismiss
-DUPLICATE_BADGE_ALERT_DURATION_MS = int(os.getenv("DUPLICATE_BADGE_ALERT_DURATION_MS", "3000"))
+DUPLICATE_BADGE_ALERT_DURATION_MS = _safe_int("DUPLICATE_BADGE_ALERT_DURATION_MS", 3000, min_val=500, max_val=30000)
 
 # Duration in milliseconds to show employee name and "THANK YOU" after scan
 # before returning to "Ready to scan..." state
-SCAN_FEEDBACK_DURATION_MS = int(os.getenv("SCAN_FEEDBACK_DURATION_MS", "2000"))
+SCAN_FEEDBACK_DURATION_MS = _safe_int("SCAN_FEEDBACK_DURATION_MS", 2000, min_val=500, max_val=30000)
 
 
 # =============================================================================
@@ -247,4 +276,4 @@ SCAN_FEEDBACK_DURATION_MS = int(os.getenv("SCAN_FEEDBACK_DURATION_MS", "2000"))
 VOICE_ENABLED = os.getenv("VOICE_ENABLED", "True").lower() in ("true", "1", "yes")
 
 # Playback volume (0.0 = muted, 1.0 = full volume)
-VOICE_VOLUME = float(os.getenv("VOICE_VOLUME", "1.0"))
+VOICE_VOLUME = _safe_float("VOICE_VOLUME", 1.0, min_val=0.0, max_val=1.0)

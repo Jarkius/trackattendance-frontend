@@ -162,6 +162,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let connectionCheckTimeoutId = null;
     let dashboardOpen = false;  // Flag to skip connection checks while dashboard is open
     const apiQueue = [];
+
+    const escapeHtml = (str) => {
+        if (typeof str !== 'string') return str;
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    };
+
     let overlayHideTimer = null;
     const overlayIntent = {
         shouldClose: false,
@@ -778,7 +784,23 @@ ${destination}` : message;
 
     const loadInitialData = () => {
         queueOrRun((bridge) => {
+            let initialDataReceived = false;
+            const initialDataTimeout = window.setTimeout(() => {
+                if (initialDataReceived) return;
+                console.warn('[QWebChannel] Initial data timeout after 10s, using defaults');
+                initialDataReceived = true;
+                applyDashboardState();
+                window.setTimeout(() => {
+                    initialDelayCompleted = true;
+                    refreshConnectionStatus();
+                    startConnectionStatusPolling();
+                }, connectionCheckInitialDelayMs);
+                returnFocusToInput();
+            }, 10000);
             bridge.get_initial_data((payload) => {
+                if (initialDataReceived) return;
+                initialDataReceived = true;
+                window.clearTimeout(initialDataTimeout);
                 applyConnectionIntervalFromPayload(payload);
                 applyConnectionInitialDelayFromPayload(payload);
                 debugMode = Boolean(payload?.debugMode);
@@ -1064,14 +1086,14 @@ ${destination}` : message;
             const stations = data?.stations || [];
             if (stations.length === 0) {
                 const errorMsg = data?.error || 'No scan data available';
-                dashboardStationsBody.innerHTML = `<div class="dash__empty">${errorMsg}</div>`;
+                dashboardStationsBody.innerHTML = `<div class="dash__empty">${escapeHtml(errorMsg)}</div>`;
             } else {
                 dashboardStationsBody.innerHTML = stations.map(station => `
                     <div class="dash__card">
-                        <div class="dash__card-name">${station.name || '--'}</div>
+                        <div class="dash__card-name">${escapeHtml(station.name || '--')}</div>
                         <div class="dash__card-row">
                             <div class="dash__card-value">${Number(station.unique || 0).toLocaleString()}</div>
-                            <div class="dash__card-sub">${station.last_scan || '--'}</div>
+                            <div class="dash__card-sub">${escapeHtml(station.last_scan || '--')}</div>
                         </div>
                     </div>
                 `).join('');
@@ -1086,7 +1108,7 @@ ${destination}` : message;
             } else {
                 dashboardBuBody.innerHTML = businessUnits.map(bu => `
                     <div class="dash__card">
-                        <div class="dash__card-name">${bu.bu_name || '--'}</div>
+                        <div class="dash__card-name">${escapeHtml(bu.bu_name || '--')}</div>
                         <div class="dash__card-row">
                             <div class="dash__card-value">${Number(bu.scanned || 0).toLocaleString()} <span class="dash__card-total">/ ${Number(bu.registered || 0).toLocaleString()}</span></div>
                             <div class="dash__card-pct">${(bu.attendance_rate || 0).toFixed(1)}%</div>
@@ -1304,10 +1326,6 @@ ${destination}` : message;
             returnFocusToInput();
         }
     });
-    document.addEventListener('scroll', returnFocusToInput, true);
-    if (scanHistoryList) {
-        scanHistoryList.addEventListener('scroll', returnFocusToInput);
-    }
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
@@ -1339,8 +1357,6 @@ ${destination}` : message;
             }
         }
     });
-    document.addEventListener('mouseup', returnFocusToInput);
-    document.addEventListener('touchend', returnFocusToInput);
     window.addEventListener('online', () => {
         // Only check connection after initial delay has completed
         if (initialDelayCompleted) {

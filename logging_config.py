@@ -102,7 +102,14 @@ def setup_logging():
 
     # Console handler
     if LOGGING_CONSOLE:
-        console_handler = logging.StreamHandler()
+        import sys as _sys
+        stream = _sys.stderr
+        if hasattr(stream, 'reconfigure'):
+            try:
+                stream.reconfigure(encoding='utf-8')
+            except Exception:
+                pass
+        console_handler = logging.StreamHandler(stream)
         console_handler.setLevel(getattr(logging, LOGGING_LEVEL, logging.INFO))
         console_handler.setFormatter(formatter)
         root_logger.addHandler(console_handler)

@@ -135,6 +135,7 @@ class AutoSyncManager(QObject):
         self.last_scan_time: Optional[float] = None
         self.is_syncing = False
         self.enabled = config.AUTO_SYNC_ENABLED
+        self._sync_lock = threading.Lock()
 
         # Create timer for periodic auto-sync checks
         self.timer = QTimer()
@@ -229,6 +230,8 @@ class AutoSyncManager(QObject):
 
     def trigger_auto_sync(self) -> None:
         """Execute auto-sync directly (no threading to avoid SQLite issues)."""
+        if not self._sync_lock.acquire(blocking=False):
+            return
         self.is_syncing = True
 
         # Show start message if enabled
@@ -253,7 +256,9 @@ class AutoSyncManager(QObject):
                     message = f"Auto-sync complete: {synced_count} scan(s) synced"
                     if failed_count > 0:
                         message += f", {failed_count} failed"
-                    self.show_status_message(message, "success")
+                        self.show_status_message(message, "warning")
+                    else:
+                        self.show_status_message(message, "success")
                 elif failed_count > 0:
                     self.show_status_message(f"Auto-sync: {failed_count} scan(s) failed", "error")
 
@@ -268,6 +273,7 @@ class AutoSyncManager(QObject):
                 self.show_status_message(f"Auto-sync failed: {str(e)}", "error")
         finally:
             self.is_syncing = False
+            self._sync_lock.release()
 
     def show_status_message(self, message: str, message_type: str = "info") -> None:
         """
@@ -280,6 +286,7 @@ class AutoSyncManager(QObject):
         color_map = {
             "info": "#00A3E0",  # Bright blue (starting auto-sync)
             "success": "var(--deloitte-green)",  # Green (auto-sync success)
+            "warning": "#FFA500",  # Orange (partial success)
             "error": "red",  # Red (errors)
         }
 

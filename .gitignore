@@ -49,3 +49,6 @@ secrets/
 
 # Tooling
 tools/
+
+# macOS
+.DS_Store
