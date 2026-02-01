@@ -44,6 +44,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 import requests
 
 from attendance import AttendanceService
+from audio import VoicePlayer
 from sync import SyncService
 from dashboard import DashboardService
 import config
@@ -105,6 +106,7 @@ EXPORT_DIRECTORY = EXEC_ROOT / "exports"
 DATABASE_PATH = DATA_DIRECTORY / "database.db"
 EMPLOYEE_WORKBOOK_PATH = DATA_DIRECTORY / "employee.xlsx"
 UI_INDEX_HTML = RESOURCE_ROOT / "web" / "index.html"
+VOICES_DIRECTORY = RESOURCE_ROOT / "assets" / "voices"
 
 DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
@@ -358,6 +360,7 @@ class Api(QObject):
         sync_service: Optional[SyncService] = None,
         auto_sync_manager: Optional[AutoSyncManager] = None,
         dashboard_service: Optional[DashboardService] = None,
+        voice_player: Optional[VoicePlayer] = None,
     ):
         super().__init__()
         self._service = service
@@ -365,6 +368,7 @@ class Api(QObject):
         self._sync_service = sync_service
         self._auto_sync_manager = auto_sync_manager
         self._dashboard_service = dashboard_service
+        self._voice_player = voice_player
         self._window = None
         self._connection_check_inflight = False
         self._last_connection_result: Dict[str, object] = {
@@ -409,6 +413,10 @@ class Api(QObject):
     def submit_scan(self, badge_id: str) -> dict:
         """Persist a badge scan and return the enriched result for UI feedback."""
         result = self._service.register_scan(badge_id)
+
+        # Play voice confirmation on successful match (skip duplicates)
+        if self._voice_player and result.get("matched") and not result.get("is_duplicate"):
+            self._voice_player.play_random()
 
         # Notify auto-sync manager that a scan occurred
         if self._auto_sync_manager:
@@ -704,6 +712,13 @@ def main() -> None:
     )
     LOGGER.info("Dashboard service initialized with Cloud API and export directory")
 
+    # Initialize voice player for scan confirmation audio
+    voice_player = VoicePlayer(
+        voices_dir=VOICES_DIRECTORY,
+        enabled=config.VOICE_ENABLED,
+        volume=config.VOICE_VOLUME,
+    )
+
     roster_missing = not service.employees_loaded()
     example_workbook_path: Optional[Path] = None
     if roster_missing:
@@ -719,6 +734,7 @@ def main() -> None:
             sync_service=sync_service,
             auto_sync_manager=auto_sync_manager_ref[0],
             dashboard_service=dashboard_service,
+            voice_player=voice_player,
         )
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)

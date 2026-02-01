@@ -237,3 +237,14 @@ DUPLICATE_BADGE_ALERT_DURATION_MS = int(os.getenv("DUPLICATE_BADGE_ALERT_DURATIO
 # Duration in milliseconds to show employee name and "THANK YOU" after scan
 # before returning to "Ready to scan..." state
 SCAN_FEEDBACK_DURATION_MS = int(os.getenv("SCAN_FEEDBACK_DURATION_MS", "2000"))
+
+
+# =============================================================================
+# Voice Playback Configuration
+# =============================================================================
+
+# Enable/disable voice confirmation on successful scans
+VOICE_ENABLED = os.getenv("VOICE_ENABLED", "True").lower() in ("true", "1", "yes")
+
+# Playback volume (0.0 = muted, 1.0 = full volume)
+VOICE_VOLUME = float(os.getenv("VOICE_VOLUME", "1.0"))

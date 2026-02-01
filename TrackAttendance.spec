@@ -10,7 +10,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('.env', '.'), ('web', 'web')] + certifi_datas,
+    datas=[('.env', '.'), ('web', 'web'), ('assets/voices', 'assets/voices')] + certifi_datas,
     hiddenimports=['certifi', 'truststore'],
     hookspath=[],
     hooksconfig={},
