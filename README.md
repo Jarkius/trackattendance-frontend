@@ -28,6 +28,7 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Auto-sync to cloud when idle; manual sync button available
 - One-click Excel export; automatic export on shutdown
 - Fully offline — runs without network; syncs when connection returns
+- Admin panel (PIN-protected) to clear cloud + local database before events
 - Welcome animation and configurable party/event background
 
 ## 💻 Requirements
@@ -164,6 +165,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `SHOW_FULL_SCREEN` | `True` | Fullscreen kiosk mode |
 | `SHOW_PARTY_BACKGROUND` | `True` | Festive background image |
 | `VOICE_ENABLED` | `True` | Voice confirmation on scan |
+| `ADMIN_PIN` | *(empty)* | 4-6 digit PIN to enable admin panel (leave empty to disable) |
 
 See `.env.example` for the full list.
 
