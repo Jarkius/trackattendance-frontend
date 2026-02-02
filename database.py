@@ -446,6 +446,7 @@ class DatabaseManager:
         count = int(cursor.fetchone()[0])
         with self._connection:
             self._connection.execute("DELETE FROM scans")
+            self._connection.execute("DELETE FROM sqlite_sequence WHERE name='scans'")
             self._connection.execute("DELETE FROM stations")
         logger.info(f"Cleared {count} local scan records + station name")
         return count
