@@ -40,7 +40,13 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # PowerShell/cmd
+.venv\Scripts\activate          # Windows PowerShell/cmd
+source .venv/bin/activate       # macOS/Linux
+
+# Option A: uv (fast)
+uv pip install -r requirements.txt
+
+# Option B: pip (standard)
 pip install -r requirements.txt
 ```
 

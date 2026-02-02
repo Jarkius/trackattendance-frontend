@@ -16,7 +16,7 @@ TrackAttendance Frontend — offline-first desktop kiosk app for badge/QR attend
 # Setup
 python -m venv .venv
 source .venv/bin/activate          # .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+uv pip install -r requirements.txt # or: pip install -r requirements.txt
 
 # Run
 python main.py
