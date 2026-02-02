@@ -78,6 +78,15 @@ class DatabaseManager:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status ON scans(sync_status);
+                CREATE INDEX IF NOT EXISTS idx_scans_badge_station_time ON scans(badge_id, station_name, scanned_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_scans_sync_status_time ON scans(sync_status, scanned_at);
+                CREATE INDEX IF NOT EXISTS idx_scans_station_name ON scans(station_name);
+                CREATE INDEX IF NOT EXISTS idx_employees_sl_l1_desc ON employees(sl_l1_desc);
+
+                CREATE TABLE IF NOT EXISTS roster_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
                 """
             )
 
@@ -97,6 +106,24 @@ class DatabaseManager:
     def employees_loaded(self) -> bool:
         cursor = self._connection.execute("SELECT COUNT(1) FROM employees")
         return cursor.fetchone()[0] > 0
+
+    def get_roster_hash(self) -> Optional[str]:
+        cursor = self._connection.execute("SELECT value FROM roster_meta WHERE key = 'file_hash'")
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+    def set_roster_hash(self, file_hash: str) -> None:
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO roster_meta(key, value) VALUES('file_hash', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (file_hash,),
+            )
+
+    def clear_employees(self) -> None:
+        """Remove all employees to prepare for reimport."""
+        with self._connection:
+            self._connection.execute("DELETE FROM employees")
 
     def bulk_insert_employees(self, employees: Iterable[EmployeeRecord]) -> int:
         rows = [
@@ -216,7 +243,7 @@ class DatabaseManager:
 
     def count_scans_today(self) -> int:
         cursor = self._connection.execute(
-            "SELECT COUNT(1) FROM scans WHERE DATE(scanned_at) = DATE('now','localtime')"
+            "SELECT COUNT(1) FROM scans WHERE DATE(scanned_at, 'localtime') = DATE('now', 'localtime')"
         )
         return int(cursor.fetchone()[0])
 
@@ -385,6 +412,42 @@ class DatabaseManager:
             "failed": int(row["failed"] or 0),
             "last_sync_time": row["last_sync_time"],
         }
+
+    def get_scans_by_bu(self) -> list[dict]:
+        """Get unique scanned badge count grouped by BU using local data."""
+        cursor = self._connection.execute("""
+            SELECT
+                e.sl_l1_desc AS bu_name,
+                COUNT(DISTINCT e.legacy_id) AS registered,
+                COUNT(DISTINCT s.badge_id) AS scanned
+            FROM employees e
+            LEFT JOIN scans s ON e.legacy_id = s.badge_id
+            GROUP BY e.sl_l1_desc
+            ORDER BY e.sl_l1_desc
+        """)
+        return [
+            {"bu_name": row["bu_name"], "registered": row["registered"], "scanned": row["scanned"]}
+            for row in cursor.fetchall()
+        ]
+
+    def count_unmatched_scanned_badges(self) -> int:
+        """Count distinct badge_ids in scans that don't match any employee."""
+        cursor = self._connection.execute("""
+            SELECT COUNT(DISTINCT s.badge_id) AS cnt
+            FROM scans s
+            LEFT JOIN employees e ON s.badge_id = e.legacy_id
+            WHERE e.legacy_id IS NULL
+        """)
+        return int(cursor.fetchone()["cnt"] or 0)
+
+    def clear_all_scans(self) -> int:
+        """Clear all scan records from local database. Returns count deleted."""
+        cursor = self._connection.execute("SELECT COUNT(*) FROM scans")
+        count = int(cursor.fetchone()[0])
+        with self._connection:
+            self._connection.execute("DELETE FROM scans")
+        logger.info(f"Cleared {count} local scan records")
+        return count
 
     def close(self) -> None:
         self._connection.close()

@@ -269,15 +269,16 @@ class SyncService:
                 else:
                     # Classify error as retryable or permanent
                     if response.status_code == 401:
-                        # 401 Unauthorized - likely temporary (API key update in progress)
-                        # Treat as retryable so scans stay pending and can retry
-                        error_msg = f"API error: {response.status_code} (Unauthorized - retrying)"
-                        last_error = error_msg
-                        if attempt < max_attempts - 1:
-                            wait_time = backoff_seconds * (2 ** attempt)  # Exponential backoff
-                            LOGGER.warning(f"{error_msg}, retrying in {wait_time}s...")
-                            time.sleep(wait_time)
-                        continue
+                        # 401 Unauthorized - permanent auth error, don't retry
+                        error_msg = "API error: 401 (Unauthorized - check API key)"
+                        LOGGER.error(error_msg)
+                        stats = self.db.get_sync_statistics()
+                        return {
+                            "synced": 0,
+                            "failed": 0,
+                            "pending": stats["pending"],
+                            "error": error_msg,
+                        }
                     elif 400 <= response.status_code < 500 and response.status_code != 429:
                         # Other 4xx errors (bad request, etc.) - non-retryable, mark as failed
                         error_msg = f"API error: {response.status_code} (non-retryable)"
@@ -336,12 +337,10 @@ class SyncService:
                     "pending": stats["pending"],
                 }
 
-        # All retries exhausted with no success
+        # All retries exhausted with no success - keep as pending for future retry
         if last_error:
             error_msg = f"Network error (after {max_attempts} attempts): {last_error}"
-            scan_ids = [scan.id for scan in pending_scans]
-            self.db.mark_scans_as_failed(scan_ids, error_msg)
-            LOGGER.error(error_msg)
+            LOGGER.warning("%s — scans kept as pending for future retry", error_msg)
 
         stats = self.db.get_sync_statistics()
         return {
@@ -364,6 +363,61 @@ class SyncService:
         # Sanitize station name (remove spaces and special chars)
         safe_station = station.replace(" ", "").replace("-", "")
         return f"{safe_station}-{scan.badge_id}-{scan.id}"
+
+
+    def get_cloud_scan_count(self) -> Tuple[bool, int, str]:
+        """Get count of scans in cloud database.
+
+        Returns:
+            (success, count, message)
+        """
+        try:
+            response = requests.get(
+                f"{self.api_url}/v1/admin/scan-count",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return True, data.get("count", 0), "OK"
+            else:
+                return False, 0, f"API error: {response.status_code}"
+        except requests.exceptions.ConnectionError:
+            return False, 0, "Cannot connect to API"
+        except requests.exceptions.Timeout:
+            return False, 0, "Connection timeout"
+        except Exception as e:
+            return False, 0, f"Error: {str(e)}"
+
+    def clear_cloud_scans(self) -> Dict[str, object]:
+        """Clear all scans from cloud database.
+
+        Returns:
+            Dictionary with: ok, deleted, message
+        """
+        try:
+            response = requests.delete(
+                f"{self.api_url}/v1/admin/clear-scans",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "X-Confirm-Delete": "DELETE ALL SCANS",
+                },
+                timeout=30,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                LOGGER.info(f"Cloud scans cleared: {data.get('deleted', 0)} records")
+                return {"ok": True, "deleted": data.get("deleted", 0), "message": data.get("message", "Scans cleared")}
+            elif response.status_code == 401:
+                return {"ok": False, "deleted": 0, "message": "Authentication failed"}
+            else:
+                return {"ok": False, "deleted": 0, "message": f"API error: {response.status_code}"}
+        except requests.exceptions.ConnectionError:
+            return {"ok": False, "deleted": 0, "message": "Cannot connect to API"}
+        except requests.exceptions.Timeout:
+            return {"ok": False, "deleted": 0, "message": "Connection timeout"}
+        except Exception as e:
+            return {"ok": False, "deleted": 0, "message": f"Error: {str(e)}"}
 
 
 __all__ = ["SyncService"]

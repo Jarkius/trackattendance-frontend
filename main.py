@@ -44,6 +44,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 import requests
 
 from attendance import AttendanceService
+from audio import VoicePlayer
 from sync import SyncService
 from dashboard import DashboardService
 import config
@@ -105,6 +106,7 @@ EXPORT_DIRECTORY = EXEC_ROOT / "exports"
 DATABASE_PATH = DATA_DIRECTORY / "database.db"
 EMPLOYEE_WORKBOOK_PATH = DATA_DIRECTORY / "employee.xlsx"
 UI_INDEX_HTML = RESOURCE_ROOT / "web" / "index.html"
+VOICES_DIRECTORY = RESOURCE_ROOT / "assets" / "voices"
 
 DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
@@ -133,6 +135,7 @@ class AutoSyncManager(QObject):
         self.last_scan_time: Optional[float] = None
         self.is_syncing = False
         self.enabled = config.AUTO_SYNC_ENABLED
+        self._sync_lock = threading.Lock()
 
         # Create timer for periodic auto-sync checks
         self.timer = QTimer()
@@ -227,6 +230,8 @@ class AutoSyncManager(QObject):
 
     def trigger_auto_sync(self) -> None:
         """Execute auto-sync directly (no threading to avoid SQLite issues)."""
+        if not self._sync_lock.acquire(blocking=False):
+            return
         self.is_syncing = True
 
         # Show start message if enabled
@@ -251,7 +256,9 @@ class AutoSyncManager(QObject):
                     message = f"Auto-sync complete: {synced_count} scan(s) synced"
                     if failed_count > 0:
                         message += f", {failed_count} failed"
-                    self.show_status_message(message, "success")
+                        self.show_status_message(message, "warning")
+                    else:
+                        self.show_status_message(message, "success")
                 elif failed_count > 0:
                     self.show_status_message(f"Auto-sync: {failed_count} scan(s) failed", "error")
 
@@ -266,6 +273,7 @@ class AutoSyncManager(QObject):
                 self.show_status_message(f"Auto-sync failed: {str(e)}", "error")
         finally:
             self.is_syncing = False
+            self._sync_lock.release()
 
     def show_status_message(self, message: str, message_type: str = "info") -> None:
         """
@@ -278,6 +286,7 @@ class AutoSyncManager(QObject):
         color_map = {
             "info": "#00A3E0",  # Bright blue (starting auto-sync)
             "success": "var(--deloitte-green)",  # Green (auto-sync success)
+            "warning": "#FFA500",  # Orange (partial success)
             "error": "red",  # Red (errors)
         }
 
@@ -358,6 +367,7 @@ class Api(QObject):
         sync_service: Optional[SyncService] = None,
         auto_sync_manager: Optional[AutoSyncManager] = None,
         dashboard_service: Optional[DashboardService] = None,
+        voice_player: Optional[VoicePlayer] = None,
     ):
         super().__init__()
         self._service = service
@@ -365,6 +375,7 @@ class Api(QObject):
         self._sync_service = sync_service
         self._auto_sync_manager = auto_sync_manager
         self._dashboard_service = dashboard_service
+        self._voice_player = voice_player
         self._window = None
         self._connection_check_inflight = False
         self._last_connection_result: Dict[str, object] = {
@@ -409,6 +420,10 @@ class Api(QObject):
     def submit_scan(self, badge_id: str) -> dict:
         """Persist a badge scan and return the enriched result for UI feedback."""
         result = self._service.register_scan(badge_id)
+
+        # Play voice confirmation on successful match (skip duplicates)
+        if self._voice_player and result.get("matched") and not result.get("is_duplicate"):
+            self._voice_player.play_random()
 
         # Notify auto-sync manager that a scan occurred
         if self._auto_sync_manager:
@@ -564,6 +579,63 @@ class Api(QObject):
             }
         return self._dashboard_service.export_to_excel()
 
+    @pyqtSlot(result="QVariant")
+    def is_admin_enabled(self) -> dict:
+        """Check if admin features are available."""
+        return {"enabled": config.ADMIN_FEATURES_ENABLED}
+
+    @pyqtSlot(str, result="QVariant")
+    def verify_admin_pin(self, pin: str) -> dict:
+        """Verify admin PIN."""
+        if not config.ADMIN_FEATURES_ENABLED:
+            return {"ok": False, "message": "Admin features disabled"}
+        if pin == config.ADMIN_PIN:
+            return {"ok": True}
+        return {"ok": False, "message": "Incorrect PIN"}
+
+    @pyqtSlot(result="QVariant")
+    def admin_get_cloud_scan_count(self) -> dict:
+        """Get count of scans in cloud database (for confirmation dialog)."""
+        if not self._sync_service:
+            return {"ok": False, "count": 0, "message": "Sync service not configured"}
+        ok, count, message = self._sync_service.get_cloud_scan_count()
+        return {"ok": ok, "count": count, "message": message}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_clear_cloud_data(self, pin: str) -> dict:
+        """Clear cloud + local scan data after PIN verification."""
+        if not config.ADMIN_FEATURES_ENABLED:
+            return {"ok": False, "message": "Admin features disabled", "cloud_deleted": 0, "local_deleted": 0}
+        if pin != config.ADMIN_PIN:
+            return {"ok": False, "message": "Incorrect PIN", "cloud_deleted": 0, "local_deleted": 0}
+
+        results = {"ok": True, "cloud_deleted": 0, "local_deleted": 0, "message": ""}
+
+        # Clear cloud data
+        if self._sync_service:
+            cloud_result = self._sync_service.clear_cloud_scans()
+            if not cloud_result["ok"]:
+                return {
+                    "ok": False,
+                    "message": f"Cloud clear failed: {cloud_result['message']}",
+                    "cloud_deleted": 0,
+                    "local_deleted": 0,
+                }
+            results["cloud_deleted"] = cloud_result.get("deleted", 0)
+
+        # Clear local scans
+        try:
+            local_count = self._service._db.clear_all_scans()
+            results["local_deleted"] = local_count
+        except Exception as e:
+            results["message"] = f"Cloud cleared but local clear failed: {e}"
+            results["ok"] = False
+            return results
+
+        results["message"] = f"Cleared {results['cloud_deleted']} cloud + {results['local_deleted']} local records"
+        LOGGER.info(f"Admin clear: cloud={results['cloud_deleted']}, local={results['local_deleted']}")
+        return results
+
     @pyqtSlot(str)
     def open_export_folder(self, file_path: str) -> None:
         """Open Windows Explorer with the exported file selected."""
@@ -704,6 +776,13 @@ def main() -> None:
     )
     LOGGER.info("Dashboard service initialized with Cloud API and export directory")
 
+    # Initialize voice player for scan confirmation audio
+    voice_player = VoicePlayer(
+        voices_dir=VOICES_DIRECTORY,
+        enabled=config.VOICE_ENABLED,
+        volume=config.VOICE_VOLUME,
+    )
+
     roster_missing = not service.employees_loaded()
     example_workbook_path: Optional[Path] = None
     if roster_missing:
@@ -719,6 +798,7 @@ def main() -> None:
             sync_service=sync_service,
             auto_sync_manager=auto_sync_manager_ref[0],
             dashboard_service=dashboard_service,
+            voice_player=voice_player,
         )
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)

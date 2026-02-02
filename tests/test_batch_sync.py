@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
 """Test batch sync functionality."""
 
+import os
 import sys
 import json
 from pathlib import Path
+
+# Resolve project root (parent of tests/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+
+from config import CLOUD_API_URL, CLOUD_API_KEY
 from database import DatabaseManager
 from sync import SyncService
 
 def main():
     # Initialize database
-    db_path = Path("data/database.db")
+    db_path = PROJECT_ROOT / "data" / "database.db"
     db = DatabaseManager(db_path)
-
-    # Initialize sync service (same config as main.py)
-    CLOUD_API_URL = "http://localhost:5000"
-    CLOUD_API_KEY = "6541f2c7892b4e5287d50c2414d179f8"
 
     sync_service = SyncService(
         db=db,

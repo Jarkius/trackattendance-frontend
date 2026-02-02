@@ -101,6 +101,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // Debug mode flag - disable auto-focus when debugging
     let debugMode = false;
 
+    // Debounce utility
+    const debounce = (fn, delayMs) => {
+        let timeoutId = null;
+        return (...args) => {
+            if (timeoutId !== null) window.clearTimeout(timeoutId);
+            timeoutId = window.setTimeout(() => { timeoutId = null; fn(...args); }, delayMs);
+        };
+    };
+
+    // Dashboard data cache (10 second TTL)
+    let dashboardDataCache = null;
+    let dashboardDataCacheTime = 0;
+    const DASHBOARD_CACHE_TTL_MS = 10000;
+
     // Duplicate badge alert configuration
     let duplicateBadgeAlertDurationMs = 3000;  // Default: 3 seconds
     let scanFeedbackDurationMs = 2000;  // Default: 2 seconds
@@ -162,6 +176,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let connectionCheckTimeoutId = null;
     let dashboardOpen = false;  // Flag to skip connection checks while dashboard is open
     const apiQueue = [];
+
+    const escapeHtml = (str) => {
+        if (typeof str !== 'string') return str;
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    };
+
     let overlayHideTimer = null;
     const overlayIntent = {
         shouldClose: false,
@@ -778,7 +798,23 @@ ${destination}` : message;
 
     const loadInitialData = () => {
         queueOrRun((bridge) => {
+            let initialDataReceived = false;
+            const initialDataTimeout = window.setTimeout(() => {
+                if (initialDataReceived) return;
+                console.warn('[QWebChannel] Initial data timeout after 10s, using defaults');
+                initialDataReceived = true;
+                applyDashboardState();
+                window.setTimeout(() => {
+                    initialDelayCompleted = true;
+                    refreshConnectionStatus();
+                    startConnectionStatusPolling();
+                }, connectionCheckInitialDelayMs);
+                returnFocusToInput();
+            }, 10000);
             bridge.get_initial_data((payload) => {
+                if (initialDataReceived) return;
+                initialDataReceived = true;
+                window.clearTimeout(initialDataTimeout);
                 applyConnectionIntervalFromPayload(payload);
                 applyConnectionInitialDelayFromPayload(payload);
                 debugMode = Boolean(payload?.debugMode);
@@ -908,7 +944,7 @@ ${destination}` : message;
         });
     };
 
-    const updateSyncStatus = () => {
+    const _updateSyncStatusImmediate = () => {
         queueOrRun((bridge) => {
             if (!bridge.get_sync_status) {
                 return;
@@ -926,6 +962,7 @@ ${destination}` : message;
             });
         });
     };
+    const updateSyncStatus = debounce(_updateSyncStatusImmediate, 200);
 
     // Dashboard overlay functions (Issue #27)
     const showDashboardOverlay = () => {
@@ -976,7 +1013,8 @@ ${destination}` : message;
             dashboardUpdated.innerHTML = '<i class="material-icons sync-spinning" style="font-size: 14px; vertical-align: middle;">sync</i> Loading...';
         }
 
-        // Fetch data from Python bridge
+        // Check admin availability and fetch data
+        checkAdminEnabled();
         fetchDashboardData();
     };
 
@@ -1017,10 +1055,16 @@ ${destination}` : message;
         returnFocusToInput();
     };
 
-    const fetchDashboardData = () => {
-        console.debug('[Dashboard] Fetch data started');
+    const fetchDashboardData = (forceRefresh = false) => {
+        const now = Date.now();
+        if (!forceRefresh && dashboardDataCache && (now - dashboardDataCacheTime) < DASHBOARD_CACHE_TTL_MS) {
+            console.debug('[Dashboard] Using cached data (age: ' + (now - dashboardDataCacheTime) + 'ms)');
+            updateDashboardUI(dashboardDataCache);
+            return;
+        }
+
+        console.debug('[Dashboard] Fetch data started (cache miss or forced)');
         queueOrRun((bridge) => {
-            console.debug('[Dashboard] Bridge callback executing');
             if (!bridge.get_dashboard_data) {
                 console.warn('[Dashboard] get_dashboard_data not available');
                 updateDashboardUI({
@@ -1033,9 +1077,10 @@ ${destination}` : message;
                 });
                 return;
             }
-            console.debug('[Dashboard] Calling bridge.get_dashboard_data');
             bridge.get_dashboard_data((data) => {
-                console.debug('[Dashboard] Data received from bridge:', data);
+                dashboardDataCache = data;
+                dashboardDataCacheTime = Date.now();
+                console.debug('[Dashboard] Data received and cached');
                 updateDashboardUI(data);
             });
         });
@@ -1064,14 +1109,14 @@ ${destination}` : message;
             const stations = data?.stations || [];
             if (stations.length === 0) {
                 const errorMsg = data?.error || 'No scan data available';
-                dashboardStationsBody.innerHTML = `<div class="dash__empty">${errorMsg}</div>`;
+                dashboardStationsBody.innerHTML = `<div class="dash__empty">${escapeHtml(errorMsg)}</div>`;
             } else {
                 dashboardStationsBody.innerHTML = stations.map(station => `
                     <div class="dash__card">
-                        <div class="dash__card-name">${station.name || '--'}</div>
+                        <div class="dash__card-name">${escapeHtml(station.name || '--')}</div>
                         <div class="dash__card-row">
                             <div class="dash__card-value">${Number(station.unique || 0).toLocaleString()}</div>
-                            <div class="dash__card-sub">${station.last_scan || '--'}</div>
+                            <div class="dash__card-sub">${escapeHtml(station.last_scan || '--')}</div>
                         </div>
                     </div>
                 `).join('');
@@ -1086,7 +1131,7 @@ ${destination}` : message;
             } else {
                 dashboardBuBody.innerHTML = businessUnits.map(bu => `
                     <div class="dash__card">
-                        <div class="dash__card-name">${bu.bu_name || '--'}</div>
+                        <div class="dash__card-name">${escapeHtml(bu.bu_name || '--')}</div>
                         <div class="dash__card-row">
                             <div class="dash__card-value">${Number(bu.scanned || 0).toLocaleString()} <span class="dash__card-total">/ ${Number(bu.registered || 0).toLocaleString()}</span></div>
                             <div class="dash__card-pct">${(bu.attendance_rate || 0).toFixed(1)}%</div>
@@ -1279,7 +1324,7 @@ ${destination}` : message;
             if (dashboardUpdated) {
                 dashboardUpdated.innerHTML = '<i class="material-icons sync-spinning" style="font-size: 14px; vertical-align: middle;">sync</i> Loading...';
             }
-            fetchDashboardData();
+            fetchDashboardData(true);  // Force refresh, bypass cache
         });
     }
 
@@ -1299,15 +1344,120 @@ ${destination}` : message;
         });
     }
 
+    // ---- Admin Panel Logic ----
+    const adminBtn = document.getElementById('dashboard-admin');
+    const adminOverlay = document.getElementById('admin-overlay');
+    const adminPinInput = document.getElementById('admin-pin-input');
+    const adminPinError = document.getElementById('admin-pin-error');
+    const adminCloudCount = document.getElementById('admin-cloud-count');
+    const adminConfirmMessage = document.getElementById('admin-confirm-message');
+    const adminResultTitle = document.getElementById('admin-result-title');
+    const adminResultMessage = document.getElementById('admin-result-message');
+
+    let adminVerifiedPin = '';
+
+    const checkAdminEnabled = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.is_admin_enabled) return;
+            bridge.is_admin_enabled((result) => {
+                if (adminBtn) adminBtn.style.display = result?.enabled ? '' : 'none';
+            });
+        });
+    };
+
+    const showAdminView = (viewId) => {
+        ['admin-pin-view', 'admin-actions-view', 'admin-confirm-view', 'admin-result-view'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = id === viewId ? '' : 'none';
+        });
+    };
+
+    const showAdminOverlay = () => {
+        if (!adminOverlay) return;
+        adminVerifiedPin = '';
+        showAdminView('admin-pin-view');
+        if (adminPinInput) { adminPinInput.value = ''; }
+        if (adminPinError) { adminPinError.textContent = ''; }
+        adminOverlay.classList.add('admin-overlay--visible');
+        adminOverlay.setAttribute('aria-hidden', 'false');
+        setTimeout(() => { if (adminPinInput) adminPinInput.focus(); }, 100);
+    };
+
+    const hideAdminOverlay = () => {
+        if (!adminOverlay) return;
+        adminOverlay.classList.remove('admin-overlay--visible');
+        adminOverlay.setAttribute('aria-hidden', 'true');
+        adminVerifiedPin = '';
+    };
+
+    const handlePinSubmit = () => {
+        const pin = adminPinInput ? adminPinInput.value.trim() : '';
+        if (!pin) { if (adminPinError) adminPinError.textContent = 'Please enter a PIN'; return; }
+        queueOrRun((bridge) => {
+            bridge.verify_admin_pin(pin, (result) => {
+                if (result?.ok) {
+                    adminVerifiedPin = pin;
+                    showAdminView('admin-actions-view');
+                    if (adminCloudCount) adminCloudCount.textContent = 'Checking scan count...';
+                    bridge.admin_get_cloud_scan_count((countResult) => {
+                        if (adminCloudCount) {
+                            adminCloudCount.textContent = countResult?.ok
+                                ? `Cloud database has ${Number(countResult.count).toLocaleString()} scan(s)`
+                                : (countResult?.message || 'Could not check count');
+                        }
+                    });
+                } else {
+                    if (adminPinError) adminPinError.textContent = result?.message || 'Incorrect PIN';
+                    if (adminPinInput) { adminPinInput.value = ''; adminPinInput.focus(); }
+                }
+            });
+        });
+    };
+
+    const handleConfirmDelete = () => {
+        if (!adminVerifiedPin) { hideAdminOverlay(); return; }
+        const btn = document.getElementById('admin-confirm-delete');
+        if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+        queueOrRun((bridge) => {
+            bridge.admin_clear_cloud_data(adminVerifiedPin, (result) => {
+                if (btn) { btn.disabled = false; btn.textContent = 'Delete Everything'; }
+                showAdminView('admin-result-view');
+                if (result?.ok) {
+                    if (adminResultTitle) { adminResultTitle.textContent = 'Cleared Successfully'; adminResultTitle.style.color = '#86bc25'; }
+                    if (adminResultMessage) adminResultMessage.textContent = result.message;
+                    dashboardDataCache = null;
+                    updateSyncStatus();
+                } else {
+                    if (adminResultTitle) { adminResultTitle.textContent = 'Error'; adminResultTitle.style.color = '#c62828'; }
+                    if (adminResultMessage) adminResultMessage.textContent = result?.message || 'Failed to clear data';
+                }
+            });
+        });
+    };
+
+    if (adminBtn) adminBtn.addEventListener('click', (e) => { e.preventDefault(); showAdminOverlay(); });
+    const adminPinSubmitBtn = document.getElementById('admin-pin-submit');
+    if (adminPinSubmitBtn) adminPinSubmitBtn.addEventListener('click', (e) => { e.preventDefault(); handlePinSubmit(); });
+    if (adminPinInput) adminPinInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') handlePinSubmit(); });
+    const adminCancelBtn = document.getElementById('admin-cancel');
+    if (adminCancelBtn) adminCancelBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
+    const adminCloseBtn = document.getElementById('admin-close');
+    if (adminCloseBtn) adminCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
+    const adminClearCloudBtn = document.getElementById('admin-clear-cloud');
+    if (adminClearCloudBtn) adminClearCloudBtn.addEventListener('click', (e) => { e.preventDefault(); showAdminView('admin-confirm-view'); });
+    const adminConfirmCancelBtn = document.getElementById('admin-confirm-cancel');
+    if (adminConfirmCancelBtn) adminConfirmCancelBtn.addEventListener('click', (e) => { e.preventDefault(); showAdminView('admin-actions-view'); });
+    const adminConfirmDeleteBtn = document.getElementById('admin-confirm-delete');
+    if (adminConfirmDeleteBtn) adminConfirmDeleteBtn.addEventListener('click', (e) => { e.preventDefault(); handleConfirmDelete(); });
+    const adminResultCloseBtn = document.getElementById('admin-result-close');
+    if (adminResultCloseBtn) adminResultCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
+    if (adminOverlay) adminOverlay.addEventListener('click', (e) => { if (e.target === adminOverlay) hideAdminOverlay(); });
+
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
             returnFocusToInput();
         }
     });
-    document.addEventListener('scroll', returnFocusToInput, true);
-    if (scanHistoryList) {
-        scanHistoryList.addEventListener('scroll', returnFocusToInput);
-    }
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
@@ -1323,29 +1473,22 @@ ${destination}` : message;
             returnFocusToInput();
         }
     });
+    const debouncedRefreshConnection = debounce(() => {
+        if (initialDelayCompleted) refreshConnectionStatus();
+    }, 5000);
+
     window.addEventListener('focus', () => {
         returnFocusToInput();
-        // Only check connection after initial delay has completed
-        if (initialDelayCompleted) {
-            refreshConnectionStatus();
-        }
+        debouncedRefreshConnection();
     });
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             returnFocusToInput();
-            // Only check connection after initial delay has completed
-            if (initialDelayCompleted) {
-                refreshConnectionStatus();
-            }
+            debouncedRefreshConnection();
         }
     });
-    document.addEventListener('mouseup', returnFocusToInput);
-    document.addEventListener('touchend', returnFocusToInput);
     window.addEventListener('online', () => {
-        // Only check connection after initial delay has completed
-        if (initialDelayCompleted) {
-            refreshConnectionStatus();
-        }
+        debouncedRefreshConnection();
     });
     window.addEventListener('offline', () => setConnectionStatus('offline', 'No network connection'));
 

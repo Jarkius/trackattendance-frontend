@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 """Test different connection scenarios for sync functionality."""
 
+import os
 import sys
 import time
 import requests
 from pathlib import Path
+
+# Resolve project root (parent of tests/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+
+from config import CLOUD_API_KEY
 from database import DatabaseManager
 from sync import SyncService
 
@@ -14,7 +22,7 @@ def test_connection_scenarios():
     print("=== Connection Scenario Testing ===\n")
 
     # Initialize database
-    db_path = Path("data/database.db")
+    db_path = PROJECT_ROOT / "data" / "database.db"
     db = DatabaseManager(db_path)
 
     # Test scenarios
@@ -22,13 +30,13 @@ def test_connection_scenarios():
         {
             "name": "Valid Connection (API running)",
             "api_url": "http://localhost:5000",
-            "api_key": "6541f2c7892b4e5287d50c2414d179f8",
+            "api_key": CLOUD_API_KEY,
             "expected_success": True
         },
         {
             "name": "Invalid API URL (wrong port)",
             "api_url": "http://localhost:9999",
-            "api_key": "6541f2c7892b4e5287d50c2414d179f8",
+            "api_key": CLOUD_API_KEY,
             "expected_success": False
         },
         {
@@ -40,7 +48,7 @@ def test_connection_scenarios():
         {
             "name": "Non-existent API URL",
             "api_url": "http://nonexistent.api.example.com",
-            "api_key": "6541f2c7892b4e5287d50c2414d179f8",
+            "api_key": CLOUD_API_KEY,
             "expected_success": False
         }
     ]
@@ -81,7 +89,7 @@ def test_connection_scenarios():
     sync_service_fast = SyncService(
         db=db,
         api_url="http://localhost:5000",
-        api_key="6541f2c7892b4e5287d50c2414d179f8",
+        api_key=CLOUD_API_KEY,
         batch_size=1
     )
 
@@ -104,7 +112,7 @@ def test_connection_scenarios():
     sync_service = SyncService(
         db=db,
         api_url="http://localhost:5000",
-        api_key="6541f2c7892b4e5287d50c2414d179f8",
+        api_key=CLOUD_API_KEY,
         batch_size=1
     )
 

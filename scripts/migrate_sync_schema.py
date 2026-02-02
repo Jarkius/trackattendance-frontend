@@ -2,11 +2,16 @@
 """Database migration script to add sync tracking columns to existing scans table."""
 
 import sqlite3
+import os
 from pathlib import Path
+
+# Resolve project root (parent of scripts/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+os.chdir(PROJECT_ROOT)
 
 def migrate_database():
     """Add sync tracking columns to scans table if they don't exist."""
-    db_path = Path("data/database.db")
+    db_path = PROJECT_ROOT / "data" / "database.db"
 
     if not db_path.exists():
         print("Database not found at data/database.db")

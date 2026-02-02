@@ -50,6 +50,16 @@ class DashboardService:
         self._api_key = api_key
         self._export_directory = export_directory or Path.cwd() / "exports"
         self._timeout = 15  # seconds
+        self._employee_cache = None
+        self._employee_cache_loaded = False
+
+    def _get_employee_cache(self):
+        """Get employee cache, loading once per session."""
+        if not self._employee_cache_loaded:
+            self._employee_cache = self._db_manager.load_employee_cache()
+            self._employee_cache_loaded = True
+            logger.debug(f"Dashboard: Loaded {len(self._employee_cache)} employees (cached)")
+        return self._employee_cache
 
     def _get_headers(self) -> Dict[str, str]:
         """Get HTTP headers for API requests."""
@@ -142,69 +152,34 @@ class DashboardService:
                 (result["scanned"] / result["registered"]) * 100, 1
             )
 
-        # Get BU breakdown
+        # Get BU breakdown from LOCAL SQLite (no API call needed)
         try:
-            # Get registered employees by BU from local DB
-            bu_registered = {bu["bu_name"]: bu["count"] for bu in self._db_manager.get_employees_by_bu()}
+            bu_data = self._db_manager.get_scans_by_bu()
+            bu_list = []
+            for bu in bu_data:
+                registered = bu["registered"]
+                scanned = bu["scanned"]
+                rate = round((scanned / registered) * 100, 1) if registered > 0 else 0.0
+                bu_list.append({
+                    "bu_name": bu["bu_name"],
+                    "registered": registered,
+                    "scanned": scanned,
+                    "attendance_rate": rate,
+                })
 
-            # Get all scanned badge IDs from Cloud API
-            response = requests.get(
-                f"{self._api_url}/v1/dashboard/export",
-                headers=self._get_headers(),
-                timeout=self._timeout,
-            )
+            unmatched_count = self._db_manager.count_unmatched_scanned_badges()
+            if unmatched_count > 0:
+                bu_list.append({
+                    "bu_name": "(Unmatched)",
+                    "registered": 0,
+                    "scanned": unmatched_count,
+                    "attendance_rate": 0.0,
+                })
 
-            if response.status_code == 200:
-                data = response.json()
-                scans = data.get("scans", [])
-
-                # Build lookup of badge_id to BU from local employee cache
-                employee_cache = self._db_manager.load_employee_cache()
-                badge_to_bu = {emp.legacy_id: emp.sl_l1_desc for emp in employee_cache.values()}
-
-                # Count unique scanned badges per BU
-                bu_scanned: Dict[str, set] = {}
-                unmatched_badges: set = set()
-                for scan in scans:
-                    # Handle both dict and list formats from API
-                    badge_id = scan.get("badge_id") if isinstance(scan, dict) else scan[0]
-                    bu_name = badge_to_bu.get(badge_id)
-                    if bu_name:
-                        if bu_name not in bu_scanned:
-                            bu_scanned[bu_name] = set()
-                        bu_scanned[bu_name].add(badge_id)
-                    else:
-                        # Track unmatched badges separately
-                        unmatched_badges.add(badge_id)
-
-                # Build BU breakdown list
-                bu_list = [
-                    {
-                        "bu_name": bu_name,
-                        "registered": bu_registered.get(bu_name, 0),
-                        "scanned": len(bu_scanned.get(bu_name, set())),
-                        "attendance_rate": round(
-                            (len(bu_scanned.get(bu_name, set())) / bu_registered.get(bu_name, 1)) * 100, 1
-                        ) if bu_registered.get(bu_name, 0) > 0 else 0.0,
-                    }
-                    for bu_name in sorted(bu_registered.keys())
-                ]
-
-                # Add unmatched category if there are unmatched badges
-                if unmatched_badges:
-                    bu_list.append({
-                        "bu_name": "(Unmatched)",
-                        "registered": 0,
-                        "scanned": len(unmatched_badges),
-                        "attendance_rate": 0.0,
-                    })
-
-                result["business_units"] = bu_list
-
-                logger.info(f"Dashboard: BU breakdown calculated for {len(result['business_units'])} BUs")
+            result["business_units"] = bu_list
+            logger.info(f"Dashboard: BU breakdown from local DB for {len(bu_list)} BUs")
         except Exception as e:
             logger.error(f"Dashboard: Failed to calculate BU breakdown: {e}")
-            # Don't fail the whole dashboard if BU breakdown fails
             result["business_units"] = []
 
         return result
@@ -220,10 +195,12 @@ class DashboardService:
         except Exception:
             return "--"
 
-    def export_to_excel(self) -> Dict[str, Any]:
+    def export_to_excel(self, dashboard_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Export dashboard data to Excel file.
 
-        Automatically generates filename and saves to export directory.
+        Args:
+            dashboard_data: Pre-fetched dashboard data to avoid redundant API calls.
+                            If None, will fetch fresh data.
 
         Returns:
             Dictionary with:
@@ -284,7 +261,7 @@ class DashboardService:
             from openpyxl.styles import Font, PatternFill, Alignment
 
             # Load employee cache for enriching scan data with employee details
-            employee_cache = self._db_manager.load_employee_cache()
+            employee_cache = self._get_employee_cache()
             logger.debug(f"Dashboard export: Loaded {len(employee_cache)} employees for enrichment")
 
             # Enrich scans with employee details from local database
@@ -351,13 +328,14 @@ class DashboardService:
                     try:
                         if len(str(cell.value)) > max_length:
                             max_length = len(str(cell.value))
-                    except:
+                    except Exception:
                         pass
                 ws.column_dimensions[column].width = max_length + 2
 
             # Add summary sheet
             ws_summary = wb.create_sheet("Summary")
-            dashboard_data = self.get_dashboard_data()
+            if dashboard_data is None:
+                dashboard_data = self.get_dashboard_data()
 
             ws_summary["A1"] = "Metric"
             ws_summary["B1"] = "Value"

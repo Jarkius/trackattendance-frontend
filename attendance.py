@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import sys
@@ -89,12 +90,21 @@ class AttendanceService:
             return False, f"Error reading roster file: {str(e)}"
 
     def _bootstrap_employee_directory(self) -> None:
-        if self._db.employees_loaded():
-            return
         if not self._employee_workbook_path.exists():
             LOGGER.warning("Employee workbook not found at %s", self._employee_workbook_path)
             self.ensure_example_employee_workbook()
             return
+
+        # Check if roster file has changed since last import
+        current_hash = self._hash_file(self._employee_workbook_path)
+        stored_hash = self._db.get_roster_hash()
+
+        if stored_hash == current_hash and self._db.employees_loaded():
+            LOGGER.info("Roster unchanged (hash match), skipping reimport")
+            return
+
+        if stored_hash and stored_hash != current_hash:
+            LOGGER.info("Roster file changed (hash mismatch), reimporting employees")
 
         # Validate roster headers before import
         from config import ROSTER_VALIDATION_ENABLED, ROSTER_STRICT_VALIDATION
@@ -148,10 +158,22 @@ class AttendanceService:
                 )
                 seen_ids.add(legacy_id)
             if employees:
+                # Clear old employees and reimport
+                self._db.clear_employees()
                 inserted = self._db.bulk_insert_employees(employees)
-                LOGGER.info("Imported %s employees from workbook", inserted)
+                self._db.set_roster_hash(current_hash)
+                LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
         finally:
             workbook.close()
+
+    @staticmethod
+    def _hash_file(path: Path) -> str:
+        """Compute SHA256 hash of a file."""
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(8192), b""):
+                h.update(chunk)
+        return h.hexdigest()
 
     def ensure_example_employee_workbook(self) -> Path:
         """Ensure a sample employee roster workbook exists for onboarding."""
@@ -201,6 +223,12 @@ class AttendanceService:
             sanitized = name.strip()
             if not sanitized:
                 QMessageBox.warning(parent, "Invalid Name", "Please provide a non-empty station name.")
+                continue
+            if len(sanitized) > 50:
+                QMessageBox.warning(parent, "Invalid Name", "Station name must be 50 characters or fewer.")
+                continue
+            if not re.match(r'^[A-Za-z0-9 _-]+$', sanitized):
+                QMessageBox.warning(parent, "Invalid Name", "Station name can only contain letters, numbers, spaces, hyphens, and underscores.")
                 continue
             self._db.set_station_name(sanitized)
             self._station_name = sanitized
