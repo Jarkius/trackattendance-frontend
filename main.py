@@ -579,6 +579,63 @@ class Api(QObject):
             }
         return self._dashboard_service.export_to_excel()
 
+    @pyqtSlot(result="QVariant")
+    def is_admin_enabled(self) -> dict:
+        """Check if admin features are available."""
+        return {"enabled": config.ADMIN_FEATURES_ENABLED}
+
+    @pyqtSlot(str, result="QVariant")
+    def verify_admin_pin(self, pin: str) -> dict:
+        """Verify admin PIN."""
+        if not config.ADMIN_FEATURES_ENABLED:
+            return {"ok": False, "message": "Admin features disabled"}
+        if pin == config.ADMIN_PIN:
+            return {"ok": True}
+        return {"ok": False, "message": "Incorrect PIN"}
+
+    @pyqtSlot(result="QVariant")
+    def admin_get_cloud_scan_count(self) -> dict:
+        """Get count of scans in cloud database (for confirmation dialog)."""
+        if not self._sync_service:
+            return {"ok": False, "count": 0, "message": "Sync service not configured"}
+        ok, count, message = self._sync_service.get_cloud_scan_count()
+        return {"ok": ok, "count": count, "message": message}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_clear_cloud_data(self, pin: str) -> dict:
+        """Clear cloud + local scan data after PIN verification."""
+        if not config.ADMIN_FEATURES_ENABLED:
+            return {"ok": False, "message": "Admin features disabled", "cloud_deleted": 0, "local_deleted": 0}
+        if pin != config.ADMIN_PIN:
+            return {"ok": False, "message": "Incorrect PIN", "cloud_deleted": 0, "local_deleted": 0}
+
+        results = {"ok": True, "cloud_deleted": 0, "local_deleted": 0, "message": ""}
+
+        # Clear cloud data
+        if self._sync_service:
+            cloud_result = self._sync_service.clear_cloud_scans()
+            if not cloud_result["ok"]:
+                return {
+                    "ok": False,
+                    "message": f"Cloud clear failed: {cloud_result['message']}",
+                    "cloud_deleted": 0,
+                    "local_deleted": 0,
+                }
+            results["cloud_deleted"] = cloud_result.get("deleted", 0)
+
+        # Clear local scans
+        try:
+            local_count = self._service._db.clear_all_scans()
+            results["local_deleted"] = local_count
+        except Exception as e:
+            results["message"] = f"Cloud cleared but local clear failed: {e}"
+            results["ok"] = False
+            return results
+
+        results["message"] = f"Cleared {results['cloud_deleted']} cloud + {results['local_deleted']} local records"
+        LOGGER.info(f"Admin clear: cloud={results['cloud_deleted']}, local={results['local_deleted']}")
+        return results
+
     @pyqtSlot(str)
     def open_export_folder(self, file_path: str) -> None:
         """Open Windows Explorer with the exported file selected."""

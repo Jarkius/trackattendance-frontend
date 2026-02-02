@@ -277,3 +277,12 @@ VOICE_ENABLED = os.getenv("VOICE_ENABLED", "True").lower() in ("true", "1", "yes
 
 # Playback volume (0.0 = muted, 1.0 = full volume)
 VOICE_VOLUME = _safe_float("VOICE_VOLUME", 1.0, min_val=0.0, max_val=1.0)
+
+
+# =============================================================================
+# Admin Configuration
+# =============================================================================
+
+# PIN for admin features (4-6 digits). Leave empty to disable admin features.
+ADMIN_PIN = os.getenv("ADMIN_PIN", "")
+ADMIN_FEATURES_ENABLED = bool(ADMIN_PIN and ADMIN_PIN.isdigit() and 4 <= len(ADMIN_PIN) <= 6)

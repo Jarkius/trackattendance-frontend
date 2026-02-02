@@ -365,4 +365,59 @@ class SyncService:
         return f"{safe_station}-{scan.badge_id}-{scan.id}"
 
 
+    def get_cloud_scan_count(self) -> Tuple[bool, int, str]:
+        """Get count of scans in cloud database.
+
+        Returns:
+            (success, count, message)
+        """
+        try:
+            response = requests.get(
+                f"{self.api_url}/v1/admin/scan-count",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return True, data.get("count", 0), "OK"
+            else:
+                return False, 0, f"API error: {response.status_code}"
+        except requests.exceptions.ConnectionError:
+            return False, 0, "Cannot connect to API"
+        except requests.exceptions.Timeout:
+            return False, 0, "Connection timeout"
+        except Exception as e:
+            return False, 0, f"Error: {str(e)}"
+
+    def clear_cloud_scans(self) -> Dict[str, object]:
+        """Clear all scans from cloud database.
+
+        Returns:
+            Dictionary with: ok, deleted, message
+        """
+        try:
+            response = requests.delete(
+                f"{self.api_url}/v1/admin/clear-scans",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "X-Confirm-Delete": "DELETE ALL SCANS",
+                },
+                timeout=30,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                LOGGER.info(f"Cloud scans cleared: {data.get('deleted', 0)} records")
+                return {"ok": True, "deleted": data.get("deleted", 0), "message": data.get("message", "Scans cleared")}
+            elif response.status_code == 401:
+                return {"ok": False, "deleted": 0, "message": "Authentication failed"}
+            else:
+                return {"ok": False, "deleted": 0, "message": f"API error: {response.status_code}"}
+        except requests.exceptions.ConnectionError:
+            return {"ok": False, "deleted": 0, "message": "Cannot connect to API"}
+        except requests.exceptions.Timeout:
+            return {"ok": False, "deleted": 0, "message": "Connection timeout"}
+        except Exception as e:
+            return {"ok": False, "deleted": 0, "message": f"Error: {str(e)}"}
+
+
 __all__ = ["SyncService"]

@@ -78,6 +78,10 @@ class DatabaseManager:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status ON scans(sync_status);
+                CREATE INDEX IF NOT EXISTS idx_scans_badge_station_time ON scans(badge_id, station_name, scanned_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_scans_sync_status_time ON scans(sync_status, scanned_at);
+                CREATE INDEX IF NOT EXISTS idx_scans_station_name ON scans(station_name);
+                CREATE INDEX IF NOT EXISTS idx_employees_sl_l1_desc ON employees(sl_l1_desc);
 
                 CREATE TABLE IF NOT EXISTS roster_meta (
                     key TEXT PRIMARY KEY,
@@ -408,6 +412,42 @@ class DatabaseManager:
             "failed": int(row["failed"] or 0),
             "last_sync_time": row["last_sync_time"],
         }
+
+    def get_scans_by_bu(self) -> list[dict]:
+        """Get unique scanned badge count grouped by BU using local data."""
+        cursor = self._connection.execute("""
+            SELECT
+                e.sl_l1_desc AS bu_name,
+                COUNT(DISTINCT e.legacy_id) AS registered,
+                COUNT(DISTINCT s.badge_id) AS scanned
+            FROM employees e
+            LEFT JOIN scans s ON e.legacy_id = s.badge_id
+            GROUP BY e.sl_l1_desc
+            ORDER BY e.sl_l1_desc
+        """)
+        return [
+            {"bu_name": row["bu_name"], "registered": row["registered"], "scanned": row["scanned"]}
+            for row in cursor.fetchall()
+        ]
+
+    def count_unmatched_scanned_badges(self) -> int:
+        """Count distinct badge_ids in scans that don't match any employee."""
+        cursor = self._connection.execute("""
+            SELECT COUNT(DISTINCT s.badge_id) AS cnt
+            FROM scans s
+            LEFT JOIN employees e ON s.badge_id = e.legacy_id
+            WHERE e.legacy_id IS NULL
+        """)
+        return int(cursor.fetchone()["cnt"] or 0)
+
+    def clear_all_scans(self) -> int:
+        """Clear all scan records from local database. Returns count deleted."""
+        cursor = self._connection.execute("SELECT COUNT(*) FROM scans")
+        count = int(cursor.fetchone()[0])
+        with self._connection:
+            self._connection.execute("DELETE FROM scans")
+        logger.info(f"Cleared {count} local scan records")
+        return count
 
     def close(self) -> None:
         self._connection.close()

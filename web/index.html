@@ -172,6 +172,7 @@
                 <span class="dash__time" id="dashboard-updated">--</span>
                 <button class="dash__btn" id="dashboard-refresh" title="Refresh"><i class="material-icons">refresh</i></button>
                 <button class="dash__btn dash__btn--export" id="dashboard-export" title="Export"><i class="material-icons">download</i></button>
+                <button class="dash__btn dash__btn--admin" id="dashboard-admin" title="Admin" style="display:none;"><i class="material-icons">settings</i></button>
                 <button class="dash__btn dash__btn--close" id="dashboard-close" title="Close"><i class="material-icons">close</i></button>
             </div>
         </header>
@@ -199,6 +200,50 @@
             <a href="#" id="dashboard-export-link" class="dash__footer-link"></a>
         </footer>
       </div>
+    </div>
+
+    <!-- Admin Panel Modal -->
+    <div class="admin-overlay" id="admin-overlay" aria-hidden="true">
+        <div class="admin-overlay__dialog">
+            <div id="admin-pin-view">
+                <h5 class="admin-overlay__title">Admin Access</h5>
+                <p class="admin-overlay__subtitle">Enter PIN to continue</p>
+                <input type="password" id="admin-pin-input" maxlength="6" placeholder="Enter PIN" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+                <p class="admin-overlay__error" id="admin-pin-error"></p>
+                <div class="admin-overlay__actions">
+                    <button class="admin-overlay__btn admin-overlay__btn--cancel" id="admin-cancel">Cancel</button>
+                    <button class="admin-overlay__btn admin-overlay__btn--submit" id="admin-pin-submit">Submit</button>
+                </div>
+            </div>
+            <div id="admin-actions-view" style="display:none;">
+                <h5 class="admin-overlay__title">Admin Panel</h5>
+                <div class="admin-overlay__section">
+                    <h6>Clear Cloud Database</h6>
+                    <p id="admin-cloud-count">Checking scan count...</p>
+                    <button class="admin-overlay__btn admin-overlay__btn--danger" id="admin-clear-cloud">
+                        <i class="material-icons">delete_forever</i> Clear All Scans
+                    </button>
+                </div>
+                <div class="admin-overlay__actions">
+                    <button class="admin-overlay__btn admin-overlay__btn--cancel" id="admin-close">Close</button>
+                </div>
+            </div>
+            <div id="admin-confirm-view" style="display:none;">
+                <h5 class="admin-overlay__title" style="color:#c62828;">Confirm Deletion</h5>
+                <p id="admin-confirm-message">This will permanently delete ALL scans from cloud and local databases. This cannot be undone.</p>
+                <div class="admin-overlay__actions">
+                    <button class="admin-overlay__btn admin-overlay__btn--cancel" id="admin-confirm-cancel">Cancel</button>
+                    <button class="admin-overlay__btn admin-overlay__btn--danger" id="admin-confirm-delete">Delete Everything</button>
+                </div>
+            </div>
+            <div id="admin-result-view" style="display:none;">
+                <h5 class="admin-overlay__title" id="admin-result-title">Done</h5>
+                <p id="admin-result-message"></p>
+                <div class="admin-overlay__actions">
+                    <button class="admin-overlay__btn admin-overlay__btn--cancel" id="admin-result-close">Close</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Materialize JavaScript -->
