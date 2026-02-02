@@ -972,6 +972,9 @@ ${destination}` : message;
         dashboardOpen = true;
         console.debug('[Dashboard] Dashboard opened - connection checks paused');
 
+        // Release focus from barcode input so dashboard can scroll freely
+        if (barcodeInput) barcodeInput.blur();
+
         // Prevent scrolling on background page
         document.body.classList.add('dashboard-open');
         console.debug('[Dashboard] Prevented background scrolling');

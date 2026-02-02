@@ -31,6 +31,10 @@ python tests/test_batch_sync.py
 python tests/test_connection_scenarios.py
 python tests/test_sync_debug.py
 python tests/simulate_scans.py
+python tests/test_sync_race_condition.py
+python tests/test_timestamp_midnight.py
+python tests/test_encoding_thai.py
+python tests/test_validation_ui.py --test all
 
 # Utility scripts
 python scripts/reset_failed_scans.py
