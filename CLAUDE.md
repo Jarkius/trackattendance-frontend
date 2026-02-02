@@ -51,11 +51,11 @@ dashboard.py         Statistics aggregation
 config.py            All configuration with .env override
 logging_config.py    Logging setup
 
-web/
-├── index.html       Single-page kiosk UI
-├── script.js        Frontend logic (barcode input, overlays, dashboard counters)
-├── css/style.css    Custom styling
-└── materialize/     CSS framework
+web/                 Embedded kiosk UI (HTML/CSS/JS, Materialize)
+scripts/             Utility scripts (migration, debug, reset)
+tests/               Test and simulation scripts
+docs/                Technical docs (API, Architecture, Sync, PRD)
+ψ/                   Oracle memory (retrospectives, learnings, handoffs)
 ```
 
 **Data flow**: Badge scanned (keyboard emulation) → JS listener → QWebChannel → Python → SQLite (pending) → batch sync → cloud API → PostgreSQL
@@ -106,9 +106,7 @@ Syncs to `trackattendance-api` (separate repo: `Jarkius/trackattendance-api`)
 - `GET /v1/dashboard/stats` — aggregated statistics
 - `GET /v1/dashboard/export` — paginated scan export
 
-## Lessons Learned
+## Notes
 
-- Break complex work into 1-hour phases; minimum viable first, then expand
-- Parallel agents speed up analysis of different system aspects
-- Phase markers ("Phase 1:", "Phase 2:") in issues help track incremental progress
 - Time zone: GMT+7 (Bangkok)
+- Learnings and retrospectives stored in `ψ/memory/`

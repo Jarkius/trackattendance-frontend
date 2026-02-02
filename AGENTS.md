@@ -1,32 +1,70 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-- `main.py` hosts the PyQt6 wrapper that loads the web UI from `web/index.html`; keep desktop-facing logic here.
-- Front-end assets live in `web/` (`css/`, `fonts/`, `images/`, `script.js`); mirror this layout for new modules and bundle-ready assets.
-- Operational data (`database.db`, `employee.xlsx`) lives under `data/`; keep only `.gitkeep` under version control.
-- `Backup/` contains legacy templates and experiments; use it only for archived references and avoid loading code from there at runtime.
-- Use `.venv/` for the project-specific virtual environment; do not commit its contents.
+## Project Overview
+
+TrackAttendance Frontend — offline-first desktop kiosk app for badge/QR attendance scanning with cloud sync.
+
+**Stack**: Python 3.11+, PyQt6 + QWebEngineView, SQLite, Materialize CSS
+**Target**: Windows desktop (.exe via PyInstaller)
+
+## Project Structure
+
+```
+main.py              PyQt6 window, QWebEngineView, AutoSyncManager
+attendance.py        Roster import (Excel), scan recording, duplicate detection, export
+database.py          SQLite schema, queries, sync_status tracking
+sync.py              Batch upload to cloud API, idempotency (SHA256), retry
+dashboard.py         Statistics aggregation
+config.py            All configuration with .env override
+audio.py             Voice playback on successful scans (QMediaPlayer)
+logging_config.py    Logging setup
+
+web/                 Embedded kiosk UI (HTML/CSS/JS, Materialize, Inter font)
+scripts/             Utility scripts (migration, debug, reset failed scans)
+tests/               Test and simulation scripts (stress test, sync tests)
+docs/                Technical docs (API, Architecture, Sync, PRD)
+data/                Runtime data — database.db, employee.xlsx (gitignored)
+exports/             Generated Excel reports (gitignored)
+assets/              Icons, voice MP3s, PyInstaller resources
+```
 
 ## Build, Test, and Development Commands
-- `python -m venv .venv` � create a fresh environment.
-- `.venv\Scripts\activate` � activate the environment on Windows; adapt for other shells when documenting steps.
-- `pip install -r requirements.txt` � install the required desktop stack (PyQt6 + WebEngine, openpyxl, etc.).
-- `python main.py` � launch the PyQt experience and validate production paths.
-- `pyinstaller TrackAttendance.spec` � produce the Windows bundle with icon and embedded web assets.
 
-## Coding Style & Naming Conventions
-- Follow PEP 8: 4-space indentation, PascalCase classes, snake_case functions, and descriptive module names (e.g., `qr_scanner.py`).
-- Keep UI bindings in sync: JS identifiers in `web/script.js` should stay camelCase and match element IDs defined in `index.html`.
-- Scope CSS by component in `web/css/`; use kebab-case class names and avoid inline styles except for quick diagnostics.
-- Provide docstrings for public functions that surface into QWebChannel so the desktop-web contract stays clear.
+- `python -m venv .venv` — create virtual environment
+- `.venv\Scripts\activate` — activate on Windows (`source .venv/bin/activate` on macOS/Linux)
+- `pip install -r requirements.txt` — install dependencies
+- `python main.py` — launch the kiosk app
+- `pyinstaller TrackAttendance.spec` — build Windows .exe
+- `python tests/stress_full_app.py --iterations 100 --delay-ms 30` — end-to-end stress test
+- `python tests/test_production_sync.py` — test cloud sync
+- `python scripts/reset_failed_scans.py` — reset failed scans to pending
 
-## Commit & Pull Request Guidelines
-- Adopt short, imperative commit summaries (e.g., `Add fade animation for load screen`) with optional detail lines.
-- Reference Jira or GitHub issue IDs where applicable, and group related asset changes in the same commit.
-- PRs should explain the change, outline validation steps, and attach screenshots or GIFs for any front-end impact.
-- Note configuration changes (env vars, file paths, PyInstaller flags) explicitly so deployment scripts stay in sync.
+## Coding Style
 
-## Security & Configuration Tips
-- Keep secrets and API keys out of the repo; fetch them from environment variables read inside `main.py`.
-- Treat `data/` contents as sensitive. Never check business rosters, generated databases, or exports into version control.
-- Review third-party fonts or images added under `web/fonts` and `web/images` for licensing before publishing builds.
+- **Python**: PEP 8, 4-space indent, snake_case functions, PascalCase classes
+- **JavaScript**: camelCase identifiers matching HTML element IDs in `web/script.js`
+- **CSS**: kebab-case class names, scoped by component in `web/css/`
+- Docstrings on public functions exposed via QWebChannel
+
+## Key Patterns
+
+- **Offline-first**: All scans save to SQLite first. Sync is background/optional.
+- **Config loading**: `.env` next to exe (frozen) → `.env` in script dir (dev) → system env vars
+- **Sync states**: Each scan has `sync_status`: `pending` → `synced` or `failed`
+- **Auto-sync**: Triggers when idle (no scans for N seconds) + pending scans + API reachable
+- **Shutdown**: Test connectivity → sync all pending → export to Excel → close
+- **Python-JS bridge**: QWebChannel exposes Python methods to `web/script.js`
+
+## Commit & PR Guidelines
+
+- Short imperative commit summaries (e.g., `feat: add voice playback on scan`)
+- Reference GitHub issue IDs where applicable
+- PRs should explain the change, outline validation steps
+- Note any config/env changes explicitly
+
+## Security & Configuration
+
+- All secrets loaded from `.env` via `config.py` — never hardcode API keys
+- `data/` contents are sensitive — never commit databases, rosters, or exports
+- Required env vars: `CLOUD_API_URL`, `CLOUD_API_KEY`
+- See `.env.example` for all available settings
