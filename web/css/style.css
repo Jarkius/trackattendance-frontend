@@ -1264,7 +1264,7 @@ body.dashboard-open {
 }
 
 /* Admin button in dashboard header */
-.dash__btn--admin { opacity: 0.4; }
+.dash__btn--admin { opacity: 0.7; }
 .dash__btn--admin:hover { opacity: 1; }
 
 /* ---- Admin Overlay ---- */
