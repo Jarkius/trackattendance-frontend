@@ -1,0 +1,21 @@
+labels:
+  - testing
+  - P0-critical
+  - sync
+  - testing
+  - P1-high
+  - database
+  - testing
+  - P2-medium
+  - config
+  - testing
+  - P3-low
+  - ui
+  - testing
+  - config
+  - testing
+  - P3-low
+  - testing
+  - sync
+  - testing
+  - database
