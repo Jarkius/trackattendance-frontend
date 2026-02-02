@@ -28,8 +28,16 @@ pyinstaller TrackAttendance.spec
 python tests/stress_full_app.py --iterations 100 --delay-ms 30
 python tests/test_production_sync.py
 python tests/test_batch_sync.py
+python tests/test_connection_scenarios.py
+python tests/test_sync_debug.py
 python tests/simulate_scans.py
-python tests/reset_failed_scans.py
+
+# Utility scripts
+python scripts/reset_failed_scans.py
+python scripts/migrate_sync_schema.py
+python scripts/debug_sync_performance.py
+python scripts/check_timestamp_format.py
+python scripts/create_test_scan.py
 ```
 
 ## Architecture

@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 """Test production sync from QR app to Cloud Run API."""
 
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import sys
+from pathlib import Path
 
+# Resolve project root (parent of tests/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+
+from config import CLOUD_API_URL, CLOUD_API_KEY
 from database import DatabaseManager
 from sync import SyncService
 
 def test_production_sync():
     """Test sync to production Cloud Run API."""
 
-    # Production Cloud Run API Configuration
-    api_url = "https://trackattendance-api-969370105809.asia-southeast1.run.app"
-    api_key = "6541f2c7892b4e5287d50c2414d179f8"
-
     print("=== Testing QR App Sync to Production Cloud Run API ===")
-    print(f"API URL: {api_url}")
+    print(f"API URL: {CLOUD_API_URL}")
     print(f"Database: data/database.db")
     print("=" * 60)
 
     # Initialize database and sync service
     try:
-        db = DatabaseManager("data/database.db")
-        sync_service = SyncService(db, api_url, api_key)
+        db = DatabaseManager(str(PROJECT_ROOT / "data" / "database.db"))
+        sync_service = SyncService(db, CLOUD_API_URL, CLOUD_API_KEY)
         print("[OK] Database and sync service initialized")
     except Exception as e:
         print(f"[ERROR] Failed to initialize: {e}")

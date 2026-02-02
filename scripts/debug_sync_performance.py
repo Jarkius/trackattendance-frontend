@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """Debug sync performance to identify bottlenecks."""
 
+import os
+import sys
 import time
+from pathlib import Path
+
+# Resolve project root (parent of scripts/)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+os.chdir(PROJECT_ROOT)
+
+from config import CLOUD_API_URL, CLOUD_API_KEY, CLOUD_SYNC_BATCH_SIZE
 from database import DatabaseManager
 from sync import SyncService
 
@@ -20,9 +30,9 @@ def debug_sync_performance():
     start_sync = time.time()
     sync_service = SyncService(
         db=db,
-        api_url="https://trackattendance-api-969370105809.asia-southeast1.run.app",
-        api_key="6541f2c7892b4e5287d50c2414d179f8",
-        batch_size=100,
+        api_url=CLOUD_API_URL,
+        api_key=CLOUD_API_KEY,
+        batch_size=CLOUD_SYNC_BATCH_SIZE,
     )
     sync_init_time = time.time() - start_sync
     print(f"Sync service initialization: {sync_init_time:.3f}s")
@@ -85,7 +95,7 @@ def debug_sync_performance():
         import requests
         start_ping = time.time()
         response = requests.get(
-            "https://trackattendance-api-969370105809.asia-southeast1.run.app/",
+            f"{CLOUD_API_URL}/",
             timeout=5
         )
         ping_time = time.time() - start_ping
