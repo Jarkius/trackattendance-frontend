@@ -1424,9 +1424,12 @@ ${destination}` : message;
                 showAdminView('admin-result-view');
                 if (result?.ok) {
                     if (adminResultTitle) { adminResultTitle.textContent = 'Cleared Successfully'; adminResultTitle.style.color = '#86bc25'; }
-                    if (adminResultMessage) adminResultMessage.textContent = result.message;
+                    if (adminResultMessage) adminResultMessage.textContent = result.message + '\nClosing app in 3 seconds...';
                     dashboardDataCache = null;
                     updateSyncStatus();
+                    window.setTimeout(() => {
+                        queueOrRun((b) => b.close_window());
+                    }, 3000);
                 } else {
                     if (adminResultTitle) { adminResultTitle.textContent = 'Error'; adminResultTitle.style.color = '#c62828'; }
                     if (adminResultMessage) adminResultMessage.textContent = result?.message || 'Failed to clear data';

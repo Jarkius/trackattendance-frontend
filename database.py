@@ -441,12 +441,13 @@ class DatabaseManager:
         return int(cursor.fetchone()["cnt"] or 0)
 
     def clear_all_scans(self) -> int:
-        """Clear all scan records from local database. Returns count deleted."""
+        """Clear all scan records and station name from local database. Returns scan count deleted."""
         cursor = self._connection.execute("SELECT COUNT(*) FROM scans")
         count = int(cursor.fetchone()[0])
         with self._connection:
             self._connection.execute("DELETE FROM scans")
-        logger.info(f"Cleared {count} local scan records")
+            self._connection.execute("DELETE FROM stations")
+        logger.info(f"Cleared {count} local scan records + station name")
         return count
 
     def close(self) -> None:
