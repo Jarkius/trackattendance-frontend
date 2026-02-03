@@ -142,6 +142,7 @@ docs/                Technical documentation
 - [Sync & Duplicate Detection](docs/SYNC.md) — Offline sync, auto-sync, batch processing, duplicate modes
 - [Product Requirements](docs/PRD.md) — Feature requirements
 - [Feature: Indicator Redesign](docs/FEATURE_INDICATOR_REDESIGN.md) — Connection indicator design
+- [Claude Code Action](docs/CLAUDE_CODE_ACTION.md) — AI-powered code assistance setup
 
 ## 📝 Version History
 
