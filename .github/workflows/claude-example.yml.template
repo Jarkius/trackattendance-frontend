@@ -1,0 +1,93 @@
+# Example Claude Integration Workflow
+# 
+# This is a TEMPLATE file. To use it:
+# 1. Rename to remove .template extension (e.g., claude-review.yml)
+# 2. Add ANTHROPIC_API_KEY to repository secrets
+# 3. Customize the workflow to your needs
+# 4. Commit and push to enable
+
+name: Claude Code Review (Example)
+
+# Trigger on pull requests
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    # Optionally limit to specific paths
+    # paths:
+    #   - 'src/**'
+    #   - '**.py'
+
+jobs:
+  # Job 1: Automated code review
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better context
+      
+      # Example: Call Claude API for code review
+      # Note: This requires a custom script or action
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install anthropic requests
+      
+      - name: Run Claude code review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Example script (you would create this)
+          # python scripts/claude_review.py --pr $PR_NUMBER
+          echo "Claude code review would run here"
+          echo "You need to create scripts/claude_review.py"
+
+  # Job 2: Documentation check
+  docs-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check documentation
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Example: Verify docs are up-to-date
+          echo "Documentation check would run here"
+
+  # Job 3: Test generation suggestions
+  test-suggestions:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Suggest tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Example: Suggest missing tests
+          echo "Test suggestions would run here"
+
+# Notes:
+# - You need to implement the actual scripts that call Claude API
+# - Add ANTHROPIC_API_KEY to Settings → Secrets and variables → Actions
+# - Customize triggers, paths, and conditions to your needs
+# - Consider rate limits and costs when running on every PR
+# - You can use the official Anthropic API Python client: pip install anthropic
