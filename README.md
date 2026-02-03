@@ -183,3 +183,13 @@ See `.env.example` for the full list.
 ## 🔒 Data Privacy
 
 Employee names and rosters stay local. Never commit `data/`, `exports/`, or `.env` files.
+
+## 🤖 AI Integration
+
+This repository is configured for Claude AI integration:
+
+- **📘 [Quick Start Guide](docs/CLAUDE_QUICKSTART.md)** — Get started with Claude in 5 minutes
+- **📚 [Full Integration Guide](docs/CLAUDE_INTEGRATION_GUIDE.md)** — Complete setup and best practices
+- **🔧 Example Scripts** — See `scripts/claude_review_example.py` for API integration
+
+**Ready to use Claude?** Visit [claude.ai/code](https://claude.ai/code) and connect this repository!
