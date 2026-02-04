@@ -22,6 +22,9 @@ pynput>=1.7.6
 flask>=2.3.0
 flask-cors>=4.0.0
 
+# Person Detection (proximity greeting via face/pose recognition)
+mediapipe>=0.10.20              # Optional: face+pose detection (falls back to motion if missing)
+
 # Utilities
 python-dateutil>=2.8.2
 

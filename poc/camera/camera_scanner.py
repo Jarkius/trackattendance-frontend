@@ -3,6 +3,7 @@ Camera-based Barcode/QR Code Scanner Module
 Uses OpenCV and pyzbar for real-time barcode detection from laptop camera
 """
 
+import os
 import cv2
 import numpy as np
 from pyzbar.pyzbar import decode
@@ -332,74 +333,178 @@ class CameraScanner:
 
 class ProximityDetector:
     """
-    Simple proximity detection using camera motion detection
-    Can be used to trigger greeting when someone approaches
+    Person proximity detection using MediaPipe (face + pose).
+    Falls back to simple motion detection if MediaPipe is unavailable.
+
+    Detection strategy (handles varying heights and laptop positions):
+    1. Face detection — works when face is visible (any angle/distance)
+    2. Pose detection — works when body is visible (even without face)
+    3. Motion fallback — catches movement if MediaPipe fails
+
+    A person is "detected" when either a face OR a body pose is found.
     """
-    
-    def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0):
-        self.sensitivity = sensitivity
+
+    def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0,
+                 min_face_confidence: float = 0.3, min_pose_confidence: float = 0.3,
+                 skip_frames: int = 2):
+        self.sensitivity = sensitivity  # for motion fallback
         self.cooldown = cooldown
+        self.min_face_confidence = min_face_confidence
+        self.min_pose_confidence = min_pose_confidence
+        self.skip_frames = skip_frames  # process every Nth frame to save CPU
+        self._frame_count = 0
         self._last_detection_time = 0
         self._background_frame: Optional[np.ndarray] = None
         self._detection_callbacks: List[Callable[[], None]] = []
-    
+        self._last_detection_method: Optional[str] = None
+
+        # Try to initialize MediaPipe (tasks API — v0.10.x+)
+        self._mp_face = None
+        self._mp_pose = None
+        self._use_mediapipe = False
+        self._mp = None  # mediapipe module reference
+
+        # Model files directory (bundled alongside this script)
+        models_dir = os.path.join(os.path.dirname(__file__), 'models')
+
+        try:
+            import mediapipe as mp
+            self._mp = mp
+
+            face_model = os.path.join(models_dir, 'blaze_face_short_range.tflite')
+            pose_model = os.path.join(models_dir, 'pose_landmarker_lite.task')
+
+            if not os.path.exists(face_model) or not os.path.exists(pose_model):
+                raise FileNotFoundError(
+                    f"Model files missing in {models_dir}. "
+                    "Download blaze_face_short_range.tflite and pose_landmarker_lite.task"
+                )
+
+            base_opts_face = mp.tasks.BaseOptions(model_asset_path=face_model)
+            face_opts = mp.tasks.vision.FaceDetectorOptions(
+                base_options=base_opts_face,
+                running_mode=mp.tasks.vision.RunningMode.IMAGE,
+                min_detection_confidence=self.min_face_confidence,
+            )
+            self._mp_face = mp.tasks.vision.FaceDetector.create_from_options(face_opts)
+
+            base_opts_pose = mp.tasks.BaseOptions(model_asset_path=pose_model)
+            pose_opts = mp.tasks.vision.PoseLandmarkerOptions(
+                base_options=base_opts_pose,
+                running_mode=mp.tasks.vision.RunningMode.IMAGE,
+                min_pose_detection_confidence=self.min_pose_confidence,
+            )
+            self._mp_pose = mp.tasks.vision.PoseLandmarker.create_from_options(pose_opts)
+
+            self._use_mediapipe = True
+            print("ProximityDetector: MediaPipe face+pose detection active")
+        except ImportError:
+            print("ProximityDetector: MediaPipe not available, using motion fallback")
+        except Exception as e:
+            print(f"ProximityDetector: MediaPipe init failed ({e}), using motion fallback")
+
+    @property
+    def detection_method(self) -> str:
+        """Return which detection method was used last."""
+        return self._last_detection_method or "none"
+
     def add_detection_callback(self, callback: Callable[[], None]):
         """Add callback for proximity detection"""
         self._detection_callbacks.append(callback)
-    
-    def process_frame(self, frame: np.ndarray) -> bool:
-        """Process frame for motion detection"""
-        current_time = time.time()
-        
-        # Cooldown check
-        if current_time - self._last_detection_time < self.cooldown:
-            return False
-        
-        # Convert to grayscale and blur
+
+    def _detect_person_mediapipe(self, frame: np.ndarray) -> Optional[str]:
+        """Detect person using MediaPipe face and pose detection (tasks API).
+        Returns detection method string or None."""
+        mp = self._mp
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+        # Try face detection first (faster)
+        if self._mp_face:
+            face_results = self._mp_face.detect(mp_image)
+            if face_results.detections:
+                return "face"
+
+        # Try pose detection (catches body even without visible face)
+        if self._mp_pose:
+            pose_results = self._mp_pose.detect(mp_image)
+            if pose_results.pose_landmarks:
+                return "pose"
+
+        return None
+
+    def _detect_motion(self, frame: np.ndarray) -> bool:
+        """Fallback: simple motion detection via frame differencing."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (21, 21), 0)
-        
-        # Initialize background
+
         if self._background_frame is None:
             self._background_frame = gray
             return False
-        
-        # Calculate difference
+
         frame_delta = cv2.absdiff(self._background_frame, gray)
         thresh = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)[1]
-        
-        # Dilate threshold
         thresh = cv2.dilate(thresh, None, iterations=2)
-        
-        # Find contours
-        contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, 
+        contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL,
                                         cv2.CHAIN_APPROX_SIMPLE)
-        
-        motion_detected = False
+
+        self._background_frame = gray
+
         for contour in contours:
             if cv2.contourArea(contour) > self.sensitivity:
-                motion_detected = True
-                break
-        
-        # Update background
-        self._background_frame = gray
-        
-        if motion_detected:
+                return True
+        return False
+
+    def process_frame(self, frame: np.ndarray) -> bool:
+        """Process frame for person detection.
+        Uses MediaPipe face+pose when available, falls back to motion detection."""
+        current_time = time.time()
+
+        # Cooldown check
+        if current_time - self._last_detection_time < self.cooldown:
+            return False
+
+        # Skip frames to save CPU (process every Nth frame)
+        self._frame_count += 1
+        if self._frame_count % (self.skip_frames + 1) != 0:
+            return False
+
+        person_detected = False
+
+        if self._use_mediapipe:
+            method = self._detect_person_mediapipe(frame)
+            if method:
+                person_detected = True
+                self._last_detection_method = method
+        else:
+            if self._detect_motion(frame):
+                person_detected = True
+                self._last_detection_method = "motion"
+
+        if person_detected:
             self._last_detection_time = current_time
-            
-            # Notify callbacks
+
             for callback in self._detection_callbacks:
                 try:
                     callback()
                 except Exception as e:
                     print(f"Detection callback error: {e}")
-        
-        return motion_detected
-    
+
+        return person_detected
+
     def reset(self):
-        """Reset detector"""
+        """Reset detector state"""
         self._background_frame = None
         self._last_detection_time = 0
+        self._frame_count = 0
+        self._last_detection_method = None
+
+    def close(self):
+        """Release MediaPipe resources"""
+        if self._mp_face:
+            self._mp_face.close()
+        if self._mp_pose:
+            self._mp_pose.close()
 
 
 def test_camera_scanner():

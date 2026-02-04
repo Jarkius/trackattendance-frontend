@@ -305,7 +305,10 @@ class AttendanceSystem:
         
         if self.camera_scanner:
             self.camera_scanner.stop()
-        
+
+        if self.proximity_detector:
+            self.proximity_detector.close()
+
         if self.voice:
             self.voice.stop()
         

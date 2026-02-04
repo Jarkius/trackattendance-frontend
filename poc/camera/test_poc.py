@@ -237,23 +237,30 @@ def test_process_frame_with_qr():
 
 
 def test_proximity_detector():
-    detector = ProximityDetector(sensitivity=100, cooldown=0.1)
+    detector = ProximityDetector(sensitivity=100, cooldown=0.1, skip_frames=0)
     callbacks_fired = []
     detector.add_detection_callback(lambda: callbacks_fired.append(True))
 
     frame1 = np.zeros((240, 320, 3), dtype=np.uint8)
     result1 = detector.process_frame(frame1)
-    assert result1 == False, "First frame should not trigger"
+    # First frame: MediaPipe won't detect a person in a black frame,
+    # motion fallback sets background — either way, no trigger
+    assert result1 == False, "Black frame should not trigger"
 
     frame2 = np.ones((240, 320, 3), dtype=np.uint8) * 200
     time.sleep(0.2)
     result2 = detector.process_frame(frame2)
-    assert result2 == True, "Large frame change should trigger detection"
-    assert len(callbacks_fired) >= 1, "Callback should have fired"
+    # Motion fallback will trigger on the large change; MediaPipe may or may not
+    # detect a "person" in a plain white frame. Accept either path.
+    if not detector._use_mediapipe:
+        assert result2 == True, "Large frame change should trigger motion detection"
+        assert len(callbacks_fired) >= 1, "Callback should have fired"
+    # With MediaPipe: plain white frame = no face/pose, so no trigger — that's OK
+    detector.close()
 
 
 def test_proximity_cooldown():
-    detector = ProximityDetector(sensitivity=100, cooldown=5.0)
+    detector = ProximityDetector(sensitivity=100, cooldown=5.0, skip_frames=0)
 
     frame1 = np.zeros((240, 320, 3), dtype=np.uint8)
     detector.process_frame(frame1)
@@ -264,6 +271,35 @@ def test_proximity_cooldown():
     frame3 = np.zeros((240, 320, 3), dtype=np.uint8)
     result = detector.process_frame(frame3)
     assert result == False, "Should not trigger within cooldown period"
+    detector.close()
+
+
+def test_proximity_mediapipe_init():
+    """Test that MediaPipe initializes when available"""
+    detector = ProximityDetector()
+    try:
+        import mediapipe
+        assert detector._use_mediapipe == True, "MediaPipe should be active when installed"
+        assert detector._mp_face is not None, "Face detector should exist"
+        assert detector._mp_pose is not None, "Pose detector should exist"
+    except ImportError:
+        assert detector._use_mediapipe == False, "Should fall back when MediaPipe missing"
+    detector.close()
+
+
+def test_proximity_detection_method_property():
+    """Test detection_method property reports correctly"""
+    detector = ProximityDetector(sensitivity=100, cooldown=0.1, skip_frames=0)
+    assert detector.detection_method == "none", "Should be 'none' before any detection"
+    detector.close()
+
+
+def test_proximity_close():
+    """Test that close() releases resources without error"""
+    detector = ProximityDetector()
+    detector.close()
+    # Calling close twice should be safe
+    detector.close()
 
 
 def test_scan_result_callbacks():
@@ -287,8 +323,11 @@ def test_scan_result_callbacks():
 test("Camera config defaults", test_camera_config_defaults)
 test("Process blank frame (no barcode)", test_process_frame_no_barcode)
 test("Process frame with QR code", test_process_frame_with_qr)
-test("Proximity detector motion detection", test_proximity_detector)
+test("Proximity detector detection", test_proximity_detector)
 test("Proximity detector cooldown", test_proximity_cooldown)
+test("Proximity MediaPipe init", test_proximity_mediapipe_init)
+test("Proximity detection_method property", test_proximity_detection_method_property)
+test("Proximity close() cleanup", test_proximity_close)
 test("Scanner result callbacks", test_scan_result_callbacks)
 
 # ============================================================
