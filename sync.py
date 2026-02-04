@@ -345,7 +345,7 @@ class SyncService:
         stats = self.db.get_sync_statistics()
         return {
             "synced": 0,
-            "failed": len(pending_scans),
+            "failed": 0,
             "pending": stats["pending"],
         }
 
