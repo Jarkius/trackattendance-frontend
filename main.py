@@ -824,6 +824,7 @@ def main() -> None:
                     camera_id=config.CAMERA_DEVICE_ID,
                     cooldown=config.CAMERA_GREETING_COOLDOWN_SECONDS,
                     resolution=(config.CAMERA_RESOLUTION_WIDTH, config.CAMERA_RESOLUTION_HEIGHT),
+                    greeting_volume=config.VOICE_VOLUME,
                 )
                 LOGGER.info("[Proximity] Plugin loaded")
             except Exception as exc:

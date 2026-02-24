@@ -25,11 +25,13 @@ class ProximityGreetingManager:
         camera_id: int = 0,
         cooldown: float = 10.0,
         resolution: Tuple[int, int] = (1280, 720),
+        greeting_volume: float = 1.0,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
         self._cooldown = cooldown
         self._resolution = resolution
+        self._greeting_volume = greeting_volume
 
         self._cap = None  # cv2.VideoCapture
         self._detector = None  # ProximityDetector
@@ -70,7 +72,7 @@ class ProximityGreetingManager:
             # Initialize greeting player (edge-tts generated audio)
             try:
                 from plugins.camera.greeting_player import GreetingPlayer
-                self._greeting_player = GreetingPlayer()
+                self._greeting_player = GreetingPlayer(volume=self._greeting_volume)
                 if not self._greeting_player.start():
                     LOGGER.warning("[Proximity] Greeting player failed to start, greetings will be silent")
                     self._greeting_player = None
