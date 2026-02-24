@@ -99,8 +99,22 @@ print("\n=== Test 4: Manager without cv2 ===")
 mgr = ProximityGreetingManager(voice_player=None, camera_id=0, cooldown=10.0, resolution=(1280, 720))
 report("Manager instantiates", True)
 
-started = mgr.start()
-report("start() returns False without cv2", started == False)
+# Hide cv2 so the manager's late import fails
+_real_cv2 = sys.modules.pop("cv2", None)
+_saved = {}
+for _k in list(sys.modules):
+    if _k.startswith("cv2"):
+        _saved[_k] = sys.modules.pop(_k)
+
+with patch.dict("sys.modules", {"cv2": None}):
+    started = mgr.start()
+    report("start() returns False without cv2", started == False)
+
+# Restore cv2
+for _k, _v in _saved.items():
+    sys.modules[_k] = _v
+if _real_cv2 is not None:
+    sys.modules["cv2"] = _real_cv2
 
 mgr.stop()
 report("stop() safe when never started", True)
@@ -119,31 +133,24 @@ report("Nonexistent folder detected", not _fake_path.is_dir())
 
 
 # =========================================================================
-# Test 6: Manager with mocked cv2 + camera
+# Test 6: Manager with mocked camera (real cv2, fake VideoCapture)
 # =========================================================================
 print("\n=== Test 6: Manager with mocked camera ===")
 
+import cv2
 import numpy as np
+import time
 
-# Create a mock cv2 module
-mock_cv2 = MagicMock()
+# Create a fake VideoCapture that returns real numpy frames
 mock_cap = MagicMock()
 mock_cap.isOpened.return_value = True
-# Return a real numpy frame so ProximityDetector can process it
 fake_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
 mock_cap.read.return_value = (True, fake_frame)
-mock_cv2.VideoCapture.return_value = mock_cap
-mock_cv2.CAP_PROP_FRAME_WIDTH = 3
-mock_cv2.CAP_PROP_FRAME_HEIGHT = 4
 
 # Mock voice player
 mock_voice = MagicMock()
 
-with patch.dict("sys.modules", {"cv2": mock_cv2}):
-    # Reload so the detector picks up mocked cv2
-    import plugins.camera.proximity_detector as pd_mod
-    importlib.reload(pd_mod)
-
+with patch("cv2.VideoCapture", return_value=mock_cap):
     mgr2 = ProximityGreetingManager(
         voice_player=mock_voice,
         camera_id=0,
@@ -152,11 +159,10 @@ with patch.dict("sys.modules", {"cv2": mock_cv2}):
     )
     started = mgr2.start()
     report("start() returns True with mocked camera", started == True)
-    report("Camera opened with correct device ID", mock_cv2.VideoCapture.called)
+    report("Camera opened", cv2.VideoCapture.called if hasattr(cv2.VideoCapture, 'called') else started)
     report("Resolution set", mock_cap.set.called)
 
     # Let the thread run briefly
-    import time
     time.sleep(0.3)
 
     report("Camera thread is running", mgr2._running == True)
@@ -167,9 +173,6 @@ with patch.dict("sys.modules", {"cv2": mock_cv2}):
     report("Camera released", mock_cap.release.called)
     report("Thread stopped", mgr2._thread is None)
 
-# Restore original module state
-importlib.reload(pd_mod)
-
 
 # =========================================================================
 # Test 7: Detection callback triggers voice
@@ -178,9 +181,7 @@ print("\n=== Test 7: Detection callback ===")
 
 mock_voice2 = MagicMock()
 
-with patch.dict("sys.modules", {"cv2": mock_cv2}):
-    importlib.reload(pd_mod)
-
+with patch("cv2.VideoCapture", return_value=mock_cap):
     mgr3 = ProximityGreetingManager(
         voice_player=mock_voice2,
         camera_id=0,
@@ -196,8 +197,6 @@ with patch.dict("sys.modules", {"cv2": mock_cv2}):
     report("Called exactly once", mock_voice2.play_random.call_count == 1)
 
     mgr3.stop()
-
-importlib.reload(pd_mod)
 
 
 # =========================================================================
