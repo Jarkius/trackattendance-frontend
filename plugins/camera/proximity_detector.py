@@ -9,6 +9,7 @@ Camera does NOT scan barcodes — badge scanning remains USB-only.
 from __future__ import annotations
 
 import os
+import sys
 import time
 from typing import Callable, List, Optional, TYPE_CHECKING
 
@@ -59,8 +60,11 @@ class ProximityDetector:
         self._use_mediapipe = False
         self._mp = None  # mediapipe module reference
 
-        # Model files directory (bundled alongside this script)
-        models_dir = os.path.join(os.path.dirname(__file__), 'models')
+        # Model files directory — bundled inside exe or alongside this script
+        if getattr(sys, 'frozen', False):
+            models_dir = os.path.join(sys._MEIPASS, 'plugins', 'camera', 'models')
+        else:
+            models_dir = os.path.join(os.path.dirname(__file__), 'models')
 
         try:
             import mediapipe as mp

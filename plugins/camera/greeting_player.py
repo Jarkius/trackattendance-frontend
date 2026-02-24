@@ -15,7 +15,14 @@ from typing import Optional
 
 LOGGER = logging.getLogger(__name__)
 
-GREETINGS_DIR = Path(__file__).resolve().parent / "greetings"
+def _greetings_dir() -> Path:
+    """Resolve greetings directory — next to exe (frozen) or next to this script (dev)."""
+    if getattr(sys, 'frozen', False):
+        # Next to .exe so users can drop in custom mp3s
+        return Path(sys.executable).parent / "greetings"
+    return Path(__file__).resolve().parent / "greetings"
+
+GREETINGS_DIR = _greetings_dir()
 
 
 class GreetingPlayer:
