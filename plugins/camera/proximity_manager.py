@@ -130,25 +130,23 @@ class ProximityGreetingManager:
         self._busy_until = time.time() + self._scan_busy_seconds
         LOGGER.debug("[Proximity] Scan activity — greetings suppressed for %.0fs", self._scan_busy_seconds)
 
-    def _is_scan_voice_playing(self) -> bool:
-        """Check if the main app's scan voice is currently playing."""
-        if self._voice_player is None:
-            return False
-        try:
-            from PyQt6.QtMultimedia import QMediaPlayer
-            return self._voice_player._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-        except Exception:
-            return False
+    def notify_voice_playing(self) -> None:
+        """Called from main thread when scan voice starts. Thread-safe flag."""
+        self._voice_playing_until = time.time() + 3.0  # typical voice clip duration
 
     def _on_person_detected(self) -> None:
-        """Callback from ProximityDetector — play greeting (unless busy or voice playing)."""
+        """Callback from ProximityDetector — play greeting (unless busy or voice playing).
+
+        Runs on camera thread. All Qt operations are deferred to main thread
+        via GreetingPlayer's thread-safe play_random().
+        """
         # Suppress greeting while scans are happening (queue is active)
         if time.time() < self._busy_until:
             LOGGER.debug("[Proximity] Person detected but suppressed (queue active)")
             return
 
-        # Don't overlap with scan "thank you" voice
-        if self._is_scan_voice_playing():
+        # Don't overlap with scan "thank you" voice (time-based, no Qt calls)
+        if time.time() < getattr(self, '_voice_playing_until', 0):
             LOGGER.debug("[Proximity] Person detected but scan voice is playing, skipping")
             return
 

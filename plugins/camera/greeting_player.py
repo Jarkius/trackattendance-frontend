@@ -3,15 +3,19 @@
 Generates Thai/English greeting MP3s via edge-tts on first run,
 then plays them randomly when a person is detected near the kiosk.
 Fully self-contained — does not depend on the main app's VoicePlayer.
+
+Thread-safe: play_random() can be called from any thread — actual
+QMediaPlayer operations are marshalled to the Qt main thread.
 """
 
-import asyncio
 import logging
 import random
 import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+
+from PyQt6.QtCore import QObject, QMetaObject, Qt as QtConst, pyqtSlot
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,15 +37,20 @@ def _greetings_dir() -> Path:
 GREETINGS_DIR = _greetings_dir()
 
 
-class GreetingPlayer:
-    """Generates and plays proximity greeting audio via edge-tts + QMediaPlayer."""
+class GreetingPlayer(QObject):
+    """Generates and plays proximity greeting audio via edge-tts + QMediaPlayer.
+
+    Thread-safe: play_random() schedules playback on the Qt main thread.
+    """
 
     def __init__(self, volume: float = 1.0):
+        super().__init__()
         self._volume = max(0.0, min(1.0, volume))
         self._player = None  # QMediaPlayer, created lazily
         self._audio_output = None  # QAudioOutput
         self._greeting_files: list[Path] = []
         self._last_played: Optional[Path] = None
+        self._pending_file: Optional[Path] = None
 
     def start(self) -> bool:
         """Generate greetings if needed, init QMediaPlayer. Returns True on success."""
@@ -49,7 +58,7 @@ class GreetingPlayer:
             from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
             from PyQt6.QtCore import QUrl
 
-            self._QUrl = QUrl  # stash for play_random
+            self._QUrl = QUrl
             self._player = QMediaPlayer()
             self._audio_output = QAudioOutput()
             self._audio_output.setVolume(self._volume)
@@ -112,7 +121,10 @@ class GreetingPlayer:
                 LOGGER.warning("[Greeting] Generation failed for %s: %s", filename, exc)
 
     def play_random(self) -> None:
-        """Play a random greeting MP3."""
+        """Pick a random greeting and schedule playback on the main thread.
+
+        Safe to call from any thread (camera thread, worker thread, etc.).
+        """
         if not self._player or not self._greeting_files:
             return
 
@@ -124,17 +136,30 @@ class GreetingPlayer:
             choice = self._greeting_files[0]
 
         self._last_played = choice
+        self._pending_file = choice
+
+        # Marshal to main thread — QMediaPlayer must only be touched there
+        QMetaObject.invokeMethod(
+            self, "_play_on_main_thread", QtConst.ConnectionType.QueuedConnection
+        )
+
+    @pyqtSlot()
+    def _play_on_main_thread(self) -> None:
+        """Actual QMediaPlayer operations — guaranteed to run on Qt main thread."""
+        if self._pending_file is None or not self._player:
+            return
 
         from PyQt6.QtMultimedia import QMediaPlayer
 
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.stop()
 
-        self._player.setSource(self._QUrl.fromLocalFile(str(choice.resolve())))
+        self._player.setSource(self._QUrl.fromLocalFile(str(self._pending_file.resolve())))
         self._player.play()
-        LOGGER.debug("[Greeting] Playing: %s", choice.name)
+        LOGGER.debug("[Greeting] Playing: %s", self._pending_file.name)
+        self._pending_file = None
 
     def stop(self) -> None:
-        """Stop playback."""
+        """Stop playback. Must be called from main thread (e.g. during shutdown)."""
         if self._player:
             self._player.stop()
