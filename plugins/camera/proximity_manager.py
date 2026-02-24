@@ -28,6 +28,7 @@ class ProximityGreetingManager:
         greeting_volume: float = 1.0,
         scan_busy_seconds: float = 30.0,
         absence_threshold: float = 3.0,
+        confirm_frames: int = 3,
         voice_player=None,
     ):
         self._parent_window = parent_window
@@ -37,6 +38,7 @@ class ProximityGreetingManager:
         self._greeting_volume = greeting_volume
         self._scan_busy_seconds = scan_busy_seconds
         self._absence_threshold = absence_threshold
+        self._confirm_frames = confirm_frames
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
 
         self._cap = None  # cv2.VideoCapture
@@ -76,6 +78,7 @@ class ProximityGreetingManager:
             self._detector = ProximityDetector(
                 cooldown=self._cooldown,
                 absence_threshold=self._absence_threshold,
+                confirm_frames=self._confirm_frames,
             )
             self._detector.add_detection_callback(self._on_person_detected)
 

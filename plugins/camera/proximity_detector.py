@@ -41,16 +41,19 @@ class ProximityDetector:
     """
 
     def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0,
-                 min_face_confidence: float = 0.3, min_pose_confidence: float = 0.3,
-                 skip_frames: int = 2, absence_threshold: float = 3.0):
+                 min_face_confidence: float = 0.5, min_pose_confidence: float = 0.5,
+                 skip_frames: int = 2, absence_threshold: float = 3.0,
+                 confirm_frames: int = 3):
         self.sensitivity = sensitivity  # for motion fallback
         self.cooldown = cooldown
         self.min_face_confidence = min_face_confidence
         self.min_pose_confidence = min_pose_confidence
         self.skip_frames = skip_frames  # process every Nth frame to save CPU
         self.absence_threshold = absence_threshold  # seconds with no detection before state → empty
+        self.confirm_frames = confirm_frames  # consecutive detections required before greeting
         self._frame_count = 0
         self._last_detection_time = 0
+        self._consecutive_detections = 0  # count of consecutive frames with person
         self._background_frame: Optional[np.ndarray] = None
         self._detection_callbacks: List[Callable[[], None]] = []
         self._last_detection_method: Optional[str] = None
@@ -197,9 +200,14 @@ class ProximityDetector:
 
         if person_in_frame:
             self._last_person_seen_time = current_time
+            self._consecutive_detections += 1
 
             if self._presence_state == "empty":
-                # Transition: empty → present — greet the newcomer
+                # Require N consecutive detections to confirm a real person
+                if self._consecutive_detections < self.confirm_frames:
+                    return False
+
+                # Confirmed: empty → present — greet the newcomer
                 self._presence_state = "present"
                 self._last_detection_time = current_time
 
@@ -212,7 +220,10 @@ class ProximityDetector:
             # Already present — stay quiet
             return False
 
-        # No person in frame — check if absent long enough to reset
+        # No person in frame — reset consecutive counter
+        self._consecutive_detections = 0
+
+        # Check if absent long enough to reset presence state
         if self._presence_state == "present":
             elapsed = current_time - self._last_person_seen_time
             if elapsed >= self.absence_threshold:

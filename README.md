@@ -177,6 +177,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `CAMERA_GREETING_COOLDOWN_SECONDS` | `10` | Seconds between proximity greetings |
 | `CAMERA_SCAN_BUSY_SECONDS` | `30` | Seconds to suppress greetings after a badge scan |
 | `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `3` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |
+| `CAMERA_CONFIRM_FRAMES` | `3` | Consecutive detected frames required before greeting (prevents false positives) |
 
 See `.env.example` for the full list.
 
@@ -190,7 +191,7 @@ See `.env.example` for the full list.
 
 **Scans stuck as "failed"**: Run `python scripts/reset_failed_scans.py` to reset them back to `pending` for retry.
 
-**Camera greeting fires too often**: The detector uses presence-aware state tracking — it only greets once when someone arrives at an empty kiosk, then stays quiet while they remain. The person must leave (no face/body for `CAMERA_ABSENCE_THRESHOLD_SECONDS`, default 3s) before the next person gets greeted. Additionally, greetings are suppressed during active scanning (`CAMERA_SCAN_BUSY_SECONDS`, default 30s) and never overlap with the scan "thank you" voice. For busy events, increase `CAMERA_SCAN_BUSY_SECONDS` or disable with `ENABLE_CAMERA_DETECTION=False`.
+**Camera greeting fires too often**: The detector uses presence-aware state tracking with hysteresis — it requires `CAMERA_CONFIRM_FRAMES` (default 3) consecutive detected frames before greeting, preventing false positives from shadows or flickers. It only greets once when someone arrives at an empty kiosk, then stays quiet while they remain. The person must leave (no face/body for `CAMERA_ABSENCE_THRESHOLD_SECONDS`, default 3s) before the next person gets greeted. Additionally, greetings are suppressed during active scanning (`CAMERA_SCAN_BUSY_SECONDS`, default 30s) and never overlap with the scan "thank you" voice. For busy events, increase `CAMERA_SCAN_BUSY_SECONDS` or disable with `ENABLE_CAMERA_DETECTION=False`.
 
 ## 🔒 Data Privacy
 

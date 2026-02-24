@@ -302,6 +302,11 @@ CAMERA_SCAN_BUSY_SECONDS = _safe_float("CAMERA_SCAN_BUSY_SECONDS", 30.0, min_val
 # A new greeting only plays when someone arrives after the kiosk was empty.
 CAMERA_ABSENCE_THRESHOLD_SECONDS = _safe_float("CAMERA_ABSENCE_THRESHOLD_SECONDS", 3.0, min_val=1.0, max_val=30.0)
 
+# Consecutive detected frames required before greeting fires.
+# Prevents false positives from shadows, posters, or brief flickers.
+# At ~15 FPS with skip_frames=2, 3 confirmations ≈ 0.6 seconds of real presence.
+CAMERA_CONFIRM_FRAMES = _safe_int("CAMERA_CONFIRM_FRAMES", 3, min_val=1, max_val=15)
+
 # Camera resolution
 CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320, max_val=4096)
 CAMERA_RESOLUTION_HEIGHT = _safe_int("CAMERA_RESOLUTION_HEIGHT", 720, min_val=240, max_val=2160)
