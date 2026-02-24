@@ -831,6 +831,7 @@ def main() -> None:
                     resolution=(config.CAMERA_RESOLUTION_WIDTH, config.CAMERA_RESOLUTION_HEIGHT),
                     greeting_volume=config.VOICE_VOLUME,
                     scan_busy_seconds=config.CAMERA_SCAN_BUSY_SECONDS,
+                    absence_threshold=config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
                     voice_player=voice_player,
                 )
                 LOGGER.info("[Proximity] Plugin loaded")

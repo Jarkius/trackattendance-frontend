@@ -42,17 +42,23 @@ class ProximityDetector:
 
     def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0,
                  min_face_confidence: float = 0.3, min_pose_confidence: float = 0.3,
-                 skip_frames: int = 2):
+                 skip_frames: int = 2, absence_threshold: float = 3.0):
         self.sensitivity = sensitivity  # for motion fallback
         self.cooldown = cooldown
         self.min_face_confidence = min_face_confidence
         self.min_pose_confidence = min_pose_confidence
         self.skip_frames = skip_frames  # process every Nth frame to save CPU
+        self.absence_threshold = absence_threshold  # seconds with no detection before state → empty
         self._frame_count = 0
         self._last_detection_time = 0
         self._background_frame: Optional[np.ndarray] = None
         self._detection_callbacks: List[Callable[[], None]] = []
         self._last_detection_method: Optional[str] = None
+
+        # Presence state: "empty" or "present"
+        # Greeting only fires on transition from empty → present
+        self._presence_state: str = "empty"
+        self._last_person_seen_time: float = 0.0
 
         # Try to initialize MediaPipe (tasks API — v0.10.x+)
         self._mp_face = None
@@ -154,42 +160,65 @@ class ProximityDetector:
                 return True
         return False
 
-    def process_frame(self, frame: np.ndarray) -> bool:
-        """Process frame for person detection.
-        Uses MediaPipe face+pose when available, falls back to motion detection."""
-        current_time = time.time()
+    @property
+    def presence_state(self) -> str:
+        """Current presence state: 'empty' or 'present'."""
+        return self._presence_state
 
-        # Cooldown check
-        if current_time - self._last_detection_time < self.cooldown:
-            return False
+    def process_frame(self, frame: np.ndarray) -> bool:
+        """Process frame for person detection with presence-aware state machine.
+
+        State transitions:
+          empty   + person seen  → present (fire callbacks = greet)
+          present + person seen  → present (no callbacks = stay quiet)
+          present + no person for absence_threshold seconds → empty
+          empty   + no person    → empty   (no change)
+
+        Uses MediaPipe face+pose when available, falls back to motion detection.
+        """
+        current_time = time.time()
 
         # Skip frames to save CPU (process every Nth frame)
         self._frame_count += 1
         if self._frame_count % (self.skip_frames + 1) != 0:
             return False
 
-        person_detected = False
-
+        # Detect person in this frame
+        person_in_frame = False
         if self._use_mediapipe:
             method = self._detect_person_mediapipe(frame)
             if method:
-                person_detected = True
+                person_in_frame = True
                 self._last_detection_method = method
         else:
             if self._detect_motion(frame):
-                person_detected = True
+                person_in_frame = True
                 self._last_detection_method = "motion"
 
-        if person_detected:
-            self._last_detection_time = current_time
+        if person_in_frame:
+            self._last_person_seen_time = current_time
 
-            for callback in self._detection_callbacks:
-                try:
-                    callback()
-                except Exception as e:
-                    print(f"Detection callback error: {e}")
+            if self._presence_state == "empty":
+                # Transition: empty → present — greet the newcomer
+                self._presence_state = "present"
+                self._last_detection_time = current_time
 
-        return person_detected
+                for callback in self._detection_callbacks:
+                    try:
+                        callback()
+                    except Exception as e:
+                        print(f"Detection callback error: {e}")
+                return True
+            # Already present — stay quiet
+            return False
+
+        # No person in frame — check if absent long enough to reset
+        if self._presence_state == "present":
+            elapsed = current_time - self._last_person_seen_time
+            if elapsed >= self.absence_threshold:
+                self._presence_state = "empty"
+
+        return False
 
     def reset(self):
         """Reset detector state."""

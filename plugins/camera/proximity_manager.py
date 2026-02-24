@@ -27,6 +27,7 @@ class ProximityGreetingManager:
         resolution: Tuple[int, int] = (1280, 720),
         greeting_volume: float = 1.0,
         scan_busy_seconds: float = 30.0,
+        absence_threshold: float = 3.0,
         voice_player=None,
     ):
         self._parent_window = parent_window
@@ -35,6 +36,7 @@ class ProximityGreetingManager:
         self._resolution = resolution
         self._greeting_volume = greeting_volume
         self._scan_busy_seconds = scan_busy_seconds
+        self._absence_threshold = absence_threshold
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
 
         self._cap = None  # cv2.VideoCapture
@@ -71,7 +73,10 @@ class ProximityGreetingManager:
                 self._cap = None
                 return False
 
-            self._detector = ProximityDetector(cooldown=self._cooldown)
+            self._detector = ProximityDetector(
+                cooldown=self._cooldown,
+                absence_threshold=self._absence_threshold,
+            )
             self._detector.add_detection_callback(self._on_person_detected)
 
             # Initialize greeting player (edge-tts generated audio)

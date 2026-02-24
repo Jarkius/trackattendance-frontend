@@ -298,6 +298,10 @@ CAMERA_GREETING_COOLDOWN_SECONDS = _safe_float("CAMERA_GREETING_COOLDOWN_SECONDS
 # After the last scan, the kiosk waits this long before greeting the next person.
 CAMERA_SCAN_BUSY_SECONDS = _safe_float("CAMERA_SCAN_BUSY_SECONDS", 30.0, min_val=5.0, max_val=300.0)
 
+# Seconds with no person visible before the detector resets to "empty" state.
+# A new greeting only plays when someone arrives after the kiosk was empty.
+CAMERA_ABSENCE_THRESHOLD_SECONDS = _safe_float("CAMERA_ABSENCE_THRESHOLD_SECONDS", 3.0, min_val=1.0, max_val=30.0)
+
 # Camera resolution
 CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320, max_val=4096)
 CAMERA_RESOLUTION_HEIGHT = _safe_int("CAMERA_RESOLUTION_HEIGHT", 720, min_val=240, max_val=2160)

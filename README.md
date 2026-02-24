@@ -30,7 +30,7 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Fully offline — runs without network; syncs when connection returns
 - Admin panel (PIN-protected) to clear cloud + local database before events
 - Welcome animation and configurable party/event background
-- **[Experimental]** Camera proximity greeting — detects approaching people and plays a bilingual welcome audio (disabled by default)
+- **[Experimental]** Camera proximity greeting — detects when someone approaches an idle kiosk and plays a bilingual welcome audio (disabled by default, presence-aware: greets once per person, not on repeat)
 
 ## 💻 Requirements
 
@@ -176,6 +176,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `CAMERA_DEVICE_ID` | `0` | Camera index (`0` = default webcam) |
 | `CAMERA_GREETING_COOLDOWN_SECONDS` | `10` | Seconds between proximity greetings |
 | `CAMERA_SCAN_BUSY_SECONDS` | `30` | Seconds to suppress greetings after a badge scan |
+| `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `3` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |
 
 See `.env.example` for the full list.
 
@@ -189,7 +190,7 @@ See `.env.example` for the full list.
 
 **Scans stuck as "failed"**: Run `python scripts/reset_failed_scans.py` to reset them back to `pending` for retry.
 
-**Camera greeting fires too often in queues**: Greetings are automatically suppressed while badge scans are happening (controlled by `CAMERA_SCAN_BUSY_SECONDS`, default 30s). The greeting only plays when the kiosk has been idle — no scans for 30 seconds and the scan "thank you" voice has finished. Increase `CAMERA_SCAN_BUSY_SECONDS` for busier events, or disable with `ENABLE_CAMERA_DETECTION=False`.
+**Camera greeting fires too often**: The detector uses presence-aware state tracking — it only greets once when someone arrives at an empty kiosk, then stays quiet while they remain. The person must leave (no face/body for `CAMERA_ABSENCE_THRESHOLD_SECONDS`, default 3s) before the next person gets greeted. Additionally, greetings are suppressed during active scanning (`CAMERA_SCAN_BUSY_SECONDS`, default 30s) and never overlap with the scan "thank you" voice. For busy events, increase `CAMERA_SCAN_BUSY_SECONDS` or disable with `ENABLE_CAMERA_DETECTION=False`.
 
 ## 🔒 Data Privacy
 
