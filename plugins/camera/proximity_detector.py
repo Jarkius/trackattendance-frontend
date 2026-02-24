@@ -6,12 +6,24 @@ Extracted from poc/camera/camera_scanner.py for production use.
 Camera does NOT scan barcodes — badge scanning remains USB-only.
 """
 
+from __future__ import annotations
+
 import os
 import time
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, TYPE_CHECKING
 
-import cv2
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
+
+# cv2 and numpy are late-imported by the manager before this module is loaded,
+# but we also guard here so the module can be imported for inspection without
+# hard-failing when the deps are absent.
+try:
+    import cv2
+    import numpy
+except ImportError:
+    cv2 = None  # type: ignore[assignment]
+    numpy = None  # type: ignore[assignment]
 
 
 class ProximityDetector:
