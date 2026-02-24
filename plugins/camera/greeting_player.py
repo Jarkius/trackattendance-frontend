@@ -16,10 +16,18 @@ from typing import Optional
 LOGGER = logging.getLogger(__name__)
 
 def _greetings_dir() -> Path:
-    """Resolve greetings directory — next to exe (frozen) or next to this script (dev)."""
+    """Resolve greetings directory with fallback chain.
+
+    Frozen exe: greetings/ next to .exe (override) → bundled in _MEIPASS (fallback)
+    Dev mode:   plugins/camera/greetings/ (as-is)
+    """
     if getattr(sys, 'frozen', False):
-        # Next to .exe so users can drop in custom mp3s
-        return Path(sys.executable).parent / "greetings"
+        # Check next to .exe first (user can drop custom mp3s here)
+        exe_dir = Path(sys.executable).parent / "greetings"
+        if exe_dir.is_dir() and any(exe_dir.glob("*.mp3")):
+            return exe_dir
+        # Fall back to bundled greetings inside exe
+        return Path(sys._MEIPASS) / "plugins" / "camera" / "greetings"
     return Path(__file__).resolve().parent / "greetings"
 
 GREETINGS_DIR = _greetings_dir()

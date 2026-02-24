@@ -15,6 +15,7 @@ a = Analysis(
         ('web', 'web'),
         ('assets/voices', 'assets/voices'),
         ('plugins/camera/models', 'plugins/camera/models'),
+        ('plugins/camera/greetings', 'plugins/camera/greetings'),
     ] + certifi_datas,
     hiddenimports=['certifi', 'truststore'],
     hookspath=[],
