@@ -95,12 +95,16 @@ class ProximityGreetingManager:
                 LOGGER.warning("[Proximity] Greeting player init failed: %s", exc)
                 self._greeting_player = None
 
-            # Initialize camera overlay (floating preview, debug only)
-            if self._show_overlay and self._parent_window is not None:
+            # Initialize camera overlay:
+            #   show_overlay=True  → live camera preview (debug)
+            #   show_overlay=False → small camera icon (production)
+            if self._parent_window is not None:
                 try:
                     from plugins.camera.camera_overlay import CameraOverlay
-                    self._overlay = CameraOverlay(self._parent_window)
+                    mode = "preview" if self._show_overlay else "icon"
+                    self._overlay = CameraOverlay(self._parent_window, mode=mode)
                     self._overlay.show_overlay()
+                    LOGGER.info("[Proximity] Overlay mode: %s", mode)
                 except Exception as exc:
                     LOGGER.warning("[Proximity] Camera overlay init failed: %s", exc)
                     self._overlay = None
