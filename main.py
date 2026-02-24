@@ -820,7 +820,7 @@ def main() -> None:
             try:
                 from plugins.camera.proximity_manager import ProximityGreetingManager
                 proximity_manager = ProximityGreetingManager(
-                    voice_player=voice_player,
+                    parent_window=window,
                     camera_id=config.CAMERA_DEVICE_ID,
                     cooldown=config.CAMERA_GREETING_COOLDOWN_SECONDS,
                     resolution=(config.CAMERA_RESOLUTION_WIDTH, config.CAMERA_RESOLUTION_HEIGHT),

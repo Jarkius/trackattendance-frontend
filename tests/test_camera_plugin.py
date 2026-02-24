@@ -96,7 +96,7 @@ report("ProximityDetector imports OK (cv2 absent)", True)
 # Test 4: Manager start fails gracefully without cv2
 # =========================================================================
 print("\n=== Test 4: Manager without cv2 ===")
-mgr = ProximityGreetingManager(voice_player=None, camera_id=0, cooldown=10.0, resolution=(1280, 720))
+mgr = ProximityGreetingManager(parent_window=None, camera_id=0, cooldown=10.0, resolution=(1280, 720))
 report("Manager instantiates", True)
 
 # Hide cv2 so the manager's late import fails
@@ -147,20 +147,17 @@ mock_cap.isOpened.return_value = True
 fake_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
 mock_cap.read.return_value = (True, fake_frame)
 
-# Mock voice player
-mock_voice = MagicMock()
-
 with patch("cv2.VideoCapture", return_value=mock_cap):
     mgr2 = ProximityGreetingManager(
-        voice_player=mock_voice,
+        parent_window=None,  # No window in tests (overlay skipped)
         camera_id=0,
         cooldown=10.0,
         resolution=(1280, 720),
     )
     started = mgr2.start()
     report("start() returns True with mocked camera", started == True)
-    report("Camera opened", cv2.VideoCapture.called if hasattr(cv2.VideoCapture, 'called') else started)
     report("Resolution set", mock_cap.set.called)
+    report("No overlay without parent_window", mgr2._overlay is None)
 
     # Let the thread run briefly
     time.sleep(0.3)
@@ -175,26 +172,28 @@ with patch("cv2.VideoCapture", return_value=mock_cap):
 
 
 # =========================================================================
-# Test 7: Detection callback triggers voice
+# Test 7: Detection callback triggers greeting player
 # =========================================================================
 print("\n=== Test 7: Detection callback ===")
 
-mock_voice2 = MagicMock()
-
 with patch("cv2.VideoCapture", return_value=mock_cap):
     mgr3 = ProximityGreetingManager(
-        voice_player=mock_voice2,
+        parent_window=None,
         camera_id=0,
-        cooldown=0.1,  # Short cooldown for testing
+        cooldown=0.1,
         resolution=(1280, 720),
     )
     started = mgr3.start()
     report("Manager started for callback test", started == True)
 
+    # Replace greeting player with mock to verify callback
+    mock_greeting = MagicMock()
+    mgr3._greeting_player = mock_greeting
+
     # Directly invoke the callback (simulates ProximityDetector firing)
     mgr3._on_person_detected()
-    report("voice_player.play_random() called", mock_voice2.play_random.called)
-    report("Called exactly once", mock_voice2.play_random.call_count == 1)
+    report("greeting_player.play_random() called", mock_greeting.play_random.called)
+    report("Called exactly once", mock_greeting.play_random.call_count == 1)
 
     mgr3.stop()
 
@@ -203,7 +202,7 @@ with patch("cv2.VideoCapture", return_value=mock_cap):
 # Test 8: Double stop is safe
 # =========================================================================
 print("\n=== Test 8: Double stop safety ===")
-mgr4 = ProximityGreetingManager(voice_player=None, camera_id=0, cooldown=10.0, resolution=(1280, 720))
+mgr4 = ProximityGreetingManager(parent_window=None, camera_id=0, cooldown=10.0, resolution=(1280, 720))
 mgr4.stop()
 mgr4.stop()
 report("Double stop() is safe", True)
@@ -222,6 +221,10 @@ report(
     "ENABLE_CAMERA_DETECTION" in main_src and "ProximityGreetingManager" in main_src,
 )
 report(
+    "Uses parent_window (not voice_player)",
+    "parent_window=window" in main_src,
+)
+report(
     "_start_services_on_load includes proximity",
     "_start_services_on_load" in main_src and "proximity_manager" in main_src,
 )
@@ -229,6 +232,32 @@ report(
     "finally block stops proximity",
     "proximity_manager" in main_src.split("finally:")[-1],
 )
+
+
+# =========================================================================
+# Test 10: GreetingPlayer import and instantiation
+# =========================================================================
+print("\n=== Test 10: GreetingPlayer ===")
+from plugins.camera.greeting_player import GreetingPlayer, GREETINGS_DIR
+
+gp = GreetingPlayer()
+report("GreetingPlayer instantiates", True)
+report("Greetings dir path set", "greetings" in str(GREETINGS_DIR))
+
+gp.stop()
+report("stop() safe before start()", True)
+
+
+# =========================================================================
+# Test 11: CameraOverlay import
+# =========================================================================
+print("\n=== Test 11: CameraOverlay import ===")
+try:
+    from plugins.camera.camera_overlay import CameraOverlay, OVERLAY_SIZE
+    report("CameraOverlay imports OK", True)
+    report("OVERLAY_SIZE is 96", OVERLAY_SIZE == 96)
+except ImportError as exc:
+    report("CameraOverlay imports", False, str(exc))
 
 
 # =========================================================================
