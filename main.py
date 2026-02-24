@@ -376,6 +376,7 @@ class Api(QObject):
         self._auto_sync_manager = auto_sync_manager
         self._dashboard_service = dashboard_service
         self._voice_player = voice_player
+        self._proximity_manager = None  # set after construction if camera plugin loaded
         self._window = None
         self._connection_check_inflight = False
         self._last_connection_result: Dict[str, object] = {
@@ -428,6 +429,10 @@ class Api(QObject):
         # Notify auto-sync manager that a scan occurred
         if self._auto_sync_manager:
             self._auto_sync_manager.on_scan()
+
+        # Suppress camera greeting while queue is active
+        if self._proximity_manager:
+            self._proximity_manager.notify_scan_activity()
 
         return result
 
@@ -825,8 +830,13 @@ def main() -> None:
                     cooldown=config.CAMERA_GREETING_COOLDOWN_SECONDS,
                     resolution=(config.CAMERA_RESOLUTION_WIDTH, config.CAMERA_RESOLUTION_HEIGHT),
                     greeting_volume=config.VOICE_VOLUME,
+                    scan_busy_seconds=config.CAMERA_SCAN_BUSY_SECONDS,
+                    voice_player=voice_player,
                 )
                 LOGGER.info("[Proximity] Plugin loaded")
+                # Wire proximity manager into the API so scans suppress greetings
+                if isinstance(api_object, Api):
+                    api_object._proximity_manager = proximity_manager
             except Exception as exc:
                 LOGGER.warning("[Proximity] Plugin load failed: %s. App continues normally.", exc)
         else:

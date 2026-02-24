@@ -294,6 +294,10 @@ CAMERA_DEVICE_ID = _safe_int("CAMERA_DEVICE_ID", 0, min_val=0, max_val=10)
 # Seconds between proximity greetings (prevents repeated greetings for same person)
 CAMERA_GREETING_COOLDOWN_SECONDS = _safe_float("CAMERA_GREETING_COOLDOWN_SECONDS", 10.0, min_val=2.0, max_val=120.0)
 
+# Seconds to suppress greetings after a badge scan (quiet during busy queues).
+# After the last scan, the kiosk waits this long before greeting the next person.
+CAMERA_SCAN_BUSY_SECONDS = _safe_float("CAMERA_SCAN_BUSY_SECONDS", 30.0, min_val=5.0, max_val=300.0)
+
 # Camera resolution
 CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320, max_val=4096)
 CAMERA_RESOLUTION_HEIGHT = _safe_int("CAMERA_RESOLUTION_HEIGHT", 720, min_val=240, max_val=2160)

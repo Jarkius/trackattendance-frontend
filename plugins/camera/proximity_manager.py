@@ -26,12 +26,16 @@ class ProximityGreetingManager:
         cooldown: float = 10.0,
         resolution: Tuple[int, int] = (1280, 720),
         greeting_volume: float = 1.0,
+        scan_busy_seconds: float = 30.0,
+        voice_player=None,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
         self._cooldown = cooldown
         self._resolution = resolution
         self._greeting_volume = greeting_volume
+        self._scan_busy_seconds = scan_busy_seconds
+        self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
 
         self._cap = None  # cv2.VideoCapture
         self._detector = None  # ProximityDetector
@@ -39,6 +43,7 @@ class ProximityGreetingManager:
         self._overlay = None  # CameraOverlay
         self._thread: Optional[threading.Thread] = None
         self._running = False
+        self._busy_until: float = 0.0  # suppress greetings while queue is active
 
     def start(self) -> bool:
         """Late-import deps, open camera, start daemon thread. Returns False on failure."""
@@ -106,8 +111,33 @@ class ProximityGreetingManager:
                 self._cap = None
             return False
 
+    def notify_scan_activity(self) -> None:
+        """Called when a badge is scanned. Suppresses greetings while queue is active."""
+        self._busy_until = time.time() + self._scan_busy_seconds
+        LOGGER.debug("[Proximity] Scan activity — greetings suppressed for %.0fs", self._scan_busy_seconds)
+
+    def _is_scan_voice_playing(self) -> bool:
+        """Check if the main app's scan voice is currently playing."""
+        if self._voice_player is None:
+            return False
+        try:
+            from PyQt6.QtMultimedia import QMediaPlayer
+            return self._voice_player._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        except Exception:
+            return False
+
     def _on_person_detected(self) -> None:
-        """Callback from ProximityDetector — play greeting."""
+        """Callback from ProximityDetector — play greeting (unless busy or voice playing)."""
+        # Suppress greeting while scans are happening (queue is active)
+        if time.time() < self._busy_until:
+            LOGGER.debug("[Proximity] Person detected but suppressed (queue active)")
+            return
+
+        # Don't overlap with scan "thank you" voice
+        if self._is_scan_voice_playing():
+            LOGGER.debug("[Proximity] Person detected but scan voice is playing, skipping")
+            return
+
         method = self._detector.detection_method if self._detector else "unknown"
         LOGGER.info("[Proximity] Person detected (%s) — playing greeting", method)
         if self._greeting_player:

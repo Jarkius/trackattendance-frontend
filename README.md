@@ -30,12 +30,14 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Fully offline — runs without network; syncs when connection returns
 - Admin panel (PIN-protected) to clear cloud + local database before events
 - Welcome animation and configurable party/event background
+- **[Experimental]** Camera proximity greeting — detects approaching people and plays a bilingual welcome audio (disabled by default)
 
 ## 💻 Requirements
 
 - Windows 10/11 (packaged build target)
 - Python 3.11+ (PyQt6 + WebEngine)
 - Keyboard-emulating barcode scanner (manual typing + Enter works for testing)
+- **Camera plugin (optional)**: USB/built-in webcam, `opencv-python`, `mediapipe`, `edge-tts`
 
 ## 🚀 Setup
 
@@ -129,6 +131,7 @@ database.py          SQLite schema, queries, sync_status tracking
 sync.py              Cloud sync client (batch upload, idempotency, retry)
 config.py            All configuration with .env override
 web/                 Embedded kiosk UI (HTML/CSS/JS)
+plugins/camera/      Proximity detection plugin (opt-in, disabled by default)
 scripts/             Utility scripts (migration, debug, reset)
 tests/               Test and simulation scripts
 docs/                Technical documentation
@@ -146,6 +149,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v1.5.0** — Camera proximity greeting plugin (experimental, opt-in), bilingual audio greetings, voice volume control
 - **v1.4.0** — Welcome animation, party background, duplicate silent fix
 - **v1.3.0** — Dashboard BU breakdown, duplicate badge detection
 - **v1.2.0** — Auto-sync with idle detection
@@ -166,7 +170,12 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `SHOW_FULL_SCREEN` | `True` | Fullscreen kiosk mode |
 | `SHOW_PARTY_BACKGROUND` | `True` | Festive background image |
 | `VOICE_ENABLED` | `True` | Voice confirmation on scan |
+| `VOICE_VOLUME` | `1.0` | Playback volume (`0.0`–`1.0`) |
 | `ADMIN_PIN` | *(empty)* | 4-6 digit PIN to enable admin panel (leave empty to disable) |
+| `ENABLE_CAMERA_DETECTION` | `False` | Enable camera proximity greeting plugin |
+| `CAMERA_DEVICE_ID` | `0` | Camera index (`0` = default webcam) |
+| `CAMERA_GREETING_COOLDOWN_SECONDS` | `10` | Seconds between proximity greetings |
+| `CAMERA_SCAN_BUSY_SECONDS` | `30` | Seconds to suppress greetings after a badge scan |
 
 See `.env.example` for the full list.
 
@@ -179,6 +188,8 @@ See `.env.example` for the full list.
 **Badge not matching despite being in Excel**: Stale database. Delete `data/database.db` and restart — the app reimports `employee.xlsx` on startup with hash-based change detection.
 
 **Scans stuck as "failed"**: Run `python scripts/reset_failed_scans.py` to reset them back to `pending` for retry.
+
+**Camera greeting fires too often in queues**: Greetings are automatically suppressed while badge scans are happening (controlled by `CAMERA_SCAN_BUSY_SECONDS`, default 30s). The greeting only plays when the kiosk has been idle — no scans for 30 seconds and the scan "thank you" voice has finished. Increase `CAMERA_SCAN_BUSY_SECONDS` for busier events, or disable with `ENABLE_CAMERA_DETECTION=False`.
 
 ## 🔒 Data Privacy
 
