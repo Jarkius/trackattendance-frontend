@@ -174,6 +174,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `ADMIN_PIN` | *(empty)* | 4-6 digit PIN to enable admin panel (leave empty to disable) |
 | `ENABLE_CAMERA_DETECTION` | `False` | Enable camera proximity greeting plugin |
 | `CAMERA_DEVICE_ID` | `0` | Camera index (`0` = default webcam) |
+| `CAMERA_SHOW_OVERLAY` | `True` | Show floating camera preview (set `False` for production) |
 | `CAMERA_GREETING_COOLDOWN_SECONDS` | `10` | Seconds between proximity greetings |
 | `CAMERA_SCAN_BUSY_SECONDS` | `30` | Seconds to suppress greetings after a badge scan |
 | `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `3` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |

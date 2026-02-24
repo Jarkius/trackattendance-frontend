@@ -29,6 +29,7 @@ class ProximityGreetingManager:
         scan_busy_seconds: float = 30.0,
         absence_threshold: float = 3.0,
         confirm_frames: int = 3,
+        show_overlay: bool = True,
         voice_player=None,
     ):
         self._parent_window = parent_window
@@ -39,6 +40,7 @@ class ProximityGreetingManager:
         self._scan_busy_seconds = scan_busy_seconds
         self._absence_threshold = absence_threshold
         self._confirm_frames = confirm_frames
+        self._show_overlay = show_overlay
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
 
         self._cap = None  # cv2.VideoCapture
@@ -93,8 +95,8 @@ class ProximityGreetingManager:
                 LOGGER.warning("[Proximity] Greeting player init failed: %s", exc)
                 self._greeting_player = None
 
-            # Initialize camera overlay (floating preview)
-            if self._parent_window is not None:
+            # Initialize camera overlay (floating preview, debug only)
+            if self._show_overlay and self._parent_window is not None:
                 try:
                     from plugins.camera.camera_overlay import CameraOverlay
                     self._overlay = CameraOverlay(self._parent_window)

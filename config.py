@@ -302,6 +302,10 @@ CAMERA_SCAN_BUSY_SECONDS = _safe_float("CAMERA_SCAN_BUSY_SECONDS", 30.0, min_val
 # A new greeting only plays when someone arrives after the kiosk was empty.
 CAMERA_ABSENCE_THRESHOLD_SECONDS = _safe_float("CAMERA_ABSENCE_THRESHOLD_SECONDS", 3.0, min_val=1.0, max_val=30.0)
 
+# Show the small floating camera preview overlay (for debugging).
+# Set to False to run detection without any visible camera UI.
+CAMERA_SHOW_OVERLAY = os.getenv("CAMERA_SHOW_OVERLAY", "True").lower() in ("true", "1", "yes")
+
 # Consecutive detected frames required before greeting fires.
 # Prevents false positives from shadows, posters, or brief flickers.
 # At ~15 FPS with skip_frames=2, 3 confirmations ≈ 0.6 seconds of real presence.
