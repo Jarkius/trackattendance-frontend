@@ -16,9 +16,13 @@ from typing import Optional
 LOGGER = logging.getLogger(__name__)
 
 # Greeting definitions: (filename, text, voice)
+# Greeting definitions: (filename, text, voice)
+# - text+voice entries are generated via edge-tts if missing
+# - entries with text=None are pre-recorded files (skipped by generator)
 GREETINGS = [
     ("greeting_th.mp3", "สวัสดีค่ะ กรุณาสแกนบัตรด้วยค่ะ", "th-TH-PremwadeeNeural"),
     ("greeting_en.mp3", "Welcome! Please scan your badge.", "en-US-JennyNeural"),
+    ("greeting_en_th.mp3", None, None),  # Pre-recorded bilingual greeting
 ]
 
 GREETINGS_DIR = Path(__file__).resolve().parent / "greetings"
@@ -52,14 +56,17 @@ class GreetingPlayer:
         # Ensure greetings dir exists
         GREETINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Check which MP3s already exist
+        # Check which audio files already exist
         missing = []
         for filename, text, voice in GREETINGS:
-            mp3_path = GREETINGS_DIR / filename
-            if mp3_path.exists() and mp3_path.stat().st_size > 0:
-                self._greeting_files.append(mp3_path)
-            else:
+            audio_path = GREETINGS_DIR / filename
+            if audio_path.exists() and audio_path.stat().st_size > 0:
+                self._greeting_files.append(audio_path)
+            elif text is not None:
+                # Only queue for generation if it has text+voice (not pre-recorded)
                 missing.append((filename, text, voice))
+            else:
+                LOGGER.warning("[Greeting] Pre-recorded file missing: %s", filename)
 
         # Generate missing greetings via edge-tts
         if missing:
