@@ -812,6 +812,25 @@ def main() -> None:
     if isinstance(api_object, Api):
         api_object._auto_sync_manager = auto_sync_manager
 
+    # Load camera proximity plugin (optional)
+    proximity_manager = None
+    if config.ENABLE_CAMERA_DETECTION:
+        _plugins_camera = Path(__file__).resolve().parent / "plugins" / "camera"
+        if _plugins_camera.is_dir():
+            try:
+                from plugins.camera.proximity_manager import ProximityGreetingManager
+                proximity_manager = ProximityGreetingManager(
+                    voice_player=voice_player,
+                    camera_id=config.CAMERA_DEVICE_ID,
+                    cooldown=config.CAMERA_GREETING_COOLDOWN_SECONDS,
+                    resolution=(config.CAMERA_RESOLUTION_WIDTH, config.CAMERA_RESOLUTION_HEIGHT),
+                )
+                LOGGER.info("[Proximity] Plugin loaded")
+            except Exception as exc:
+                LOGGER.warning("[Proximity] Plugin load failed: %s. App continues normally.", exc)
+        else:
+            LOGGER.warning("[Proximity] ENABLE_CAMERA_DETECTION=true but plugins/camera/ folder not found")
+
     if roster_missing:
         sample_path_display = str((example_workbook_path or service.ensure_example_employee_workbook()).resolve())
         QMessageBox.warning(
@@ -857,17 +876,24 @@ def main() -> None:
 
     view.setUrl(QUrl.fromLocalFile(str(UI_INDEX_HTML)))
 
-    # Start auto-sync after UI loads
-    def _start_auto_sync_on_load(ok: bool) -> None:
-        if ok and auto_sync_manager:
-            print("[Main] Starting auto-sync manager...")
-            auto_sync_manager.start()
+    # Start services after UI loads
+    def _start_services_on_load(ok: bool) -> None:
+        if ok:
+            if auto_sync_manager:
+                print("[Main] Starting auto-sync manager...")
+                auto_sync_manager.start()
+            if proximity_manager:
+                started = proximity_manager.start()
+                if started:
+                    LOGGER.info("[Proximity] Greeting active on camera %d", config.CAMERA_DEVICE_ID)
+                else:
+                    LOGGER.warning("[Proximity] Camera not available. App continues normally.")
         try:
-            view.loadFinished.disconnect(_start_auto_sync_on_load)
+            view.loadFinished.disconnect(_start_services_on_load)
         except TypeError:
             pass
 
-    view.loadFinished.connect(_start_auto_sync_on_load)
+    view.loadFinished.connect(_start_services_on_load)
 
     api_object = getattr(window, '_api', None)
     if isinstance(api_object, Api):
@@ -1048,6 +1074,8 @@ def main() -> None:
     try:
         sys.exit(app.exec())
     finally:
+        if proximity_manager:
+            proximity_manager.stop()
         service.close()
 
 

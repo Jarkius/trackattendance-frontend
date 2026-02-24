@@ -280,6 +280,26 @@ VOICE_VOLUME = _safe_float("VOICE_VOLUME", 1.0, min_val=0.0, max_val=1.0)
 
 
 # =============================================================================
+# Camera Proximity Detection Plugin (Optional)
+# =============================================================================
+
+# Enable camera-based proximity greeting. When a person is detected near the
+# kiosk, plays a voice greeting prompting them to scan their badge.
+# Camera does NOT scan barcodes — badge scanning remains USB-only.
+ENABLE_CAMERA_DETECTION = os.getenv("ENABLE_CAMERA_DETECTION", "False").lower() in ("true", "1", "yes")
+
+# Camera device index (0 = built-in laptop camera)
+CAMERA_DEVICE_ID = _safe_int("CAMERA_DEVICE_ID", 0, min_val=0, max_val=10)
+
+# Seconds between proximity greetings (prevents repeated greetings for same person)
+CAMERA_GREETING_COOLDOWN_SECONDS = _safe_float("CAMERA_GREETING_COOLDOWN_SECONDS", 10.0, min_val=2.0, max_val=120.0)
+
+# Camera resolution
+CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320, max_val=4096)
+CAMERA_RESOLUTION_HEIGHT = _safe_int("CAMERA_RESOLUTION_HEIGHT", 720, min_val=240, max_val=2160)
+
+
+# =============================================================================
 # Admin Configuration
 # =============================================================================
 
