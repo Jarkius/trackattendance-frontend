@@ -131,7 +131,11 @@ class ProximityGreetingManager:
         LOGGER.debug("[Proximity] Scan activity — greetings suppressed for %.0fs", self._scan_busy_seconds)
 
     def notify_voice_playing(self) -> None:
-        """Called from main thread when scan voice starts. Thread-safe flag."""
+        """Called from main thread when scan voice starts. Thread-safe flag.
+
+        Deprecated in favor of checking voice_player.is_playing() directly.
+        Kept as fallback when no voice_player reference is available.
+        """
         self._voice_playing_until = time.time() + 3.0  # typical voice clip duration
 
     def _on_person_detected(self) -> None:
@@ -145,8 +149,14 @@ class ProximityGreetingManager:
             LOGGER.debug("[Proximity] Person detected but suppressed (queue active)")
             return
 
-        # Don't overlap with scan "thank you" voice (time-based, no Qt calls)
-        if time.time() < getattr(self, '_voice_playing_until', 0):
+        # Don't overlap with scan "thank you" voice
+        # Prefer real-time check via is_playing(); fall back to time-based estimate
+        voice_busy = False
+        if self._voice_player is not None and hasattr(self._voice_player, 'is_playing'):
+            voice_busy = self._voice_player.is_playing()
+        else:
+            voice_busy = time.time() < getattr(self, '_voice_playing_until', 0)
+        if voice_busy:
             LOGGER.debug("[Proximity] Person detected but scan voice is playing, skipping")
             return
 
