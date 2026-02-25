@@ -22,7 +22,7 @@ body, html {
 
 /* Party/Event background - enabled via SHOW_PARTY_BACKGROUND config */
 body.party-bg {
-    background: url('../images/party-bg.png') center center / cover no-repeat fixed;
+    background: url('../images/party-bg.jpg') center center / cover no-repeat fixed;
 }
 
 /* Main page header - use child combinator to avoid affecting dashboard header */
