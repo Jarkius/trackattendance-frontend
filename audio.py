@@ -5,7 +5,7 @@ import random
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QTimer, QUrl
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 LOGGER = logging.getLogger(__name__)
@@ -28,7 +28,8 @@ class VoicePlayer:
         self._player.errorOccurred.connect(self._on_error)
 
         self._load_voice_files()
-        self._prewarm()
+        # Defer pre-warm to avoid blocking startup (~300ms saved)
+        QTimer.singleShot(500, self._prewarm)
 
         LOGGER.info(
             "VoicePlayer initialized: enabled=%s, volume=%.2f, files=%d",

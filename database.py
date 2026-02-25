@@ -107,18 +107,24 @@ class DatabaseManager:
         cursor = self._connection.execute("SELECT COUNT(1) FROM employees")
         return cursor.fetchone()[0] > 0
 
-    def get_roster_hash(self) -> Optional[str]:
-        cursor = self._connection.execute("SELECT value FROM roster_meta WHERE key = 'file_hash'")
+    def get_roster_meta(self, key: str) -> Optional[str]:
+        cursor = self._connection.execute("SELECT value FROM roster_meta WHERE key = ?", (key,))
         row = cursor.fetchone()
         return row[0] if row else None
 
-    def set_roster_hash(self, file_hash: str) -> None:
+    def set_roster_meta(self, key: str, value: str) -> None:
         with self._connection:
             self._connection.execute(
-                "INSERT INTO roster_meta(key, value) VALUES('file_hash', ?) "
+                "INSERT INTO roster_meta(key, value) VALUES(?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (file_hash,),
+                (key, value),
             )
+
+    def get_roster_hash(self) -> Optional[str]:
+        return self.get_roster_meta("file_hash")
+
+    def set_roster_hash(self, file_hash: str) -> None:
+        self.set_roster_meta("file_hash", file_hash)
 
     def clear_employees(self) -> None:
         """Remove all employees to prepare for reimport."""

@@ -95,12 +95,22 @@ class AttendanceService:
             self.ensure_example_employee_workbook()
             return
 
-        # Check if roster file has changed since last import
-        current_hash = self._hash_file(self._employee_workbook_path)
+        # Fast path: skip SHA256 if file modification time hasn't changed
+        current_mtime = str(self._employee_workbook_path.stat().st_mtime)
+        stored_mtime = self._db.get_roster_meta("file_mtime")
         stored_hash = self._db.get_roster_hash()
 
+        if stored_mtime == current_mtime and stored_hash and self._db.employees_loaded():
+            LOGGER.info("Roster unchanged (mtime match), skipping reimport")
+            return
+
+        # Mtime changed (or first run) — compute hash to confirm
+        current_hash = self._hash_file(self._employee_workbook_path)
+
         if stored_hash == current_hash and self._db.employees_loaded():
-            LOGGER.info("Roster unchanged (hash match), skipping reimport")
+            # File was touched but content unchanged — update mtime cache
+            self._db.set_roster_meta("file_mtime", current_mtime)
+            LOGGER.info("Roster unchanged (hash match, mtime updated), skipping reimport")
             return
 
         if stored_hash and stored_hash != current_hash:
@@ -162,6 +172,7 @@ class AttendanceService:
                 self._db.clear_employees()
                 inserted = self._db.bulk_insert_employees(employees)
                 self._db.set_roster_hash(current_hash)
+                self._db.set_roster_meta("file_mtime", current_mtime)
                 LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
         finally:
             workbook.close()
