@@ -1088,9 +1088,31 @@ def main() -> None:
 
     window.closeEvent = _handle_close_event
 
+    # Prevent Windows screen lock / display sleep while kiosk is running
+    _keep_awake_set = False
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ES_CONTINUOUS = 0x80000000
+            ES_SYSTEM_REQUIRED = 0x00000001
+            ES_DISPLAY_REQUIRED = 0x00000002
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+            )
+            _keep_awake_set = True
+            LOGGER.info("Screen lock prevention enabled (SetThreadExecutionState)")
+        except Exception as exc:
+            LOGGER.warning("Failed to prevent screen lock: %s", exc)
+
     try:
         sys.exit(app.exec())
     finally:
+        if _keep_awake_set:
+            try:
+                ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+                LOGGER.info("Screen lock prevention released")
+            except Exception:
+                pass
         if proximity_manager:
             proximity_manager.stop()
         service.close()

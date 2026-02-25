@@ -68,19 +68,20 @@ class CameraOverlay(QLabel):
                 "}"
             )
             self._current_state = "empty"
-            self._draw_icon(QColor(76, 175, 80))  # green = ready
+            body, dot = self._STATE_COLORS["empty"]
+            self._draw_icon(body, dot)  # green = ready
 
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         parent_window.installEventFilter(self)
 
-    # State → dot color mapping
+    # State → (body color, dot color) mapping
     _STATE_COLORS = {
-        "empty": QColor(76, 175, 80),    # green — ready
-        "present": QColor(255, 167, 38),  # amber — person detected
+        "empty": (QColor(76, 175, 80, 200), QColor(76, 175, 80)),      # green — ready
+        "present": (QColor(244, 67, 54, 200), QColor(244, 67, 54)),     # red — person detected
     }
 
-    def _draw_icon(self, dot_color: QColor) -> None:
-        """Draw camera icon with the given status dot color."""
+    def _draw_icon(self, body_color: QColor, dot_color: QColor) -> None:
+        """Draw camera icon with tinted body and status dot."""
         from PyQt6.QtCore import QRectF
 
         pixmap = QPixmap(self._size, self._size)
@@ -89,20 +90,20 @@ class CameraOverlay(QLabel):
         p = QPainter(pixmap)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Camera body (rounded rect)
+        # Camera body (rounded rect) — tinted by state
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(255, 255, 255, 180))
+        p.setBrush(body_color)
         body = QRectF(4, 10, 20, 14)
         p.drawRoundedRect(body, 2, 2)
 
         # Camera lens (circle)
         p.setBrush(QColor(50, 50, 50))
         p.drawEllipse(QRectF(9, 12, 10, 10))
-        p.setBrush(QColor(255, 255, 255, 180))
+        p.setBrush(body_color)
         p.drawEllipse(QRectF(11, 14, 6, 6))
 
-        # Flash/viewfinder bump
-        p.setBrush(QColor(255, 255, 255, 180))
+        # Flash/viewfinder bump — tinted by state
+        p.setBrush(body_color)
         p.drawRect(QRect(8, 7, 8, 4))
 
         # Status dot — bottom-right corner
@@ -135,8 +136,8 @@ class CameraOverlay(QLabel):
         if state is None or state == self._current_state:
             return
         self._current_state = state
-        dot_color = self._STATE_COLORS.get(state, self._STATE_COLORS["empty"])
-        self._draw_icon(dot_color)
+        body_color, dot_color = self._STATE_COLORS.get(state, self._STATE_COLORS["empty"])
+        self._draw_icon(body_color, dot_color)
         self._pulse()
 
     def _pulse(self) -> None:
