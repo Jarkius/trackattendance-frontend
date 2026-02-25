@@ -116,6 +116,9 @@ python tests/test_production_sync.py
 python tests/test_batch_sync.py
 python tests/test_connection_scenarios.py
 
+# Camera proximity detector (unit tests, no hardware needed)
+python tests/test_proximity_detector.py
+
 # Utilities
 python scripts/reset_failed_scans.py        # Reset failed scans to pending
 python scripts/debug_sync_performance.py     # Profile sync bottlenecks
@@ -149,7 +152,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
-- **v1.5.0** — Camera proximity greeting plugin (experimental, opt-in), bilingual audio greetings, voice volume control
+- **v1.5.0** — Camera proximity greeting plugin (experimental, opt-in), bilingual audio greetings, presence-aware state machine with hysteresis, VoicePlayer.is_playing(), 13 unit tests, voice volume control
 - **v1.4.0** — Welcome animation, party background, duplicate silent fix
 - **v1.3.0** — Dashboard BU breakdown, duplicate badge detection
 - **v1.2.0** — Auto-sync with idle detection
