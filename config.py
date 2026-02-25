@@ -291,7 +291,8 @@ ENABLE_CAMERA_DETECTION = os.getenv("ENABLE_CAMERA_DETECTION", "False").lower() 
 # Camera device index (0 = built-in laptop camera)
 CAMERA_DEVICE_ID = _safe_int("CAMERA_DEVICE_ID", 0, min_val=0, max_val=10)
 
-# Seconds between proximity greetings (prevents repeated greetings for same person)
+# Minimum seconds between greetings. If someone leaves and returns within this
+# window, the greeting is suppressed (prevents "revolving door" repeats).
 CAMERA_GREETING_COOLDOWN_SECONDS = _safe_float("CAMERA_GREETING_COOLDOWN_SECONDS", 10.0, min_val=2.0, max_val=120.0)
 
 # Seconds to suppress greetings after a badge scan (quiet during busy queues).
