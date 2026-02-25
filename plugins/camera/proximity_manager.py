@@ -171,6 +171,7 @@ class ProximityGreetingManager:
 
         overlay_interval = 0.2  # ~5 FPS for preview (saves CPU + avoids GC pressure)
         last_overlay_time = 0.0
+        prev_state = "empty"
 
         while self._running:
             if self._cap is None or not self._cap.isOpened():
@@ -186,6 +187,13 @@ class ProximityGreetingManager:
                 self._detector.process_frame(frame)
             except Exception as exc:
                 LOGGER.error("[Proximity] Frame processing error: %s", exc)
+
+            # Notify overlay of state changes (icon mode only)
+            cur_state = self._detector.presence_state
+            if cur_state != prev_state:
+                prev_state = cur_state
+                if self._overlay is not None:
+                    self._overlay.notify_state(cur_state)
 
             # Feed frame to overlay at ~5 FPS (throttled to reduce GC pressure)
             now = time.time()

@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QEasingCurve, pyqtSlot
 from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor
 from PyQt6.QtWidgets import QLabel, QMainWindow
 
@@ -67,14 +67,21 @@ class CameraOverlay(QLabel):
                 "  border-radius: 6px;"
                 "}"
             )
-            self._set_camera_icon()
+            self._current_state = "empty"
+            self._draw_icon(QColor(76, 175, 80))  # green = ready
 
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         parent_window.installEventFilter(self)
 
-    def _set_camera_icon(self) -> None:
-        """Draw a simple camera shape with green active dot onto a pixmap."""
-        from PyQt6.QtCore import QRect, QRectF
+    # State → dot color mapping
+    _STATE_COLORS = {
+        "empty": QColor(76, 175, 80),    # green — ready
+        "present": QColor(255, 167, 38),  # amber — person detected
+    }
+
+    def _draw_icon(self, dot_color: QColor) -> None:
+        """Draw camera icon with the given status dot color."""
+        from PyQt6.QtCore import QRectF
 
         pixmap = QPixmap(self._size, self._size)
         pixmap.fill(QColor(0, 0, 0, 0))
@@ -98,14 +105,58 @@ class CameraOverlay(QLabel):
         p.setBrush(QColor(255, 255, 255, 180))
         p.drawRect(QRect(8, 7, 8, 4))
 
-        # Green active dot — bottom-right corner
-        p.setBrush(QColor(76, 175, 80))
+        # Status dot — bottom-right corner
+        p.setBrush(dot_color)
         dot_size = 8
         p.drawEllipse(self._size - dot_size - 3, self._size - dot_size - 3,
                        dot_size, dot_size)
 
         p.end()
         self.setPixmap(pixmap)
+
+    def notify_state(self, state: str) -> None:
+        """Update icon to reflect detection state. Thread-safe (any thread).
+
+        Args:
+            state: "present" (person detected) or "empty" (ready).
+        """
+        if self._mode != "icon":
+            return
+        from PyQt6.QtCore import QMetaObject, Qt as QtConst
+        self._pending_state = state
+        QMetaObject.invokeMethod(
+            self, "_apply_state", QtConst.ConnectionType.QueuedConnection
+        )
+
+    @pyqtSlot()
+    def _apply_state(self) -> None:
+        """Apply pending state change on the main thread."""
+        state = getattr(self, '_pending_state', None)
+        if state is None or state == self._current_state:
+            return
+        self._current_state = state
+        dot_color = self._STATE_COLORS.get(state, self._STATE_COLORS["empty"])
+        self._draw_icon(dot_color)
+        self._pulse()
+
+    def _pulse(self) -> None:
+        """Brief scale-up/down animation on state change."""
+        geo = self.geometry()
+        center = geo.center()
+        expand = 4  # px expansion each side
+
+        expanded = QRect(
+            geo.x() - expand, geo.y() - expand,
+            geo.width() + expand * 2, geo.height() + expand * 2,
+        )
+
+        anim = QPropertyAnimation(self, b"geometry", self)
+        anim.setDuration(200)
+        anim.setStartValue(geo)
+        anim.setKeyValueAt(0.5, expanded)
+        anim.setEndValue(geo)
+        anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
     def show_overlay(self) -> None:
         """Position and show the overlay."""
