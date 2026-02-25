@@ -152,6 +152,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v1.5.1** — Animated camera icon: dot turns amber on detection, reverts to green when person leaves, with pulse animation on state transitions
 - **v1.5.0** — Camera proximity greeting plugin (experimental, opt-in), bilingual audio greetings, presence-aware state machine with hysteresis, VoicePlayer.is_playing(), 13 unit tests, voice volume control
 - **v1.4.0** — Welcome animation, party background, duplicate silent fix
 - **v1.3.0** — Dashboard BU breakdown, duplicate badge detection
