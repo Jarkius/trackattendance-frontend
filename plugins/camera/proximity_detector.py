@@ -45,7 +45,7 @@ class ProximityDetector:
                  skip_frames: int = 2, absence_threshold: float = 3.0,
                  confirm_frames: int = 3):
         self.sensitivity = sensitivity  # for motion fallback
-        self.cooldown = cooldown
+        self.cooldown = cooldown  # minimum seconds between greetings
         self.min_face_confidence = min_face_confidence
         self.min_pose_confidence = min_pose_confidence
         self.skip_frames = skip_frames  # process every Nth frame to save CPU
@@ -207,10 +207,16 @@ class ProximityDetector:
                 if self._consecutive_detections < self.confirm_frames:
                     return False
 
-                # Confirmed: empty → present — greet the newcomer
+                # Confirmed: empty → present
                 self._presence_state = "present"
-                self._last_detection_time = current_time
 
+                # Enforce minimum gap between greetings (cooldown)
+                since_last_greet = current_time - self._last_detection_time
+                if since_last_greet < self.cooldown:
+                    return False
+
+                # Greet the newcomer
+                self._last_detection_time = current_time
                 for callback in self._detection_callbacks:
                     try:
                         callback()
