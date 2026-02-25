@@ -189,7 +189,10 @@ class ProximityGreetingManager:
                 LOGGER.error("[Proximity] Frame processing error: %s", exc)
 
             # Notify overlay of state changes (icon mode only)
-            cur_state = self._detector.presence_state
+            # During scan-busy window, show "empty" (green) regardless of detection
+            # to match actual greeting behavior (suppressed while queue active)
+            raw_state = self._detector.presence_state
+            cur_state = "empty" if time.time() < self._busy_until else raw_state
             if cur_state != prev_state:
                 prev_state = cur_state
                 if self._overlay is not None:
