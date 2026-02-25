@@ -376,6 +376,7 @@ class Api(QObject):
         self._auto_sync_manager = auto_sync_manager
         self._dashboard_service = dashboard_service
         self._voice_player = voice_player
+        self._proximity_manager = None  # set after construction if camera plugin loaded
         self._window = None
         self._connection_check_inflight = False
         self._last_connection_result: Dict[str, object] = {
@@ -424,10 +425,17 @@ class Api(QObject):
         # Play voice confirmation on successful match (skip duplicates)
         if self._voice_player and result.get("matched") and not result.get("is_duplicate"):
             self._voice_player.play_random()
+            # Tell camera plugin that voice is playing (avoids audio overlap)
+            if self._proximity_manager:
+                self._proximity_manager.notify_voice_playing()
 
         # Notify auto-sync manager that a scan occurred
         if self._auto_sync_manager:
             self._auto_sync_manager.on_scan()
+
+        # Suppress camera greeting while queue is active
+        if self._proximity_manager:
+            self._proximity_manager.notify_scan_activity()
 
         return result
 
@@ -812,6 +820,34 @@ def main() -> None:
     if isinstance(api_object, Api):
         api_object._auto_sync_manager = auto_sync_manager
 
+    # Load camera proximity plugin (optional)
+    proximity_manager = None
+    if config.ENABLE_CAMERA_DETECTION:
+        _plugins_camera = Path(__file__).resolve().parent / "plugins" / "camera"
+        if _plugins_camera.is_dir():
+            try:
+                from plugins.camera.proximity_manager import ProximityGreetingManager
+                proximity_manager = ProximityGreetingManager(
+                    parent_window=window,
+                    camera_id=config.CAMERA_DEVICE_ID,
+                    cooldown=config.CAMERA_GREETING_COOLDOWN_SECONDS,
+                    resolution=(config.CAMERA_RESOLUTION_WIDTH, config.CAMERA_RESOLUTION_HEIGHT),
+                    greeting_volume=config.VOICE_VOLUME,
+                    scan_busy_seconds=config.CAMERA_SCAN_BUSY_SECONDS,
+                    absence_threshold=config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
+                    confirm_frames=config.CAMERA_CONFIRM_FRAMES,
+                    show_overlay=config.CAMERA_SHOW_OVERLAY,
+                    voice_player=voice_player,
+                )
+                LOGGER.info("[Proximity] Plugin loaded")
+                # Wire proximity manager into the API so scans suppress greetings
+                if isinstance(api_object, Api):
+                    api_object._proximity_manager = proximity_manager
+            except Exception as exc:
+                LOGGER.warning("[Proximity] Plugin load failed: %s. App continues normally.", exc)
+        else:
+            LOGGER.warning("[Proximity] ENABLE_CAMERA_DETECTION=true but plugins/camera/ folder not found")
+
     if roster_missing:
         sample_path_display = str((example_workbook_path or service.ensure_example_employee_workbook()).resolve())
         QMessageBox.warning(
@@ -857,17 +893,24 @@ def main() -> None:
 
     view.setUrl(QUrl.fromLocalFile(str(UI_INDEX_HTML)))
 
-    # Start auto-sync after UI loads
-    def _start_auto_sync_on_load(ok: bool) -> None:
-        if ok and auto_sync_manager:
-            print("[Main] Starting auto-sync manager...")
-            auto_sync_manager.start()
+    # Start services after UI loads
+    def _start_services_on_load(ok: bool) -> None:
+        if ok:
+            if auto_sync_manager:
+                print("[Main] Starting auto-sync manager...")
+                auto_sync_manager.start()
+            if proximity_manager:
+                started = proximity_manager.start()
+                if started:
+                    LOGGER.info("[Proximity] Greeting active on camera %d", config.CAMERA_DEVICE_ID)
+                else:
+                    LOGGER.warning("[Proximity] Camera not available. App continues normally.")
         try:
-            view.loadFinished.disconnect(_start_auto_sync_on_load)
+            view.loadFinished.disconnect(_start_services_on_load)
         except TypeError:
             pass
 
-    view.loadFinished.connect(_start_auto_sync_on_load)
+    view.loadFinished.connect(_start_services_on_load)
 
     api_object = getattr(window, '_api', None)
     if isinstance(api_object, Api):
@@ -1048,6 +1091,8 @@ def main() -> None:
     try:
         sys.exit(app.exec())
     finally:
+        if proximity_manager:
+            proximity_manager.stop()
         service.close()
 
 

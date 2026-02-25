@@ -78,5 +78,9 @@ class VoicePlayer:
         self._player.play()
         LOGGER.debug("Playing voice: %s", voice_file.name)
 
+    def is_playing(self) -> bool:
+        """Return True if a voice clip is currently playing."""
+        return self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+
     def _on_error(self, error, error_string: str) -> None:
         LOGGER.error("Voice playback error: %s (%s)", error_string, error)

@@ -50,5 +50,8 @@ secrets/
 # Tooling
 tools/
 
+# Camera plugin (runtime-generated greeting audio)
+plugins/camera/greetings/
+
 # macOS
 .DS_Store
