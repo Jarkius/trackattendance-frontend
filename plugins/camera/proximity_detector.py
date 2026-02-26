@@ -294,19 +294,24 @@ class ProximityDetector:
 
                 # Confirmed: empty → present
                 self._presence_state = "present"
+                LOGGER.info("[Proximity] State: empty → present (%s, %d consecutive frames)",
+                            self._last_detection_method, self._consecutive_detections)
 
                 # Enforce minimum gap between greetings (cooldown)
                 since_last_greet = current_time - self._last_detection_time
                 if since_last_greet < self.cooldown:
+                    remaining = self.cooldown - since_last_greet
+                    LOGGER.info("[Proximity] Greeting suppressed by cooldown (%.0fs remaining)", remaining)
                     return False
 
                 # Greet the newcomer
                 self._last_detection_time = current_time
+                LOGGER.info("[Proximity] Greeting fired — next allowed in %.0fs", self.cooldown)
                 for callback in self._detection_callbacks:
                     try:
                         callback()
                     except Exception as e:
-                        print(f"Detection callback error: {e}")
+                        LOGGER.error("[Proximity] Detection callback error: %s", e)
                 return True
             # Already present — stay quiet
             return False
@@ -319,6 +324,7 @@ class ProximityDetector:
             elapsed = current_time - self._last_person_seen_time
             if elapsed >= self.absence_threshold:
                 self._presence_state = "empty"
+                LOGGER.info("[Proximity] State: present → empty (absent %.1fs)", elapsed)
 
         return False
 
