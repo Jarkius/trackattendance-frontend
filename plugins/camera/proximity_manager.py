@@ -31,6 +31,7 @@ class ProximityGreetingManager:
         confirm_frames: int = 3,
         show_overlay: bool = True,
         voice_player=None,
+        min_size_pct: float = 0.20,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
@@ -40,6 +41,7 @@ class ProximityGreetingManager:
         self._scan_busy_seconds = scan_busy_seconds
         self._absence_threshold = absence_threshold
         self._confirm_frames = confirm_frames
+        self._min_size_pct = min_size_pct
         self._show_overlay = show_overlay
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
 
@@ -81,6 +83,7 @@ class ProximityGreetingManager:
                 cooldown=self._cooldown,
                 absence_threshold=self._absence_threshold,
                 confirm_frames=self._confirm_frames,
+                min_size_pct=self._min_size_pct,
             )
             self._detector.add_detection_callback(self._on_person_detected)
 

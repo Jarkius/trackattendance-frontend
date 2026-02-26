@@ -293,7 +293,7 @@ CAMERA_DEVICE_ID = _safe_int("CAMERA_DEVICE_ID", 0, min_val=0, max_val=10)
 
 # Minimum seconds between greetings. If someone leaves and returns within this
 # window, the greeting is suppressed (prevents "revolving door" repeats).
-CAMERA_GREETING_COOLDOWN_SECONDS = _safe_float("CAMERA_GREETING_COOLDOWN_SECONDS", 10.0, min_val=2.0, max_val=120.0)
+CAMERA_GREETING_COOLDOWN_SECONDS = _safe_float("CAMERA_GREETING_COOLDOWN_SECONDS", 60.0, min_val=5.0, max_val=300.0)
 
 # Seconds to suppress greetings after a badge scan (quiet during busy queues).
 # After the last scan, the kiosk waits this long before greeting the next person.
@@ -311,6 +311,11 @@ CAMERA_SHOW_OVERLAY = os.getenv("CAMERA_SHOW_OVERLAY", "True").lower() in ("true
 # Prevents false positives from shadows, posters, or brief flickers.
 # At ~15 FPS with skip_frames=2, 3 confirmations ≈ 0.6 seconds of real presence.
 CAMERA_CONFIRM_FRAMES = _safe_int("CAMERA_CONFIRM_FRAMES", 3, min_val=1, max_val=15)
+
+# Minimum detection size as percentage of frame width.
+# Filters out distant people — only greet those close to the kiosk.
+# 0.20 = face/body must fill at least 20% of the frame (~0.5-1m distance).
+CAMERA_MIN_SIZE_PCT = _safe_float("CAMERA_MIN_SIZE_PCT", 0.20, min_val=0.05, max_val=0.80)
 
 # Camera resolution
 CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320, max_val=4096)

@@ -43,11 +43,12 @@ class ProximityDetector:
     def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0,
                  min_face_confidence: float = 0.5, min_pose_confidence: float = 0.5,
                  skip_frames: int = 2, absence_threshold: float = 3.0,
-                 confirm_frames: int = 3):
+                 confirm_frames: int = 3, min_size_pct: float = 0.20):
         self.sensitivity = sensitivity  # for motion fallback
         self.cooldown = cooldown  # minimum seconds between greetings
         self.min_face_confidence = min_face_confidence
         self.min_pose_confidence = min_pose_confidence
+        self.min_size_pct = min_size_pct  # minimum detection size as fraction of frame
         self.skip_frames = skip_frames  # process every Nth frame to save CPU
         self.absence_threshold = absence_threshold  # seconds with no detection before state → empty
         self.confirm_frames = confirm_frames  # consecutive detections required before greeting
@@ -127,17 +128,26 @@ class ProximityDetector:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
 
+        frame_w = frame.shape[1]
+
         # Try face detection first (faster)
         if self._mp_face:
             face_results = self._mp_face.detect(mp_image)
-            if face_results.detections:
-                return "face"
+            for det in (face_results.detections or []):
+                # Filter by bounding box width relative to frame
+                bbox_w = det.bounding_box.width
+                if bbox_w / frame_w >= self.min_size_pct:
+                    return "face"
 
         # Try pose detection (catches body even without visible face)
         if self._mp_pose:
             pose_results = self._mp_pose.detect(mp_image)
-            if pose_results.pose_landmarks:
-                return "pose"
+            for landmarks in (pose_results.pose_landmarks or []):
+                # Use horizontal spread of landmarks as size proxy
+                xs = [lm.x for lm in landmarks]
+                spread = max(xs) - min(xs)
+                if spread >= self.min_size_pct:
+                    return "pose"
 
         return None
 

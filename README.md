@@ -179,8 +179,9 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `ENABLE_CAMERA_DETECTION` | `False` | Enable camera proximity greeting plugin |
 | `CAMERA_DEVICE_ID` | `0` | Camera index (`0` = default webcam) |
 | `CAMERA_SHOW_OVERLAY` | `True` | Show floating camera preview (set `False` for production) |
-| `CAMERA_GREETING_COOLDOWN_SECONDS` | `10` | Minimum seconds between greetings — suppresses repeat if someone leaves and returns quickly |
+| `CAMERA_GREETING_COOLDOWN_SECONDS` | `60` | Minimum seconds between greetings — prevents re-greeting a standing person when detection flickers |
 | `CAMERA_SCAN_BUSY_SECONDS` | `30` | Seconds to suppress greetings after a badge scan |
+| `CAMERA_MIN_SIZE_PCT` | `0.20` | Minimum detection size as fraction of frame width — filters out distant people |
 | `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `3` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |
 | `CAMERA_CONFIRM_FRAMES` | `3` | Consecutive detected frames required before greeting (prevents false positives) |
 

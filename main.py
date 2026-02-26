@@ -838,6 +838,7 @@ def main() -> None:
                     confirm_frames=config.CAMERA_CONFIRM_FRAMES,
                     show_overlay=config.CAMERA_SHOW_OVERLAY,
                     voice_player=voice_player,
+                    min_size_pct=config.CAMERA_MIN_SIZE_PCT,
                 )
                 LOGGER.info("[Proximity] Plugin loaded")
                 # Wire proximity manager into the API so scans suppress greetings
