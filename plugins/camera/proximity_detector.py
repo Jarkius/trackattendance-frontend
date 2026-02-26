@@ -207,7 +207,7 @@ class ProximityDetector:
         faces = self._haar_cascade.detectMultiScale(
             gray,
             scaleFactor=1.1,
-            minNeighbors=4,
+            minNeighbors=3,
             minSize=(min_px, min_px),
         )
 
