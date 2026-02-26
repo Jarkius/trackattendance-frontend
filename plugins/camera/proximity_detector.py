@@ -8,10 +8,13 @@ Camera does NOT scan barcodes — badge scanning remains USB-only.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
 from typing import Callable, List, Optional, TYPE_CHECKING
+
+LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import numpy as np
@@ -106,11 +109,11 @@ class ProximityDetector:
             self._mp_pose = mp.tasks.vision.PoseLandmarker.create_from_options(pose_opts)
 
             self._use_mediapipe = True
-            print("ProximityDetector: MediaPipe face+pose detection active")
+            LOGGER.info("[Proximity] MediaPipe face+pose detection active (min_size_pct=%.2f)", self.min_size_pct)
         except ImportError:
-            print("ProximityDetector: MediaPipe not available, using motion fallback")
+            LOGGER.warning("[Proximity] MediaPipe not available, using motion fallback (min_size_pct=%.2f)", self.min_size_pct)
         except Exception as e:
-            print(f"ProximityDetector: MediaPipe init failed ({e}), using motion fallback")
+            LOGGER.warning("[Proximity] MediaPipe init failed (%s), using motion fallback", e)
 
     @property
     def detection_method(self) -> str:
@@ -152,7 +155,11 @@ class ProximityDetector:
         return None
 
     def _detect_motion(self, frame: np.ndarray) -> bool:
-        """Fallback: simple motion detection via frame differencing."""
+        """Fallback: simple motion detection via frame differencing.
+
+        Also applies min_size_pct filter — the largest motion contour's
+        bounding-box width must fill at least min_size_pct of the frame.
+        """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
@@ -168,9 +175,13 @@ class ProximityDetector:
 
         self._background_frame = gray
 
+        frame_w = frame.shape[1]
         for contour in contours:
             if cv2.contourArea(contour) > self.sensitivity:
-                return True
+                # Apply size filter — motion region must be close enough
+                _, _, w, _ = cv2.boundingRect(contour)
+                if w / frame_w >= self.min_size_pct:
+                    return True
         return False
 
     @property
