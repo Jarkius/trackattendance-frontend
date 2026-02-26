@@ -131,7 +131,7 @@ class ProximityGreetingManager:
     def notify_scan_activity(self) -> None:
         """Called when a badge is scanned. Suppresses greetings while queue is active."""
         self._busy_until = time.time() + self._scan_busy_seconds
-        LOGGER.debug("[Proximity] Scan activity — greetings suppressed for %.0fs", self._scan_busy_seconds)
+        LOGGER.info("[Proximity] Scan activity — greetings suppressed for %.0fs", self._scan_busy_seconds)
 
     def notify_voice_playing(self) -> None:
         """Called from main thread when scan voice starts. Thread-safe flag.
@@ -149,7 +149,8 @@ class ProximityGreetingManager:
         """
         # Suppress greeting while scans are happening (queue is active)
         if time.time() < self._busy_until:
-            LOGGER.debug("[Proximity] Person detected but suppressed (queue active)")
+            remaining = self._busy_until - time.time()
+            LOGGER.info("[Proximity] Person detected but suppressed (scan busy, %.0fs remaining)", remaining)
             return
 
         # Don't overlap with scan "thank you" voice
@@ -160,7 +161,7 @@ class ProximityGreetingManager:
         else:
             voice_busy = time.time() < getattr(self, '_voice_playing_until', 0)
         if voice_busy:
-            LOGGER.debug("[Proximity] Person detected but scan voice is playing, skipping")
+            LOGGER.info("[Proximity] Person detected but scan voice is playing, skipping")
             return
 
         method = self._detector.detection_method if self._detector else "unknown"
