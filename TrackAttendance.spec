@@ -1,10 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import certifi
+import cv2
+import os
 from PyInstaller.utils.hooks import collect_data_files
 
 # Collect certifi's certificate bundle
 certifi_datas = collect_data_files('certifi')
+
+# Haar cascade XML for face detection fallback
+_cv2_data = os.path.join(os.path.dirname(cv2.__file__), 'data')
+haar_datas = [(_cv2_data, os.path.join('cv2', 'data'))] if os.path.isdir(_cv2_data) else []
 
 a = Analysis(
     ['main.py'],
@@ -16,7 +22,7 @@ a = Analysis(
         ('assets/voices', 'assets/voices'),
         ('plugins/camera/models', 'plugins/camera/models'),
         ('plugins/camera/greetings', 'plugins/camera/greetings'),
-    ] + certifi_datas,
+    ] + certifi_datas + haar_datas,
     hiddenimports=['certifi', 'truststore'],
     hookspath=[],
     hooksconfig={},

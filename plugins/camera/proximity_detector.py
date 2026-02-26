@@ -58,6 +58,7 @@ class ProximityDetector:
         self._frame_count = 0
         self._last_detection_time = 0
         self._consecutive_detections = 0  # count of consecutive frames with person
+        self._background_frame: Optional[np.ndarray] = None
         self._detection_callbacks: List[Callable[[], None]] = []
         self._last_detection_method: Optional[str] = None
         self._haar_cascade = None  # OpenCV Haar cascade (fallback)
@@ -118,13 +119,39 @@ class ProximityDetector:
         # Fallback: OpenCV Haar cascade face detection (ships with cv2, no extra files)
         if not self._use_mediapipe:
             try:
-                cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-                self._haar_cascade = cv2.CascadeClassifier(cascade_path)
-                if self._haar_cascade.empty():
-                    self._haar_cascade = None
-                    LOGGER.warning("[Proximity] Haar cascade failed to load, no detection available")
+                # cv2.data.haarcascades may not resolve inside PyInstaller .exe
+                cascade_candidates = []
+                if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
+                    cascade_candidates.append(
+                        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                    )
+                # Also try relative to cv2 package location
+                cv2_dir = os.path.dirname(cv2.__file__)
+                cascade_candidates.append(
+                    os.path.join(cv2_dir, 'data', 'haarcascade_frontalface_default.xml')
+                )
+                # PyInstaller _MEIPASS path
+                if getattr(sys, 'frozen', False):
+                    meipass = getattr(sys, '_MEIPASS', '')
+                    cascade_candidates.append(
+                        os.path.join(meipass, 'cv2', 'data', 'haarcascade_frontalface_default.xml')
+                    )
+
+                cascade_path = None
+                for candidate in cascade_candidates:
+                    if os.path.exists(candidate):
+                        cascade_path = candidate
+                        break
+
+                if cascade_path:
+                    self._haar_cascade = cv2.CascadeClassifier(cascade_path)
+                    if self._haar_cascade.empty():
+                        self._haar_cascade = None
+                        LOGGER.warning("[Proximity] Haar cascade XML found but failed to load")
+                    else:
+                        LOGGER.info("[Proximity] OpenCV Haar cascade active (min_size_pct=%.2f, path=%s)", self.min_size_pct, cascade_path)
                 else:
-                    LOGGER.info("[Proximity] OpenCV Haar cascade face detection active (min_size_pct=%.2f)", self.min_size_pct)
+                    LOGGER.warning("[Proximity] Haar cascade XML not found, tried: %s", cascade_candidates)
             except Exception as e:
                 LOGGER.warning("[Proximity] Haar cascade init failed (%s)", e)
 
