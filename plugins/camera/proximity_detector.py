@@ -58,9 +58,9 @@ class ProximityDetector:
         self._frame_count = 0
         self._last_detection_time = 0
         self._consecutive_detections = 0  # count of consecutive frames with person
-        self._background_frame: Optional[np.ndarray] = None
         self._detection_callbacks: List[Callable[[], None]] = []
         self._last_detection_method: Optional[str] = None
+        self._haar_cascade = None  # OpenCV Haar cascade (fallback)
 
         # Presence state: "empty" or "present"
         # Greeting only fires on transition from empty → present
@@ -111,9 +111,22 @@ class ProximityDetector:
             self._use_mediapipe = True
             LOGGER.info("[Proximity] MediaPipe face+pose detection active (min_size_pct=%.2f)", self.min_size_pct)
         except ImportError:
-            LOGGER.warning("[Proximity] MediaPipe not available, using motion fallback (min_size_pct=%.2f)", self.min_size_pct)
+            LOGGER.warning("[Proximity] MediaPipe not available, trying OpenCV Haar cascade")
         except Exception as e:
-            LOGGER.warning("[Proximity] MediaPipe init failed (%s), using motion fallback", e)
+            LOGGER.warning("[Proximity] MediaPipe init failed (%s), trying OpenCV Haar cascade", e)
+
+        # Fallback: OpenCV Haar cascade face detection (ships with cv2, no extra files)
+        if not self._use_mediapipe:
+            try:
+                cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                self._haar_cascade = cv2.CascadeClassifier(cascade_path)
+                if self._haar_cascade.empty():
+                    self._haar_cascade = None
+                    LOGGER.warning("[Proximity] Haar cascade failed to load, no detection available")
+                else:
+                    LOGGER.info("[Proximity] OpenCV Haar cascade face detection active (min_size_pct=%.2f)", self.min_size_pct)
+            except Exception as e:
+                LOGGER.warning("[Proximity] Haar cascade init failed (%s)", e)
 
     @property
     def detection_method(self) -> str:
@@ -153,6 +166,25 @@ class ProximityDetector:
                     return "pose"
 
         return None
+
+    def _detect_haar_face(self, frame: np.ndarray) -> bool:
+        """Detect face using OpenCV Haar cascade. Returns True if a close face is found.
+
+        More reliable than motion detection — works for stationary people and
+        returns bounding boxes for size filtering. Ships with cv2, no extra files.
+        """
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame_w = frame.shape[1]
+        min_px = int(frame_w * self.min_size_pct)
+
+        faces = self._haar_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=4,
+            minSize=(min_px, min_px),
+        )
+
+        return len(faces) > 0
 
     def _detect_motion(self, frame: np.ndarray) -> bool:
         """Fallback: simple motion detection via frame differencing.
@@ -198,7 +230,8 @@ class ProximityDetector:
           present + no person for absence_threshold seconds → empty
           empty   + no person    → empty   (no change)
 
-        Uses MediaPipe face+pose when available, falls back to motion detection.
+        Uses MediaPipe face+pose when available, falls back to OpenCV Haar
+        cascade, then to motion detection as last resort.
         """
         current_time = time.time()
 
@@ -214,6 +247,10 @@ class ProximityDetector:
             if method:
                 person_in_frame = True
                 self._last_detection_method = method
+        elif self._haar_cascade is not None:
+            if self._detect_haar_face(frame):
+                person_in_frame = True
+                self._last_detection_method = "haar"
         else:
             if self._detect_motion(frame):
                 person_in_frame = True
