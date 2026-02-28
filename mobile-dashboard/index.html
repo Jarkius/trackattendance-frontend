@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#388e3c">
+    <meta name="description" content="Real-time attendance tracking dashboard">
+    <title>TrackAttendance Dashboard</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+    <!-- Materialize CSS -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="green darken-2">
+        <div class="nav-wrapper container">
+            <span class="brand-logo">
+                <i class="material-icons left">assessment</i>
+                TrackAttendance
+            </span>
+            <span id="connection-status" class="right status-connecting">
+                <i class="material-icons tiny">sync</i> Connecting...
+            </span>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Main Stats Cards -->
+        <div class="row stats-row">
+            <div class="col s6 m4">
+                <div class="card-panel stat-card center-align z-depth-2">
+                    <i class="material-icons medium green-text text-darken-2">people</i>
+                    <h3 id="total-scanned" class="stat-number">--</h3>
+                    <p class="stat-label">Unique Scanned</p>
+                </div>
+            </div>
+            <div class="col s6 m4">
+                <div class="card-panel stat-card center-align z-depth-2">
+                    <i class="material-icons medium blue-text text-darken-2">qr_code_scanner</i>
+                    <h3 id="total-scans" class="stat-number">--</h3>
+                    <p class="stat-label">Total Scans</p>
+                </div>
+            </div>
+            <div class="col s12 m4">
+                <div class="card-panel stat-card center-align z-depth-2 attendance-card">
+                    <i class="material-icons medium orange-text text-darken-2">trending_up</i>
+                    <h3 id="attendance-rate" class="stat-number">--%</h3>
+                    <p class="stat-label">Attendance Rate</p>
+                    <div class="progress-bar-container">
+                        <div id="attendance-progress" class="progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Registered count -->
+        <div class="row">
+            <div class="col s12">
+                <p class="center-align grey-text">
+                    <span id="registered-count">--</span> registered employees
+                </p>
+            </div>
+        </div>
+
+        <!-- Stations Section -->
+        <div class="section">
+            <h5 class="section-title">
+                <i class="material-icons left">router</i>
+                Stations
+            </h5>
+            <div class="row" id="stations-list">
+                <div class="col s12 center-align">
+                    <div class="preloader-wrapper small active">
+                        <div class="spinner-layer spinner-green-only">
+                            <div class="circle-clipper left"><div class="circle"></div></div>
+                            <div class="gap-patch"><div class="circle"></div></div>
+                            <div class="circle-clipper right"><div class="circle"></div></div>
+                        </div>
+                    </div>
+                    <p class="grey-text">Loading stations...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Business Units Section -->
+        <div class="section">
+            <h5 class="section-title">
+                <i class="material-icons left">business</i>
+                Business Units
+            </h5>
+            <div class="row" id="bu-list">
+                <div class="col s12 center-align">
+                    <p class="grey-text">Loading...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="section center-align">
+            <p class="grey-text text-darken-1">
+                <i class="material-icons tiny">update</i>
+                Last updated: <span id="last-updated">--</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Offline indicator -->
+    <div id="offline-indicator" class="offline-banner hide">
+        <i class="material-icons">cloud_off</i>
+        You are offline
+    </div>
+
+    <!-- Toast for updates -->
+    <div id="update-toast" class="update-toast hide">
+        <i class="material-icons">notifications_active</i>
+        <span id="update-message">New scan received!</span>
+    </div>
+
+    <!-- Configuration -->
+    <script>
+        window.CONFIG = {
+            // Set this to your API URL (can be overridden at deploy time)
+            API_URL: 'https://trackattendance-api.run.app',
+            // Fallback to polling if SSE fails (milliseconds)
+            POLL_INTERVAL: 15000,
+            // Show toast on new scans
+            SHOW_TOAST: true
+        };
+    </script>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

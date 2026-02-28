@@ -1,0 +1,26 @@
+{
+    "name": "TrackAttendance Dashboard",
+    "short_name": "Attendance",
+    "description": "Real-time attendance tracking dashboard",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#fafafa",
+    "theme_color": "#388e3c",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": ["business", "productivity"],
+    "lang": "en"
+}

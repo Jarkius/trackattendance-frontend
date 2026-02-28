@@ -1,432 +1,435 @@
 # Mobile Dashboard Implementation Plan
 
-This document outlines the plan to implement a mobile-friendly online dashboard for TrackAttendance.
+This document outlines the plan to implement a mobile-friendly online dashboard for TrackAttendance with real-time updates via Server-Sent Events (SSE).
 
 **Created**: 2026-02-27
+**Updated**: 2026-02-28
 **Status**: Planning
 
 ---
 
 ## Executive Summary
 
-Build a Progressive Web App (PWA) dashboard that allows managers to view attendance statistics from any device (mobile, tablet, desktop) without needing the desktop kiosk app.
+Build a lightweight static dashboard (HTML + vanilla JS) that displays real-time attendance statistics. Updates are pushed via SSE when new scans arrive - no polling needed.
 
 ---
 
-## Current State Analysis
-
-### Existing Infrastructure
-
-| Component | Technology | Status |
-|-----------|------------|--------|
-| **Backend API** | Cloud Run (trackattendance-api) | Production |
-| **Database** | PostgreSQL (Neon) | Production |
-| **Authentication** | Bearer Token (API Key) | Production |
-| **Desktop App** | PyQt6 + QWebEngineView | Production |
-
-### Available API Endpoints
-
-| Endpoint | Method | Auth | Purpose |
-|----------|--------|------|---------|
-| `/` | GET | None | Health check |
-| `/v1/dashboard/stats` | GET | Bearer | Multi-station statistics |
-| `/v1/dashboard/export` | GET | Bearer | Detailed scan records |
-| `/v1/scans/batch` | POST | Bearer | Upload scans (kiosk only) |
-
-### Current Dashboard Data
-
-```json
-{
-  "total_scans": 350,
-  "unique_badges": 285,
-  "stations": [
-    {"name": "Main Gate", "scans": 180, "unique": 150, "last_scan": "2025-12-15T08:45:30Z"}
-  ],
-  "last_updated": "2025-12-15T09:00:00Z"
-}
-```
-
----
-
-## Proposed Architecture
-
-### Option A: Static PWA (Recommended)
+## Architecture
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Mobile PWA    │────▶│   Cloud Run API  │────▶│  PostgreSQL     │
-│  (Static Host)  │     │  (Existing)      │     │  (Neon)         │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-       │
-       ▼
-┌─────────────────┐
-│  Cloudflare     │
-│  Pages/Vercel   │
-└─────────────────┘
+┌──────────────┐        ┌──────────────────┐        ┌────────────────┐
+│   KIOSKS     │        │    CLOUD API     │        │   DASHBOARD    │
+│              │        │                  │        │                │
+│  Station 1   │──sync──▶ POST /v1/scans  │        │  Cloudflare    │
+│  Station 2   │──sync──▶    /batch       │        │    Pages       │
+│  Station 3   │        │        │         │        │                │
+└──────────────┘        │        ▼         │        │  index.html    │
+                        │  ┌──────────┐    │   SSE  │  dashboard.js  │
+                        │  │ Postgres │    │◀───────│  style.css     │
+                        │  └──────────┘    │        │                │
+                        │        │         │        └────────────────┘
+                        │        ▼         │               ▲
+                        │  broadcast_update│               │
+                        │        │         │               │
+                        │        ▼         │               │
+                        │ GET /v1/dashboard│               │
+                        │     /events      │───────────────┘
+                        └──────────────────┘      (real-time push)
 ```
 
-**Pros:**
-- Zero backend changes needed
-- Free hosting (Cloudflare Pages, Vercel, Netlify)
-- Automatic HTTPS, CDN, edge caching
-- Simple deployment (git push)
+### Data Flow
 
-**Cons:**
-- API key exposed in browser (need API changes for user auth)
-- No server-side rendering
-
-### Option B: Add Web Auth to Existing API
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Mobile PWA    │────▶│   Cloud Run API  │────▶│  PostgreSQL     │
-│                 │     │  + Auth Routes   │     │  + Users Table  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-```
-
-**Pros:**
-- Proper user authentication (email/password or SSO)
-- Per-user permissions possible
-- API key stays secure on server
-
-**Cons:**
-- Requires backend changes
-- Need to manage user accounts
-
-### Option C: BFF (Backend for Frontend)
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   Mobile PWA    │────▶│   BFF Service    │────▶│   Cloud Run API  │
-│                 │     │  (Auth + Proxy)  │     │   (Existing)     │
-└─────────────────┘     └──────────────────┘     └──────────────────┘
-```
-
-**Pros:**
-- No changes to existing API
-- Clean separation of concerns
-- Can add caching, rate limiting
-
-**Cons:**
-- Additional service to maintain
-- More infrastructure cost
-
----
-
-## Recommended Approach: Option A (Static PWA)
-
-Since there's no confidential data, we can deploy a simple static PWA that calls the existing API directly. No authentication needed.
-
-### Single Phase: Static PWA with Existing API
-
-Deploy a read-only dashboard that uses the existing API. The API key can be embedded at build time since the data is not sensitive.
+1. **Kiosk scans badge** → saves locally → syncs to Cloud API
+2. **Cloud API receives batch** → saves to PostgreSQL → **broadcasts SSE event**
+3. **Dashboard receives SSE** → updates UI instantly (< 1 second latency)
 
 ---
 
 ## Technology Stack
 
-### Frontend (PWA)
+### Frontend (Simple HTML)
 
-| Category | Technology | Rationale |
-|----------|------------|-----------|
-| **Framework** | React 18 + TypeScript | Industry standard, great mobile support |
-| **Styling** | Tailwind CSS | Mobile-first, utility classes |
-| **State** | Zustand | Lightweight, simple API |
-| **Charts** | Recharts | React-native, responsive |
-| **Build** | Vite | Fast builds, PWA plugin |
-| **PWA** | vite-plugin-pwa | Service worker, offline |
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| **Structure** | HTML5 | No build step, instant deploy |
+| **Styling** | Materialize CSS | Same as kiosk app, consistent look |
+| **Logic** | Vanilla JS | No dependencies, fast load |
+| **Real-time** | EventSource (SSE) | Native browser API, auto-reconnect |
+| **Hosting** | Cloudflare Pages | Free, global CDN, fast in Thailand |
 
-### Hosting Options
+### Backend (API Changes)
 
-| Provider | Free Tier | Custom Domain | Build Time |
-|----------|-----------|---------------|------------|
-| **Cloudflare Pages** | Unlimited | Yes | Fast |
-| **Vercel** | 100GB/mo | Yes | Very Fast |
-| **Netlify** | 100GB/mo | Yes | Fast |
-| **GitHub Pages** | Unlimited | Yes | Slow |
-| **Firebase Hosting** | 10GB/mo | Yes | Medium |
-
-**Recommendation**: **Cloudflare Pages** for best performance and free tier.
-
----
-
-## Feature Specification
-
-### MVP Features (Phase 1)
-
-#### 1. Dashboard View
-- [ ] Total registered employees
-- [ ] Total scanned (unique badges)
-- [ ] Attendance rate percentage
-- [ ] Real-time last updated timestamp
-
-#### 2. Station Breakdown
-- [ ] List all stations
-- [ ] Scans per station
-- [ ] Unique badges per station
-- [ ] Last scan time per station
-- [ ] Visual bar/pie chart
-
-#### 3. Business Unit View
-- [ ] BU-level attendance rates
-- [ ] Registered vs scanned per BU
-- [ ] Sort by attendance rate
-
-#### 4. Mobile-First UI
-- [ ] Responsive design (320px - 1920px)
-- [ ] Touch-friendly (44px tap targets)
-- [ ] Pull-to-refresh
-- [ ] Bottom navigation
-
-#### 5. PWA Features
-- [ ] Installable (Add to Home Screen)
-- [ ] Offline indicator
-- [ ] App-like experience
-
-### Phase 2 Features
-
-#### 6. Export
-- [ ] Download Excel report
-- [ ] Share via native share API
-- [ ] Email report option
-
-#### 8. Real-time Updates
-- [ ] Auto-refresh interval (30s/60s/5m)
-- [ ] Push notifications for milestones
-- [ ] Live scan counter
-
-### Phase 3 Features (Future)
-
-#### 9. Advanced Analytics
-- [ ] Historical trends (daily/weekly)
-- [ ] Comparison with previous events
-- [ ] Peak hour analysis
-
-#### 10. Multi-Event Support
-- [ ] Switch between events
-- [ ] Archive past events
-
----
-
-## UI/UX Design
-
-### Mobile Layout (< 768px)
-
-```
-┌────────────────────────┐
-│  TrackAttendance   ☰  │  ← Header with menu
-├────────────────────────┤
-│                        │
-│   ┌────────────────┐   │
-│   │    285/500     │   │  ← Main stat card
-│   │   Attendance   │   │
-│   │     57.0%      │   │
-│   └────────────────┘   │
-│                        │
-│   ┌──────┐ ┌──────┐   │
-│   │ 350  │ │  3   │   │  ← Secondary stats
-│   │Scans │ │Stns  │   │
-│   └──────┘ └──────┘   │
-│                        │
-│   ── Stations ──       │
-│   ┌────────────────┐   │
-│   │ Main Gate  150 │   │  ← Station cards
-│   │ Last: 08:45    │   │
-│   └────────────────┘   │
-│   ┌────────────────┐   │
-│   │ Side Gate   80 │   │
-│   │ Last: 08:30    │   │
-│   └────────────────┘   │
-│                        │
-├────────────────────────┤
-│  📊   🏢   📤   ⚙️    │  ← Bottom nav
-└────────────────────────┘
-```
-
-### Tablet/Desktop Layout (≥ 768px)
-
-```
-┌─────────────────────────────────────────────┐
-│  TrackAttendance          Last: 09:00  ⚙️  │
-├─────────────────────────────────────────────┤
-│                                             │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐       │
-│  │  285    │ │  350    │ │  57.0%  │       │
-│  │Attended │ │ Scans   │ │  Rate   │       │
-│  └─────────┘ └─────────┘ └─────────┘       │
-│                                             │
-│  ┌──────────────────┐ ┌──────────────────┐ │
-│  │    Stations      │ │  Business Units  │ │
-│  │  ┌────┐ ┌────┐   │ │  IT: 85%         │ │
-│  │  │Main│ │Side│   │ │  HR: 72%         │ │
-│  │  │150 │ │ 80 │   │ │  Sales: 45%      │ │
-│  │  └────┘ └────┘   │ │                  │ │
-│  └──────────────────┘ └──────────────────┘ │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
----
-
-## API Changes Required
-
-### New Endpoint: Dashboard PIN Auth (Phase 2)
-
-```
-POST /v1/dashboard/auth
-Content-Type: application/json
-
-{
-  "pin": "1234"
-}
-
-Response (200):
-{
-  "token": "eyJ...",
-  "expires_in": 1800
-}
-
-Response (401):
-{
-  "error": "Invalid PIN"
-}
-```
-
-### Environment Variable
-
-```env
-DASHBOARD_VIEW_PIN=1234
-DASHBOARD_TOKEN_EXPIRY_SECONDS=1800
-```
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **SSE Endpoint** | FastAPI + sse-starlette | Push events to dashboards |
+| **Event Bus** | In-memory or Redis | Broadcast to all connections |
 
 ---
 
 ## Project Structure
 
 ```
-trackattendance-dashboard/
-├── public/
-│   ├── manifest.json      # PWA manifest
-│   ├── icons/             # App icons (192, 512)
-│   └── favicon.ico
-├── src/
-│   ├── components/
-│   │   ├── Dashboard.tsx
-│   │   ├── StationCard.tsx
-│   │   ├── BUChart.tsx
-│   │   ├── StatCard.tsx
-│   │   └── Layout.tsx
-│   ├── hooks/
-│   │   ├── useDashboard.ts
-│   │   └── useAuth.ts
-│   ├── services/
-│   │   └── api.ts
-│   ├── stores/
-│   │   └── dashboardStore.ts
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css
-├── package.json
-├── vite.config.ts
-├── tailwind.config.js
-└── README.md
+mobile-dashboard/
+├── index.html          # Single page dashboard
+├── css/
+│   └── style.css       # Custom styles (extends Materialize)
+├── js/
+│   └── dashboard.js    # SSE connection + UI updates
+├── manifest.json       # PWA support (add to home screen)
+├── icons/
+│   ├── icon-192.png
+│   └── icon-512.png
+└── _headers            # Cloudflare headers (CORS, cache)
 ```
 
 ---
 
-## Implementation Timeline
+## SSE Implementation
 
-### Week 1: Setup & Basic Dashboard
+### API Endpoint (trackattendance-api)
 
-| Day | Task |
-|-----|------|
-| 1 | Create Vite + React + TypeScript project |
-| 2 | Setup Tailwind, Zustand, API service |
-| 3 | Build StatCard, Layout components |
-| 4 | Implement Dashboard with mock data |
-| 5 | Connect to real API, test mobile |
+```python
+# Add to trackattendance-api/app/routes/dashboard.py
 
-### Week 2: Polish & Deploy
+from sse_starlette.sse import EventSourceResponse
+import asyncio
+from typing import Set
 
-| Day | Task |
-|-----|------|
-| 6 | Add StationCard, BU breakdown |
-| 7 | Implement charts (Recharts) |
-| 8 | Add PWA manifest, service worker |
-| 9 | Deploy to Cloudflare Pages |
-| 10 | Testing, bug fixes |
+# Connected dashboard clients
+connected_clients: Set[asyncio.Queue] = set()
 
-### Week 3: Auth & Features (Phase 2)
+@router.get("/v1/dashboard/events")
+async def dashboard_events():
+    """SSE endpoint for real-time dashboard updates."""
+    queue = asyncio.Queue()
+    connected_clients.add(queue)
 
-| Day | Task |
-|-----|------|
-| 11 | Add PIN auth endpoint to API |
-| 12 | Implement auth UI in dashboard |
-| 13 | Add auto-refresh, pull-to-refresh |
-| 14 | Add Excel export via API |
-| 15 | Final testing, documentation |
+    async def event_generator():
+        try:
+            # Send initial stats immediately
+            stats = await get_dashboard_stats()
+            yield {
+                "event": "init",
+                "data": json.dumps(stats)
+            }
+
+            # Wait for updates
+            while True:
+                data = await queue.get()
+                yield {
+                    "event": "update",
+                    "data": json.dumps(data)
+                }
+        except asyncio.CancelledError:
+            connected_clients.discard(queue)
+            raise
+
+    return EventSourceResponse(event_generator())
+
+
+async def broadcast_update(data: dict):
+    """Broadcast update to all connected dashboards."""
+    for queue in connected_clients:
+        await queue.put(data)
+
+
+# Modify existing batch endpoint
+@router.post("/v1/scans/batch")
+async def receive_scans(scans: List[ScanCreate]):
+    # ... existing save logic ...
+
+    # NEW: Broadcast to dashboards
+    stats = await get_dashboard_stats()
+    await broadcast_update(stats)
+
+    return {"ok": True, "synced": len(scans)}
+```
+
+### Dashboard JavaScript
+
+```javascript
+// mobile-dashboard/js/dashboard.js
+
+class DashboardSSE {
+    constructor(apiUrl) {
+        this.apiUrl = apiUrl;
+        this.eventSource = null;
+        this.reconnectDelay = 1000;
+    }
+
+    connect() {
+        this.eventSource = new EventSource(`${this.apiUrl}/v1/dashboard/events`);
+
+        this.eventSource.addEventListener('init', (e) => {
+            const data = JSON.parse(e.data);
+            this.updateUI(data);
+            this.setStatus('connected');
+        });
+
+        this.eventSource.addEventListener('update', (e) => {
+            const data = JSON.parse(e.data);
+            this.updateUI(data);
+            this.flashUpdate();
+        });
+
+        this.eventSource.onerror = () => {
+            this.setStatus('reconnecting');
+            setTimeout(() => this.connect(), this.reconnectDelay);
+            this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+        };
+
+        this.eventSource.onopen = () => {
+            this.reconnectDelay = 1000;
+        };
+    }
+
+    updateUI(data) {
+        document.getElementById('total-scanned').textContent =
+            data.unique_badges.toLocaleString();
+        document.getElementById('total-scans').textContent =
+            data.total_scans.toLocaleString();
+        document.getElementById('attendance-rate').textContent =
+            data.attendance_rate + '%';
+        document.getElementById('last-updated').textContent =
+            new Date().toLocaleTimeString();
+
+        this.updateStations(data.stations);
+    }
+
+    updateStations(stations) {
+        const container = document.getElementById('stations-list');
+        container.innerHTML = stations.map(s => `
+            <div class="col s12 m6 l4">
+                <div class="card-panel">
+                    <span class="station-name">${s.name}</span>
+                    <span class="station-count">${s.unique}</span>
+                    <span class="station-time">Last: ${this.formatTime(s.last_scan)}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    flashUpdate() {
+        document.body.classList.add('flash');
+        setTimeout(() => document.body.classList.remove('flash'), 300);
+    }
+
+    setStatus(status) {
+        const el = document.getElementById('connection-status');
+        el.className = `status-${status}`;
+        el.textContent = status === 'connected' ? '● Live' : '○ Reconnecting...';
+    }
+
+    formatTime(iso) {
+        if (!iso) return '--';
+        return new Date(iso).toLocaleTimeString();
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const dashboard = new DashboardSSE(window.CONFIG.API_URL);
+    dashboard.connect();
+});
+```
 
 ---
 
-## Hosting Setup (Cloudflare Pages)
+## Dashboard HTML
 
-### 1. Create Project
+```html
+<!-- mobile-dashboard/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackAttendance Dashboard</title>
+    <link rel="manifest" href="manifest.json">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="green darken-2">
+        <div class="nav-wrapper container">
+            <span class="brand-logo">TrackAttendance</span>
+            <span id="connection-status" class="right status-connecting">○ Connecting...</span>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Main Stats -->
+        <div class="row">
+            <div class="col s6 m4">
+                <div class="card-panel center-align">
+                    <i class="material-icons medium green-text">people</i>
+                    <h4 id="total-scanned">--</h4>
+                    <p>Scanned</p>
+                </div>
+            </div>
+            <div class="col s6 m4">
+                <div class="card-panel center-align">
+                    <i class="material-icons medium blue-text">qr_code_scanner</i>
+                    <h4 id="total-scans">--</h4>
+                    <p>Total Scans</p>
+                </div>
+            </div>
+            <div class="col s12 m4">
+                <div class="card-panel center-align">
+                    <i class="material-icons medium orange-text">trending_up</i>
+                    <h4 id="attendance-rate">--%</h4>
+                    <p>Attendance Rate</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stations -->
+        <h5>Stations</h5>
+        <div class="row" id="stations-list">
+            <!-- Populated by JavaScript -->
+        </div>
+
+        <!-- Footer -->
+        <p class="grey-text center-align">
+            Last updated: <span id="last-updated">--</span>
+        </p>
+    </div>
+
+    <script>
+        window.CONFIG = {
+            API_URL: 'https://your-api.run.app'  // Set at deploy time
+        };
+    </script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
+```
+
+---
+
+## API Changes Required
+
+### 1. Add SSE Dependency
 
 ```bash
-# In new repo: trackattendance-dashboard
-npm create vite@latest . -- --template react-ts
-npm install
+# In trackattendance-api
+pip install sse-starlette
 ```
 
-### 2. Configure Build
+### 2. Add SSE Endpoint
 
-```toml
-# wrangler.toml (optional)
-name = "trackattendance-dashboard"
-compatibility_date = "2024-01-01"
+Add `/v1/dashboard/events` endpoint (code shown above).
 
-[site]
-bucket = "./dist"
-```
+### 3. Modify Batch Endpoint
 
-### 3. Deploy
+Call `broadcast_update()` after saving scans.
 
-```bash
-# Connect to Cloudflare Pages via GitHub
-# Auto-deploys on push to main
+### 4. CORS Configuration
 
-# Or manual deploy:
-npx wrangler pages deploy dist
-```
-
-### 4. Environment Variables
-
-Set in Cloudflare Pages dashboard:
-```
-VITE_API_URL=https://trackattendance-api-xxx.run.app
-VITE_API_KEY=xxx  # Only for MVP, remove in Phase 2
+```python
+# Allow SSE connections from dashboard domain
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://dashboard.trackattendance.app"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 ```
 
 ---
 
-## Security Considerations
+## Deployment
 
-### MVP (Phase 1)
-- API key stored in environment variable (build-time)
-- Dashboard is read-only (no mutations)
-- Consider: Rate limiting on API
-- Consider: IP allowlist for dashboard
+### Dashboard (Cloudflare Pages)
 
-### Phase 2 (With Auth)
-- PIN hashed with bcrypt on server
-- JWT tokens with short expiry (30 min)
-- CSRF protection
-- Audit logging for dashboard access
+```bash
+# Create repo and push
+git init mobile-dashboard
+cd mobile-dashboard
+# ... add files ...
+git add .
+git commit -m "Initial dashboard"
+git push origin main
 
-### Phase 3 (Production)
-- SSO integration (Google Workspace, Azure AD)
-- Role-based access (admin, viewer)
-- Per-event permissions
+# Connect to Cloudflare Pages
+# Settings:
+#   Build command: (none)
+#   Output directory: /
+#   Environment: API_URL=https://your-api.run.app
+```
+
+### API (Cloud Run)
+
+```bash
+# Update trackattendance-api
+pip install sse-starlette
+# Add SSE endpoint
+# Deploy to Cloud Run
+```
+
+---
+
+## Performance Impact
+
+| Component | Impact | Mitigation |
+|-----------|--------|------------|
+| Kiosk | None | SSE is server-side only |
+| API CPU | +5% per 50 connections | Async non-blocking |
+| API Memory | ~10KB per connection | Limit max connections |
+| Database | None | Broadcast from memory |
+| Network | Minimal | SSE is text-based |
+
+### Connection Limits
+
+```python
+MAX_SSE_CONNECTIONS = 100
+
+@router.get("/v1/dashboard/events")
+async def dashboard_events():
+    if len(connected_clients) >= MAX_SSE_CONNECTIONS:
+        raise HTTPException(503, "Too many connections")
+    # ... rest of code
+```
+
+---
+
+## Fallback: Polling Mode
+
+If SSE fails, dashboard falls back to polling:
+
+```javascript
+// In dashboard.js
+connect() {
+    try {
+        this.eventSource = new EventSource(...);
+    } catch (e) {
+        // Fallback to polling
+        this.startPolling();
+    }
+}
+
+startPolling() {
+    setInterval(async () => {
+        const res = await fetch(`${this.apiUrl}/v1/dashboard/stats`);
+        const data = await res.json();
+        this.updateUI(data);
+    }, 15000);
+}
+```
+
+---
+
+## Timeline
+
+| Day | Task |
+|-----|------|
+| 1 | Create mobile-dashboard repo with HTML/CSS/JS |
+| 2 | Add SSE endpoint to trackattendance-api |
+| 3 | Test SSE connection locally |
+| 4 | Deploy dashboard to Cloudflare Pages |
+| 5 | Deploy API changes to Cloud Run |
+| 6 | End-to-end testing |
 
 ---
 
@@ -434,86 +437,22 @@ VITE_API_KEY=xxx  # Only for MVP, remove in Phase 2
 
 | Metric | Target |
 |--------|--------|
-| Time to First Paint | < 1.5s |
-| Lighthouse Performance | > 90 |
-| Lighthouse PWA | 100 |
-| Mobile Usability | 100 |
-| API Response Time | < 500ms |
-| Offline Capability | Basic (cached stats) |
-
----
-
-## Cost Estimate
-
-| Item | Monthly Cost |
-|------|--------------|
-| Cloudflare Pages | $0 (free tier) |
-| Domain (optional) | ~$1/month |
-| Cloud Run API | Existing |
-| Neon PostgreSQL | Existing |
-| **Total** | **~$0-1/month** |
+| Update latency | < 1 second |
+| Page load time | < 2 seconds |
+| Lighthouse score | > 90 |
+| Max concurrent dashboards | 100 |
+| Reconnect time | < 5 seconds |
 
 ---
 
 ## Next Steps
 
-1. [ ] Approve this plan
-2. [ ] Create new repo: `Jarkius/trackattendance-dashboard`
-3. [ ] Initialize Vite + React + TypeScript project
-4. [ ] Set up Cloudflare Pages deployment
-5. [ ] Implement MVP dashboard
-6. [ ] Test on mobile devices
-7. [ ] Deploy to production
+1. [x] Approve SSE approach
+2. [ ] Create `mobile-dashboard/` folder with static files
+3. [ ] Add SSE endpoint to `trackattendance-api`
+4. [ ] Deploy and test
+5. [ ] Create GitHub repo for dashboard
 
 ---
 
-## Appendix: API Response Examples
-
-### GET /v1/dashboard/stats
-
-```json
-{
-  "total_scans": 350,
-  "unique_badges": 285,
-  "stations": [
-    {
-      "name": "Main Gate",
-      "scans": 180,
-      "unique": 150,
-      "last_scan": "2025-12-15T08:45:30Z"
-    },
-    {
-      "name": "Side Gate",
-      "scans": 120,
-      "unique": 100,
-      "last_scan": "2025-12-15T08:30:00Z"
-    },
-    {
-      "name": "VIP Entrance",
-      "scans": 50,
-      "unique": 35,
-      "last_scan": "2025-12-15T07:15:00Z"
-    }
-  ],
-  "last_updated": "2025-12-15T09:00:00Z"
-}
-```
-
-### GET /v1/dashboard/export
-
-```json
-{
-  "scans": [
-    ["ABC123", "Main Gate", "2025-12-15T08:45:30Z", true],
-    ["DEF456", "Side Gate", "2025-12-15T08:30:00Z", true],
-    ["UNKNOWN", "Main Gate", "2025-12-15T08:00:00Z", false]
-  ],
-  "total": 350,
-  "page": 1,
-  "per_page": 100
-}
-```
-
----
-
-*Document generated by Claude Code*
+*Document updated by Claude Code*
