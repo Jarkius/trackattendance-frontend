@@ -1,9 +1,8 @@
 /**
  * TrackAttendance Dashboard
  *
- * Uses polling for updates (15 second interval).
- * Polling is more cost-effective on Cloud Run than SSE,
- * which bills for the entire duration of open connections.
+ * Uses Server-Sent Events (SSE) for real-time updates.
+ * Falls back to polling if SSE is unavailable.
  */
 
 class Dashboard {
@@ -13,8 +12,11 @@ class Dashboard {
         this.pollInterval = config.POLL_INTERVAL || 15000;
         this.showToast = config.SHOW_TOAST !== false;
 
+        this.eventSource = null;
         this.pollTimer = null;
         this.lastStats = null;
+        this.reconnectDelay = 1000;
+        this.maxReconnectDelay = 30000;
     }
 
     /**
@@ -26,11 +28,77 @@ class Dashboard {
     }
 
     /**
-     * Start polling for updates
-     * (Polling is more cost-effective on Cloud Run than SSE)
+     * Connect via SSE for real-time updates
      */
     connect() {
-        this.startPolling();
+        // Check if SSE is supported
+        if (typeof EventSource === 'undefined') {
+            console.log('SSE not supported, using polling');
+            this.startPolling();
+            return;
+        }
+
+        try {
+            this.setStatus('connecting');
+            const sseUrl = `${this.apiUrl}/v1/dashboard/events`;
+            console.log('Connecting to SSE:', sseUrl);
+            this.eventSource = new EventSource(sseUrl);
+
+            // Initial data event
+            this.eventSource.addEventListener('init', (e) => {
+                const data = JSON.parse(e.data);
+                this.updateUI(data);
+                this.setStatus('connected');
+                this.reconnectDelay = 1000;
+            });
+
+            // Update event (new scans)
+            this.eventSource.addEventListener('update', (e) => {
+                const data = JSON.parse(e.data);
+                this.updateUI(data);
+                this.flashUpdate();
+
+                if (this.showToast) {
+                    this.showUpdateToast('New scan received!');
+                }
+            });
+
+            // Connection opened
+            this.eventSource.onopen = () => {
+                console.log('SSE connected');
+                this.setStatus('connected');
+                this.reconnectDelay = 1000;
+            };
+
+            // Handle messages without event type
+            this.eventSource.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    this.updateUI(data);
+                    this.setStatus('connected');
+                } catch (err) {
+                    console.error('Failed to parse SSE message:', err);
+                }
+            };
+
+            // Error handling with reconnect
+            this.eventSource.onerror = (e) => {
+                console.error('SSE error, reconnecting...', e);
+                this.eventSource.close();
+                this.setStatus('reconnecting');
+
+                // Exponential backoff
+                setTimeout(() => this.connect(), this.reconnectDelay);
+                this.reconnectDelay = Math.min(
+                    this.reconnectDelay * 2,
+                    this.maxReconnectDelay
+                );
+            };
+
+        } catch (e) {
+            console.error('SSE connection failed:', e);
+            this.startPolling();
+        }
     }
 
     /**
@@ -345,6 +413,9 @@ class Dashboard {
      * Clean up resources
      */
     destroy() {
+        if (this.eventSource) {
+            this.eventSource.close();
+        }
         if (this.pollTimer) {
             clearInterval(this.pollTimer);
         }
