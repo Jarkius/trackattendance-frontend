@@ -179,6 +179,13 @@ class AttendanceService:
                 self._db.set_roster_hash(current_hash)
                 self._db.set_roster_meta("file_mtime", current_mtime)
                 LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
+                # Push roster BU counts to cloud for dashboard
+                try:
+                    from sync import sync_roster_summary
+                    from config import CLOUD_API_URL, CLOUD_API_KEY
+                    sync_roster_summary(self._db, CLOUD_API_URL, CLOUD_API_KEY)
+                except Exception as e:
+                    LOGGER.warning(f"Failed to sync roster summary: {e}")
         finally:
             workbook.close()
 

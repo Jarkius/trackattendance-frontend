@@ -421,4 +421,33 @@ class SyncService:
             return {"ok": False, "deleted": 0, "message": f"Error: {str(e)}"}
 
 
-__all__ = ["SyncService"]
+def sync_roster_summary(db: DatabaseManager, api_url: str, api_key: str) -> dict:
+    """Push BU roster counts to cloud for dashboard progress display."""
+    bu_data = db.get_employees_by_bu()
+    if not bu_data:
+        return {"ok": False, "reason": "no_employees"}
+
+    payload = {
+        "business_units": [
+            {"name": row["bu_name"], "registered": row["count"]}
+            for row in bu_data
+        ]
+    }
+
+    try:
+        response = requests.post(
+            f"{api_url.rstrip('/')}/v1/roster/summary",
+            json=payload,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        result = response.json()
+        LOGGER.info(f"RosterSync: pushed {len(bu_data)} BU counts to cloud")
+        return {"ok": True, "saved": result.get("saved", 0)}
+    except Exception as e:
+        LOGGER.warning(f"RosterSync: failed to push roster summary: {e}")
+        return {"ok": False, "error": str(e)}
+
+
+__all__ = ["SyncService", "sync_roster_summary"]
