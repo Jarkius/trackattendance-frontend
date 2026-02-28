@@ -450,45 +450,54 @@ def sync_roster_summary(db: DatabaseManager, api_url: str, api_key: str) -> dict
         return {"ok": False, "error": str(e)}
 
 
-def sync_roster_summary_from_data(
-    bu_data: list, api_url: str, api_key: str,
-    max_retries: int = 5, initial_delay: float = 10.0,
-) -> dict:
+def sync_roster_summary_from_data(bu_data: list, api_url: str, api_key: str) -> dict:
     """Push pre-fetched BU counts to cloud. Thread-safe (no DB access).
 
-    Retries with exponential backoff if network is unavailable at startup.
-    Delays: 10s, 30s, 90s, 270s, 810s (~13 min total before giving up).
+    Called from health check thread after first successful API connection.
+    Checks cloud hash first — skips POST if roster already up to date.
     """
-    import time
+    import hashlib
 
+    # Compute local hash (same algorithm as API)
+    hash_input = "|".join(sorted(f"{row['bu_name']}:{row['count']}" for row in bu_data))
+    local_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    base_url = api_url.rstrip("/")
+
+    # Check cloud hash first
+    try:
+        check = requests.get(f"{base_url}/v1/roster/hash", headers=headers, timeout=5)
+        if check.status_code == 200:
+            cloud_hash = check.json().get("hash")
+            if cloud_hash == local_hash:
+                LOGGER.info(f"RosterSync: hash match ({local_hash}), skipping POST")
+                return {"ok": True, "skipped": True}
+    except Exception:
+        pass  # proceed to POST if hash check fails
+
+    # Hash mismatch or check failed — push the data
     payload = {
         "business_units": [
             {"name": row["bu_name"], "registered": row["count"]}
             for row in bu_data
         ]
     }
-
-    delay = initial_delay
-    for attempt in range(1, max_retries + 1):
-        try:
-            response = requests.post(
-                f"{api_url.rstrip('/')}/v1/roster/summary",
-                json=payload,
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=10,
-            )
-            response.raise_for_status()
-            result = response.json()
-            LOGGER.info(f"RosterSync: pushed {len(bu_data)} BU counts to cloud")
-            return {"ok": True, "saved": result.get("saved", 0)}
-        except Exception as e:
-            if attempt < max_retries:
-                LOGGER.info(f"RosterSync: attempt {attempt}/{max_retries} failed, retry in {delay:.0f}s: {e}")
-                time.sleep(delay)
-                delay *= 3  # exponential backoff
-            else:
-                LOGGER.warning(f"RosterSync: all {max_retries} attempts failed: {e}")
-                return {"ok": False, "error": str(e)}
+    try:
+        response = requests.post(
+            f"{base_url}/v1/roster/summary",
+            json=payload,
+            headers=headers,
+            timeout=10,
+        )
+        response.raise_for_status()
+        result = response.json()
+        skipped = result.get("skipped", False)
+        LOGGER.info(f"RosterSync: pushed {len(bu_data)} BU counts (hash={local_hash}, skipped={skipped})")
+        return {"ok": True, "saved": result.get("saved", 0), "skipped": skipped}
+    except Exception as e:
+        LOGGER.warning(f"RosterSync: failed to push roster summary: {e}")
+        return {"ok": False, "error": str(e)}
 
 
 __all__ = ["SyncService", "sync_roster_summary", "sync_roster_summary_from_data"]

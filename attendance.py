@@ -179,21 +179,8 @@ class AttendanceService:
                 self._db.set_roster_hash(current_hash)
                 self._db.set_roster_meta("file_mtime", current_mtime)
                 LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
-                # Push roster BU counts to cloud for dashboard (non-blocking)
-                # Read DB on main thread (SQLite not thread-safe), POST in background
-                try:
-                    import threading
-                    from sync import sync_roster_summary_from_data
-                    from config import CLOUD_API_URL, CLOUD_API_KEY
-                    bu_data = self._db.get_employees_by_bu()
-                    if bu_data:
-                        threading.Thread(
-                            target=sync_roster_summary_from_data,
-                            args=(bu_data, CLOUD_API_URL, CLOUD_API_KEY),
-                            daemon=True,
-                        ).start()
-                except Exception as e:
-                    LOGGER.warning(f"Failed to start roster sync: {e}")
+                # Roster BU counts will be pushed to cloud after first
+                # successful health check (see main.py Api._run_check)
         finally:
             workbook.close()
 

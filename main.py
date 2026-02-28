@@ -379,6 +379,7 @@ class Api(QObject):
         self._proximity_manager = None  # set after construction if camera plugin loaded
         self._window = None
         self._connection_check_inflight = False
+        self._roster_synced = False  # one-time roster push after first successful health check
         self._last_connection_result: Dict[str, object] = {
             "ok": False,
             "message": "Connection not checked yet",
@@ -473,6 +474,18 @@ class Api(QObject):
                     ok, msg = self._sync_service.test_connection()
                     payload = {"ok": ok, "message": msg}
                     LOGGER.info("Cloud health check result: ok=%s, message=%s", ok, msg)
+                    # Push roster BU counts on first successful connection
+                    if ok and not self._roster_synced:
+                        self._roster_synced = True
+                        try:
+                            from sync import sync_roster_summary_from_data
+                            from config import CLOUD_API_URL, CLOUD_API_KEY
+                            bu_data = self._service._db.get_employees_by_bu()
+                            if bu_data:
+                                sync_roster_summary_from_data(bu_data, CLOUD_API_URL, CLOUD_API_KEY)
+                        except Exception as e:
+                            LOGGER.warning(f"Roster sync after health check failed: {e}")
+                            self._roster_synced = False  # retry next check
             except Exception as exc:  # noqa: BLE001
                 LOGGER.exception("Health check failed: %s", exc)
                 payload = {"ok": False, "message": f"Check failed: {exc}"}
