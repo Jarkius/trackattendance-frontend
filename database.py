@@ -20,6 +20,7 @@ class EmployeeRecord:
     full_name: str
     sl_l1_desc: str
     position_desc: str
+    email: str = ""
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class ScanRecord:
     legacy_id: Optional[str]
     sl_l1_desc: Optional[str]
     position_desc: Optional[str]
+    email: Optional[str] = None
     sync_status: str = "pending"
     synced_at: Optional[str] = None
     sync_error: Optional[str] = None
@@ -89,6 +91,15 @@ class DatabaseManager:
                 );
                 """
             )
+        # Migrations for email column
+        try:
+            self._connection.execute("ALTER TABLE employees ADD COLUMN email TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        try:
+            self._connection.execute("ALTER TABLE scans ADD COLUMN email TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     def get_station_name(self) -> Optional[str]:
         cursor = self._connection.execute("SELECT name FROM stations WHERE id = 1")
@@ -138,20 +149,21 @@ class DatabaseManager:
                 employee.full_name.strip(),
                 employee.sl_l1_desc.strip(),
                 employee.position_desc.strip(),
+                employee.email.strip() if employee.email else "",
             )
             for employee in employees
         ]
         with self._connection:
             self._connection.executemany(
-                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc)"
-                " VALUES(?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc, email)"
+                " VALUES(?, ?, ?, ?, ?)",
                 rows,
             )
         return len(rows)
 
     def load_employee_cache(self) -> Dict[str, EmployeeRecord]:
         cursor = self._connection.execute(
-            "SELECT legacy_id, full_name, sl_l1_desc, position_desc FROM employees"
+            "SELECT legacy_id, full_name, sl_l1_desc, position_desc, email FROM employees"
         )
         return {
             row["legacy_id"]: EmployeeRecord(
@@ -159,6 +171,7 @@ class DatabaseManager:
                 full_name=row["full_name"],
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
+                email=row["email"] or "",
             )
             for row in cursor.fetchall()
         }
@@ -182,8 +195,9 @@ class DatabaseManager:
                     employee_full_name,
                     legacy_id,
                     sl_l1_desc,
-                    position_desc
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    position_desc,
+                    email
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     badge_id,
@@ -193,6 +207,7 @@ class DatabaseManager:
                     employee.legacy_id if employee else None,
                     employee.sl_l1_desc if employee else None,
                     employee.position_desc if employee else None,
+                    employee.email if employee else None,
                 ),
             )
 
@@ -201,7 +216,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   sync_status, synced_at, sync_error
+                   email, sync_status, synced_at, sync_error
             FROM scans
             ORDER BY scanned_at DESC
             LIMIT ?
@@ -218,6 +233,7 @@ class DatabaseManager:
                 legacy_id=row["legacy_id"],
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
+                email=row["email"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],
@@ -258,7 +274,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   sync_status, synced_at, sync_error
+                   email, sync_status, synced_at, sync_error
             FROM scans
             ORDER BY scanned_at ASC
             """
@@ -273,6 +289,7 @@ class DatabaseManager:
                 legacy_id=row["legacy_id"],
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
+                email=row["email"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],
@@ -338,7 +355,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   sync_status, synced_at, sync_error
+                   email, sync_status, synced_at, sync_error
             FROM scans
             WHERE sync_status = 'pending'
             ORDER BY scanned_at ASC
@@ -356,6 +373,7 @@ class DatabaseManager:
                 legacy_id=row["legacy_id"],
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
+                email=row["email"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],

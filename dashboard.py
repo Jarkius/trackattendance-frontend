@@ -290,6 +290,7 @@ class DashboardService:
                 enriched_scans.append({
                     "Badge ID": badge_id,
                     "Full Name": full_name,
+                    "Email": employee.email if employee else "--",
                     "Business Unit": business_unit,
                     "Position": position,
                     "Station": station,
@@ -308,7 +309,7 @@ class DashboardService:
             header_fill = PatternFill(start_color="86bc25", end_color="86bc25", fill_type="solid")
             header_font = Font(bold=True, color="FFFFFF")
 
-            columns = ["Badge ID", "Full Name", "Business Unit", "Position", "Station", "Scanned At", "Matched"]
+            columns = ["Badge ID", "Full Name", "Email", "Business Unit", "Position", "Station", "Scanned At", "Matched"]
             for col_idx, col_name in enumerate(columns, start=1):
                 cell = ws.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill
@@ -408,7 +409,7 @@ class DashboardService:
             not_scanned.sort(key=lambda e: (e.sl_l1_desc or "", e.full_name or ""))
 
             ws_missing = wb.create_sheet("Not Yet Scanned")
-            missing_headers = ["Badge ID", "Full Name", "Business Unit", "Position"]
+            missing_headers = ["Badge ID", "Full Name", "Email", "Business Unit", "Position"]
             for col_idx, col_name in enumerate(missing_headers, start=1):
                 cell = ws_missing.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill
@@ -418,8 +419,9 @@ class DashboardService:
             for row_idx, emp in enumerate(not_scanned, start=2):
                 ws_missing.cell(row=row_idx, column=1, value=emp.legacy_id)
                 ws_missing.cell(row=row_idx, column=2, value=emp.full_name)
-                ws_missing.cell(row=row_idx, column=3, value=emp.sl_l1_desc or "--")
-                ws_missing.cell(row=row_idx, column=4, value=emp.position_desc or "--")
+                ws_missing.cell(row=row_idx, column=3, value=emp.email or "--")
+                ws_missing.cell(row=row_idx, column=4, value=emp.sl_l1_desc or "--")
+                ws_missing.cell(row=row_idx, column=5, value=emp.position_desc or "--")
 
             # Summary row
             summary_row = len(not_scanned) + 2
