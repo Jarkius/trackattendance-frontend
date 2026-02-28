@@ -131,6 +131,8 @@
             API_URL: 'https://trackattendance-api.run.app',
             // Fallback to polling if SSE fails (milliseconds)
             POLL_INTERVAL: 15000,
+            // Disconnect SSE after idle (milliseconds) - saves Cloud Run costs
+            IDLE_TIMEOUT: 5 * 60 * 1000,  // 5 minutes
             // Show toast on new scans
             SHOW_TOAST: true
         };

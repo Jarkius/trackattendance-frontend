@@ -78,6 +78,10 @@ nav .brand-logo i {
     color: #ef9a9a !important;
 }
 
+.status-paused {
+    color: #b0bec5 !important;
+}
+
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }

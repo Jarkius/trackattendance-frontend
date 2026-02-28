@@ -11,12 +11,15 @@ class Dashboard {
         this.apiKey = config.API_KEY || '';
         this.pollInterval = config.POLL_INTERVAL || 15000;
         this.showToast = config.SHOW_TOAST !== false;
+        this.idleTimeout = config.IDLE_TIMEOUT || 5 * 60 * 1000; // 5 minutes
 
         this.eventSource = null;
         this.pollTimer = null;
         this.lastStats = null;
         this.reconnectDelay = 1000;
         this.maxReconnectDelay = 30000;
+        this.idleTimer = null;
+        this.isPaused = false;
     }
 
     /**
@@ -24,7 +27,58 @@ class Dashboard {
      */
     init() {
         this.setupOfflineDetection();
+        this.setupActivityDetection();
         this.connect();
+    }
+
+    /**
+     * Setup activity detection to pause/resume SSE
+     */
+    setupActivityDetection() {
+        const resetIdleTimer = () => {
+            // If paused, reconnect
+            if (this.isPaused) {
+                console.log('User activity detected, reconnecting...');
+                this.isPaused = false;
+                this.connect();
+            }
+
+            // Reset idle timer
+            clearTimeout(this.idleTimer);
+            this.idleTimer = setTimeout(() => {
+                this.pauseConnection();
+            }, this.idleTimeout);
+        };
+
+        // Track user activity
+        ['click', 'touchstart', 'scroll', 'keydown', 'mousemove'].forEach(event => {
+            document.addEventListener(event, resetIdleTimer, { passive: true });
+        });
+
+        // Also resume on page visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.isPaused) {
+                console.log('Page visible, reconnecting...');
+                this.isPaused = false;
+                this.connect();
+            }
+        });
+
+        // Start initial idle timer
+        resetIdleTimer();
+    }
+
+    /**
+     * Pause SSE connection after idle timeout
+     */
+    pauseConnection() {
+        if (this.eventSource) {
+            console.log('Idle timeout, pausing SSE connection...');
+            this.eventSource.close();
+            this.eventSource = null;
+            this.isPaused = true;
+            this.setStatus('paused');
+        }
     }
 
     /**
@@ -344,6 +398,7 @@ class Dashboard {
             connected: 'cloud_done',
             connecting: 'sync',
             reconnecting: 'sync_problem',
+            paused: 'pause_circle',
             error: 'cloud_off'
         };
 
@@ -351,6 +406,7 @@ class Dashboard {
             connected: 'Live',
             connecting: 'Connecting...',
             reconnecting: 'Reconnecting...',
+            paused: 'Paused (tap to resume)',
             error: 'Offline'
         };
 
