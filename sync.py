@@ -217,6 +217,7 @@ class SyncService:
                 "badge_id": scan.badge_id,
                 "station_name": scan.station_name,
                 "scanned_at": scanned_at,
+                "business_unit": scan.sl_l1_desc or None,
                 "meta": {
                     "matched": scan.legacy_id is not None,
                     "local_id": scan.id,

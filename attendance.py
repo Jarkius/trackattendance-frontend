@@ -146,6 +146,9 @@ class AttendanceService:
                 LOGGER.error("Employee workbook missing columns: %s", ", ".join(missing))
                 return
 
+            # Detect optional columns present in this workbook
+            email_index = header_to_index.get("Email")
+
             seen_ids: set[str] = set()
             employees: List[EmployeeRecord] = []
             for row in sheet.iter_rows(min_row=2, values_only=True):
@@ -158,12 +161,14 @@ class AttendanceService:
                 full_name = _safe_string(row[header_to_index["Full Name"]])
                 sl_l1_desc = _safe_string(row[header_to_index["SL L1 Desc"]])
                 position_desc = _safe_string(row[header_to_index["Position Desc"]])
+                email = _safe_string(row[email_index]) if email_index is not None else ""
                 employees.append(
                     EmployeeRecord(
                         legacy_id=legacy_id,
                         full_name=full_name,
                         sl_l1_desc=sl_l1_desc,
                         position_desc=position_desc,
+                        email=email,
                     )
                 )
                 seen_ids.add(legacy_id)

@@ -194,6 +194,11 @@ REQUIRED_ROSTER_COLUMNS = [
     "Position Desc"
 ]
 
+# Optional column headers — read if present, silently ignored if missing
+OPTIONAL_ROSTER_COLUMNS = [
+    "Email",
+]
+
 # Show warning if roster is missing or invalid
 ROSTER_VALIDATION_ENABLED = os.getenv("ROSTER_VALIDATION_ENABLED", "True").lower() in ("true", "1", "yes")
 
