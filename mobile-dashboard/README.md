@@ -1,14 +1,14 @@
 # TrackAttendance Mobile Dashboard
 
-Real-time attendance dashboard with Server-Sent Events (SSE) for instant updates.
+Mobile-friendly attendance dashboard with automatic refresh.
 
 ## Features
 
-- Real-time updates via SSE (no polling)
+- Auto-refresh every 15 seconds (configurable)
 - Mobile-first responsive design
 - PWA support (add to home screen)
 - Offline indicator
-- Auto-reconnect on connection loss
+- Cost-effective on Cloud Run (polling, not SSE)
 
 ## Setup
 

@@ -1,19 +1,18 @@
 /**
- * TrackAttendance Real-time Dashboard
+ * TrackAttendance Dashboard
  *
- * Uses Server-Sent Events (SSE) for instant updates when new scans arrive.
- * Falls back to polling if SSE is not available.
+ * Uses polling for updates (15 second interval).
+ * Polling is more cost-effective on Cloud Run than SSE,
+ * which bills for the entire duration of open connections.
  */
 
-class DashboardSSE {
+class Dashboard {
     constructor(config) {
         this.apiUrl = config.API_URL;
+        this.apiKey = config.API_KEY || '';
         this.pollInterval = config.POLL_INTERVAL || 15000;
         this.showToast = config.SHOW_TOAST !== false;
 
-        this.eventSource = null;
-        this.reconnectDelay = 1000;
-        this.maxReconnectDelay = 30000;
         this.pollTimer = null;
         this.lastStats = null;
     }
@@ -27,84 +26,42 @@ class DashboardSSE {
     }
 
     /**
-     * Connect via SSE, fallback to polling if unavailable
+     * Start polling for updates
+     * (Polling is more cost-effective on Cloud Run than SSE)
      */
     connect() {
-        // Check if SSE is supported
-        if (typeof EventSource === 'undefined') {
-            console.log('SSE not supported, using polling');
-            this.startPolling();
-            return;
-        }
-
-        try {
-            this.setStatus('connecting');
-            this.eventSource = new EventSource(`${this.apiUrl}/v1/dashboard/events`);
-
-            // Initial data event
-            this.eventSource.addEventListener('init', (e) => {
-                const data = JSON.parse(e.data);
-                this.updateUI(data);
-                this.setStatus('connected');
-                this.reconnectDelay = 1000;
-            });
-
-            // Update event (new scans)
-            this.eventSource.addEventListener('update', (e) => {
-                const data = JSON.parse(e.data);
-                this.updateUI(data);
-                this.flashUpdate();
-
-                if (this.showToast) {
-                    this.showUpdateToast('New scan received!');
-                }
-            });
-
-            // Connection opened
-            this.eventSource.onopen = () => {
-                console.log('SSE connected');
-                this.setStatus('connected');
-                this.reconnectDelay = 1000;
-            };
-
-            // Error handling
-            this.eventSource.onerror = (e) => {
-                console.error('SSE error:', e);
-                this.eventSource.close();
-                this.setStatus('reconnecting');
-
-                // Exponential backoff reconnect
-                setTimeout(() => this.connect(), this.reconnectDelay);
-                this.reconnectDelay = Math.min(
-                    this.reconnectDelay * 2,
-                    this.maxReconnectDelay
-                );
-            };
-
-        } catch (e) {
-            console.error('SSE connection failed:', e);
-            this.startPolling();
-        }
+        this.startPolling();
     }
 
     /**
-     * Fallback to polling mode
+     * Start polling for dashboard stats
      */
     startPolling() {
-        console.log(`Starting polling mode (${this.pollInterval}ms)`);
-        this.setStatus('connected');
+        console.log(`Polling every ${this.pollInterval / 1000}s`);
 
         const poll = async () => {
             try {
-                const res = await fetch(`${this.apiUrl}/v1/dashboard/stats`, {
-                    headers: {
-                        'Authorization': `Bearer ${window.CONFIG.API_KEY || ''}`
-                    }
-                });
+                this.setStatus('connecting');
+
+                const headers = {};
+                if (this.apiKey) {
+                    headers['Authorization'] = `Bearer ${this.apiKey}`;
+                }
+
+                const res = await fetch(`${this.apiUrl}/v1/dashboard/stats`, { headers });
 
                 if (res.ok) {
                     const data = await res.json();
+                    const hadChanges = this.hasChanges(data);
                     this.updateUI(data);
+                    this.setStatus('connected');
+
+                    if (hadChanges && this.showToast) {
+                        this.showUpdateToast('Data updated');
+                    }
+                } else {
+                    console.error('API error:', res.status);
+                    this.setStatus('error');
                 }
             } catch (e) {
                 console.error('Polling error:', e);
@@ -117,6 +74,15 @@ class DashboardSSE {
 
         // Start interval
         this.pollTimer = setInterval(poll, this.pollInterval);
+    }
+
+    /**
+     * Check if stats have changed
+     */
+    hasChanges(newData) {
+        if (!this.lastStats) return false;
+        return newData.total_scans !== this.lastStats.total_scans ||
+               newData.unique_badges !== this.lastStats.unique_badges;
     }
 
     /**
@@ -379,9 +345,6 @@ class DashboardSSE {
      * Clean up resources
      */
     destroy() {
-        if (this.eventSource) {
-            this.eventSource.close();
-        }
         if (this.pollTimer) {
             clearInterval(this.pollTimer);
         }
@@ -390,7 +353,7 @@ class DashboardSSE {
 
 // Initialize dashboard when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    const dashboard = new DashboardSSE(window.CONFIG);
+    const dashboard = new Dashboard(window.CONFIG);
     dashboard.init();
 
     // Expose for debugging
