@@ -450,4 +450,45 @@ def sync_roster_summary(db: DatabaseManager, api_url: str, api_key: str) -> dict
         return {"ok": False, "error": str(e)}
 
 
-__all__ = ["SyncService", "sync_roster_summary"]
+def sync_roster_summary_from_data(
+    bu_data: list, api_url: str, api_key: str,
+    max_retries: int = 5, initial_delay: float = 10.0,
+) -> dict:
+    """Push pre-fetched BU counts to cloud. Thread-safe (no DB access).
+
+    Retries with exponential backoff if network is unavailable at startup.
+    Delays: 10s, 30s, 90s, 270s, 810s (~13 min total before giving up).
+    """
+    import time
+
+    payload = {
+        "business_units": [
+            {"name": row["bu_name"], "registered": row["count"]}
+            for row in bu_data
+        ]
+    }
+
+    delay = initial_delay
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = requests.post(
+                f"{api_url.rstrip('/')}/v1/roster/summary",
+                json=payload,
+                headers={"Authorization": f"Bearer {api_key}"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            result = response.json()
+            LOGGER.info(f"RosterSync: pushed {len(bu_data)} BU counts to cloud")
+            return {"ok": True, "saved": result.get("saved", 0)}
+        except Exception as e:
+            if attempt < max_retries:
+                LOGGER.info(f"RosterSync: attempt {attempt}/{max_retries} failed, retry in {delay:.0f}s: {e}")
+                time.sleep(delay)
+                delay *= 3  # exponential backoff
+            else:
+                LOGGER.warning(f"RosterSync: all {max_retries} attempts failed: {e}")
+                return {"ok": False, "error": str(e)}
+
+
+__all__ = ["SyncService", "sync_roster_summary", "sync_roster_summary_from_data"]
