@@ -1617,17 +1617,17 @@ ${destination}` : message;
                 if (result?.ok) {
                     adminVerifiedPin = pin;
                     showAdminView('admin-actions-view');
-                    if (adminCloudCount) adminCloudCount.textContent = 'Checking scan count...';
+                    if (adminCloudCount) adminCloudCount.innerHTML = '<i class="material-icons">cloud_queue</i> Checking...';
                     bridge.admin_get_cloud_scan_count((countResult) => {
                         if (adminCloudCount) {
-                            adminCloudCount.textContent = countResult?.ok
-                                ? `Cloud: ${Number(countResult.count).toLocaleString()} scan(s)`
-                                : (countResult?.message || 'Could not check count');
+                            adminCloudCount.innerHTML = countResult?.ok
+                                ? `<i class="material-icons">cloud_queue</i> Cloud: ${Number(countResult.count).toLocaleString()} scans`
+                                : `<i class="material-icons">cloud_off</i> ${countResult?.message || 'Could not check count'}`;
                         }
                     });
                     bridge.admin_get_local_scan_count((localResult) => {
                         if (adminLocalCount) {
-                            adminLocalCount.textContent = `This station: ${Number(localResult?.count || 0).toLocaleString()} local scan(s)`;
+                            adminLocalCount.innerHTML = `<i class="material-icons">computer</i> This station: ${Number(localResult?.count || 0).toLocaleString()} local scans`;
                         }
                     });
                 } else {
@@ -1762,40 +1762,83 @@ ${destination}` : message;
     // Settings panel
     const adminSettingsBtn = document.getElementById('admin-settings-btn');
     const adminSettingsBack = document.getElementById('admin-settings-back');
+    const adminSettingsBackBottom = document.getElementById('admin-settings-back-bottom');
     const adminRefreshStatus = document.getElementById('admin-refresh-status');
+    const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
+    const adminDupActionStatus = document.getElementById('admin-dup-action-status');
+    const adminVoiceToggle = document.getElementById('admin-voice-toggle');
+    const adminVolumeSlider = document.getElementById('admin-volume-slider');
+    const adminVolumeValue = document.getElementById('admin-volume-value');
 
-    const loadRefreshSetting = () => {
+    const loadAllSettings = () => {
+        // Load refresh setting
         if (adminRefreshStatus) adminRefreshStatus.textContent = 'Loading...';
-        document.querySelectorAll('.admin-refresh-opt').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.adm-refresh-opt').forEach(b => b.classList.remove('active'));
         queueOrRun((bridge) => {
             bridge.admin_get_dashboard_refresh((result) => {
                 const val = result?.ok ? result.interval : 60;
                 if (adminRefreshStatus) {
                     adminRefreshStatus.textContent = val === 0 ? 'Current: Manual (pull-to-refresh only)' : `Current: ${val}s auto-refresh`;
                 }
-                document.querySelectorAll('.admin-refresh-opt').forEach(b => {
+                document.querySelectorAll('.adm-refresh-opt').forEach(b => {
                     b.classList.toggle('active', parseInt(b.dataset.val) === val);
                 });
             });
+            // Load local settings (duplicate, voice, volume)
+            if (bridge.admin_get_local_settings) {
+                bridge.admin_get_local_settings((result) => {
+                    if (!result) return;
+                    // Duplicate window
+                    const dupWindow = result.duplicate_window || 60;
+                    document.querySelectorAll('.adm-dup-window-opt').forEach(b => {
+                        b.classList.toggle('active', parseInt(b.dataset.val) === dupWindow);
+                    });
+                    if (adminDupWindowStatus) {
+                        adminDupWindowStatus.textContent = `Current: ${dupWindow >= 60 ? (dupWindow / 60) + 'm' : dupWindow + 's'}`;
+                    }
+                    // Duplicate action
+                    const dupAction = result.duplicate_action || 'warn';
+                    document.querySelectorAll('.adm-dup-action-opt').forEach(b => {
+                        b.classList.toggle('active', b.dataset.val === dupAction);
+                    });
+                    if (adminDupActionStatus) {
+                        adminDupActionStatus.textContent = `Current: ${dupAction}`;
+                    }
+                    // Voice toggle
+                    const voiceEnabled = result.voice_enabled !== false;
+                    if (adminVoiceToggle) {
+                        adminVoiceToggle.classList.toggle('active', voiceEnabled);
+                    }
+                    // Volume slider
+                    const volume = Math.round((result.voice_volume ?? 1.0) * 100);
+                    if (adminVolumeSlider) {
+                        adminVolumeSlider.value = volume;
+                        adminVolumeSlider.style.setProperty('--fill', volume + '%');
+                    }
+                    if (adminVolumeValue) {
+                        adminVolumeValue.textContent = volume + '%';
+                    }
+                });
+            }
         });
     };
 
     if (adminSettingsBtn) adminSettingsBtn.addEventListener('click', (e) => {
         e.preventDefault();
         showAdminView('admin-settings-view');
-        loadRefreshSetting();
+        loadAllSettings();
     });
-    if (adminSettingsBack) adminSettingsBack.addEventListener('click', (e) => {
-        e.preventDefault();
-        showAdminView('admin-actions-view');
-    });
+    const goBackToActions = (e) => { e.preventDefault(); showAdminView('admin-actions-view'); };
+    if (adminSettingsBack) adminSettingsBack.addEventListener('click', goBackToActions);
+    if (adminSettingsBackBottom) adminSettingsBackBottom.addEventListener('click', goBackToActions);
 
-    document.querySelectorAll('.admin-refresh-opt').forEach(btn => {
+    // Dashboard refresh preset buttons
+    document.querySelectorAll('.adm-refresh-opt').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const val = parseInt(btn.dataset.val);
             if (adminRefreshStatus) adminRefreshStatus.textContent = 'Saving...';
-            document.querySelectorAll('.admin-refresh-opt').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.adm-refresh-opt').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             queueOrRun((bridge) => {
                 bridge.admin_set_dashboard_refresh(val, (result) => {
@@ -1808,6 +1851,78 @@ ${destination}` : message;
             });
         });
     });
+
+    // Duplicate window preset buttons
+    document.querySelectorAll('.adm-dup-window-opt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const val = parseInt(btn.dataset.val);
+            document.querySelectorAll('.adm-dup-window-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (adminDupWindowStatus) adminDupWindowStatus.textContent = 'Saving...';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_duplicate_window) {
+                    bridge.admin_set_duplicate_window(val, (result) => {
+                        if (adminDupWindowStatus) {
+                            adminDupWindowStatus.textContent = result?.ok
+                                ? `Saved: ${val >= 60 ? (val / 60) + 'm' : val + 's'}`
+                                : `Error: ${result?.message || 'Failed'}`;
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // Duplicate action preset buttons
+    document.querySelectorAll('.adm-dup-action-opt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const val = btn.dataset.val;
+            document.querySelectorAll('.adm-dup-action-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (adminDupActionStatus) adminDupActionStatus.textContent = 'Saving...';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_duplicate_action) {
+                    bridge.admin_set_duplicate_action(val, (result) => {
+                        if (adminDupActionStatus) {
+                            adminDupActionStatus.textContent = result?.ok
+                                ? `Saved: ${val}`
+                                : `Error: ${result?.message || 'Failed'}`;
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // Voice toggle
+    if (adminVoiceToggle) {
+        adminVoiceToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminVoiceToggle.classList.contains('active');
+            adminVoiceToggle.classList.toggle('active', newState);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_voice_enabled) {
+                    bridge.admin_set_voice_enabled(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Volume slider
+    if (adminVolumeSlider) {
+        adminVolumeSlider.addEventListener('input', () => {
+            const pct = parseInt(adminVolumeSlider.value);
+            adminVolumeSlider.style.setProperty('--fill', pct + '%');
+            if (adminVolumeValue) adminVolumeValue.textContent = pct + '%';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_voice_volume) {
+                    bridge.admin_set_voice_volume(pct / 100.0, () => {});
+                }
+            });
+        });
+    }
 
     if (adminOverlay) adminOverlay.addEventListener('click', (e) => { if (e.target === adminOverlay) hideAdminOverlay(); });
 

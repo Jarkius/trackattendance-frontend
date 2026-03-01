@@ -1494,15 +1494,14 @@ body.dashboard-open {
 .admin-overlay--visible { display: flex; }
 .admin-overlay__dialog {
     background: #fff; border-radius: 12px;
-    padding: 32px; width: 380px; max-width: 90vw;
+    padding: 28px 24px; width: 460px; max-width: 92vw;
+    max-height: 85vh; overflow-y: auto;
     box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    border-top: 3px solid var(--deloitte-green);
 }
 .admin-overlay__title { margin: 0 0 8px; font-size: 1.4rem; font-weight: 600; }
 .admin-overlay__subtitle { color: #666; margin: 0 0 16px; font-size: 0.9rem; }
 .admin-overlay__error { color: #c62828; font-size: 0.85rem; min-height: 1.2em; margin: 4px 0; }
-.admin-overlay__section { margin: 16px 0; padding: 16px; background: #f5f5f5; border-radius: 8px; }
-.admin-overlay__section h6 { margin: 0 0 8px; font-weight: 600; font-size: 1rem; }
-.admin-overlay__section p { margin: 0 0 12px; color: #666; font-size: 0.9rem; }
 .admin-overlay__actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 .admin-overlay__btn {
     padding: 8px 20px; border: none; border-radius: 6px;
@@ -1525,15 +1524,120 @@ body.dashboard-open {
 }
 .admin-overlay__btn--warning:hover { background: #e65100; }
 .admin-overlay__btn--warning i { font-size: 18px; }
-.admin-refresh-opt {
+
+/* ---- Admin Section Component ---- */
+.adm-section {
+    background: #f7f7f8;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+.adm-section__header {
+    display: flex; align-items: center; gap: 6px;
+    margin: 0 0 10px;
+    font-size: 0.65rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: #999;
+}
+.adm-section__header i { font-size: 14px; }
+
+/* ---- Admin Preset Buttons (pills) ---- */
+.adm-opt-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.adm-opt {
     flex: 1; min-width: 48px; text-align: center;
     background: #e0e0e0; color: #333; padding: 8px 12px;
     border: 2px solid transparent; border-radius: 6px;
     cursor: pointer; font-size: 0.85rem; font-weight: 500;
     transition: border-color 0.2s, background 0.2s;
 }
-.admin-refresh-opt:hover { background: #d0d0d0; }
-.admin-refresh-opt.active { border-color: #86bc25; background: #86bc2520; color: #86bc25; font-weight: 600; }
+.adm-opt:hover { background: #d0d0d0; }
+.adm-opt.active { border-color: #86bc25; background: rgba(134,188,37,0.12); color: #86bc25; font-weight: 600; }
+
+/* ---- Admin Status Text ---- */
+.adm-status {
+    margin-top: 8px; font-size: 0.72rem; color: #999;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+/* ---- Admin Toggle Switch ---- */
+.adm-toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 2px 0;
+}
+.adm-toggle-row__label { font-size: 0.85rem; font-weight: 500; color: #333; }
+.adm-toggle {
+    position: relative; width: 36px; height: 20px;
+    background: #ccc; border-radius: 10px;
+    cursor: pointer; transition: background 0.2s;
+    border: none; padding: 0;
+}
+.adm-toggle::after {
+    content: '';
+    position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    background: #fff; border-radius: 50%;
+    transition: transform 0.2s;
+}
+.adm-toggle.active { background: #86bc25; }
+.adm-toggle.active::after { transform: translateX(16px); }
+
+/* ---- Admin Slider ---- */
+.adm-slider-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 4px 0;
+}
+.adm-slider-row__label { font-size: 0.85rem; font-weight: 500; color: #333; white-space: nowrap; }
+.adm-slider {
+    flex: 1; -webkit-appearance: none; appearance: none;
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(to right, #86bc25 var(--fill, 80%), #ddd var(--fill, 80%));
+    outline: none; cursor: pointer;
+}
+.adm-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #86bc25; cursor: pointer;
+    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.adm-slider::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #86bc25; cursor: pointer;
+    border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.adm-slider-row__value {
+    font-size: 0.8rem; font-weight: 600; color: #555;
+    min-width: 32px; text-align: right;
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+/* ---- Admin Back Button ---- */
+.adm-back {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: none; border: none; cursor: pointer;
+    font-size: 0.9rem; font-weight: 500; color: #666;
+    padding: 0; margin-bottom: 12px;
+}
+.adm-back:hover { color: #333; }
+.adm-back i { font-size: 18px; }
+
+/* ---- Admin Settings Link Button ---- */
+.adm-link-btn {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    background: none; border: 1px solid #e0e0e0; border-radius: 8px;
+    padding: 10px 14px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+    color: #333; transition: border-color 0.2s, background 0.2s;
+}
+.adm-link-btn:hover { border-color: #86bc25; background: rgba(134,188,37,0.04); }
+.adm-link-btn i { font-size: 18px; color: #999; }
+
+/* ---- Admin Monospace Readout ---- */
+.adm-readout {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 0.82rem; color: #333; line-height: 1.6;
+}
+.adm-readout i { font-size: 14px; vertical-align: -2px; margin-right: 4px; color: #999; }
+
+/* ---- Existing: PIN, Confirm, Station List ---- */
 .admin-confirm-code {
     font-family: 'Courier New', monospace;
     font-size: 32px; font-weight: bold; letter-spacing: 12px;

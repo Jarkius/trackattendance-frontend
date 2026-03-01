@@ -789,6 +789,54 @@ class Api(QObject):
         ok, message = self._sync_service.set_dashboard_refresh(interval)
         return {"ok": ok, "message": message}
 
+    @pyqtSlot(result="QVariant")
+    def admin_get_local_settings(self) -> dict:
+        """Return all runtime-adjustable local settings."""
+        return {
+            "duplicate_window": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
+            "duplicate_action": config.DUPLICATE_BADGE_ACTION,
+            "voice_enabled": self._voice_player.enabled if self._voice_player else False,
+            "voice_volume": self._voice_player._volume if self._voice_player else 1.0,
+        }
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_duplicate_window(self, seconds: int) -> dict:
+        """Set duplicate badge time window (runtime only)."""
+        seconds = max(1, min(3600, seconds))
+        config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = seconds
+        LOGGER.info("[Admin] Duplicate window set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_duplicate_action(self, action: str) -> dict:
+        """Set duplicate badge action: block, warn, or silent (runtime only)."""
+        action = action.lower()
+        if action not in ("block", "warn", "silent"):
+            return {"ok": False, "message": f"Invalid action: {action}"}
+        config.DUPLICATE_BADGE_ACTION = action
+        LOGGER.info("[Admin] Duplicate action set to '%s'", action)
+        return {"ok": True, "value": action}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_voice_enabled(self, enabled: bool) -> dict:
+        """Enable/disable voice confirmation (runtime only)."""
+        if not self._voice_player:
+            return {"ok": False, "message": "Voice not configured"}
+        self._voice_player.enabled = enabled
+        LOGGER.info("[Admin] Voice %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "enabled": enabled}
+
+    @pyqtSlot(float, result="QVariant")
+    def admin_set_voice_volume(self, volume: float) -> dict:
+        """Set voice volume 0.0-1.0 (runtime only)."""
+        if not self._voice_player:
+            return {"ok": False, "message": "Voice not configured"}
+        volume = max(0.0, min(1.0, volume))
+        self._voice_player._volume = volume
+        self._voice_player._audio_output.setVolume(volume)
+        LOGGER.info("[Admin] Voice volume set to %.0f%%", volume * 100)
+        return {"ok": True, "volume": volume}
+
     @pyqtSlot()
     def _handle_clear_epoch_and_heartbeat_slot(self) -> None:
         """Check clear_epoch and send heartbeat. Runs on MAIN thread (SQLite safe)."""
