@@ -1056,31 +1056,26 @@ ${destination}` : message;
                 });
             });
         } else {
-            // Non-numeric input → try badge first, then fallback to employee lookup
+            // Non-numeric input → search employees first (don't record yet)
             queueOrRun((bridge) => {
-                bridge.submit_scan(badge, (response) => {
-                    if (response?.matched) {
-                        // Badge matched even though it contains letters — proceed normally
+                if (!bridge.search_employee) {
+                    // Fallback: no search support, just do normal scan
+                    bridge.submit_scan(badge, (response) => {
                         handleScanResponse(response);
                         barcodeInput.value = '';
                         returnFocusToInput();
+                    });
+                    return;
+                }
+                bridge.search_employee(badge, (searchResult) => {
+                    barcodeInput.value = '';
+                    if (searchResult?.ok && searchResult.results && searchResult.results.length > 0) {
+                        showLookupOverlay(badge, searchResult.results);
                     } else {
-                        // No badge match → trigger employee lookup
-                        if (!bridge.search_employee) {
+                        // No lookup results — record as unmatched badge scan
+                        bridge.submit_scan(badge, (response) => {
                             handleScanResponse(response);
-                            barcodeInput.value = '';
                             returnFocusToInput();
-                            return;
-                        }
-                        bridge.search_employee(badge, (searchResult) => {
-                            barcodeInput.value = '';
-                            if (searchResult?.ok && searchResult.results && searchResult.results.length > 0) {
-                                showLookupOverlay(badge, searchResult.results);
-                            } else {
-                                // No lookup results — show original "Unknown" response
-                                handleScanResponse(response);
-                                returnFocusToInput();
-                            }
                         });
                     }
                 });
