@@ -1049,8 +1049,8 @@ ${destination}` : message;
         if (!badge) {
             return;
         }
-        // Check if input looks like an email username (contains letters, not a pure number)
-        const looksLikeBadge = /^\d+$/.test(badge);
+        // Badge IDs are numeric, optionally with a trailing letter suffix (e.g. 10117001T for reprints)
+        const looksLikeBadge = /^\d+[A-Za-z]?$/.test(badge);
 
         if (looksLikeBadge) {
             // Normal badge scan flow
