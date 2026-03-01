@@ -160,6 +160,11 @@ class GreetingPlayer(QObject):
         self._pending_file = None
 
     def stop(self) -> None:
-        """Stop playback. Must be called from main thread (e.g. during shutdown)."""
+        """Stop playback and disarm pending invocations.
+
+        Must be called from main thread (e.g. during shutdown).
+        Clears _pending_file so any queued _play_on_main_thread calls become no-ops.
+        """
+        self._pending_file = None
         if self._player:
             self._player.stop()

@@ -187,7 +187,9 @@ class ProximityGreetingManager:
                 time.sleep(0.1)
                 continue
 
+            # Capture refs to avoid race with stop() on main thread
             detector = self._detector
+            overlay = self._overlay
             if detector is None:
                 break
 
@@ -203,17 +205,20 @@ class ProximityGreetingManager:
             cur_state = "empty" if time.time() < self._busy_until else raw_state
             if cur_state != prev_state:
                 prev_state = cur_state
-                if self._overlay is not None:
-                    self._overlay.notify_state(cur_state)
+                if overlay is not None and self._running:
+                    try:
+                        overlay.notify_state(cur_state)
+                    except RuntimeError:
+                        pass  # widget deleted
 
             # Feed frame to overlay at ~5 FPS (throttled to reduce GC pressure)
             now = time.time()
-            if self._overlay is not None and (now - last_overlay_time) >= overlay_interval:
+            if overlay is not None and self._running and (now - last_overlay_time) >= overlay_interval:
                 last_overlay_time = now
                 try:
-                    self._overlay.update_frame(frame)
-                except Exception:
-                    pass
+                    overlay.update_frame(frame)
+                except (RuntimeError, Exception):
+                    pass  # widget deleted or other error
 
             # ~15 FPS is plenty for proximity detection
             time.sleep(0.066)
@@ -222,14 +227,17 @@ class ProximityGreetingManager:
         """Stop camera — immediate UI cleanup, deferred resource release."""
         self._running = False
 
-        # Immediate: hide Qt widgets (must be on main thread, which we are)
+        # Hide overlay but keep reference alive — camera thread may have
+        # queued invokeMethod calls that need a live QObject to land on.
+        # The reference is overwritten by start() if camera is re-enabled.
         if self._overlay is not None:
             self._overlay.hide_overlay()
-            self._overlay = None
 
+        # Stop greeting but keep reference alive — camera thread may have
+        # queued play_random() invocations that need a live QObject to land on.
+        # The reference is overwritten by start() if camera is re-enabled.
         if self._greeting_player is not None:
             self._greeting_player.stop()
-            self._greeting_player = None
 
         # Deferred: thread join + camera release in background (avoids blocking UI)
         thread = self._thread

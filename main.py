@@ -615,9 +615,14 @@ class Api(QObject):
 
     @pyqtSlot(result="QVariant")
     def toggle_camera(self) -> dict:
-        """Toggle camera detection on/off at runtime."""
+        """Toggle camera detection on/off at runtime (1s debounce)."""
         if not self._proximity_manager:
             return {"ok": False, "running": False, "message": "Camera not configured"}
+        now = time.time()
+        if now - getattr(self, '_camera_toggle_at', 0) < 1.0:
+            running = self._proximity_manager._running
+            return {"ok": False, "running": running, "message": "Please wait"}
+        self._camera_toggle_at = now
         if self._proximity_manager._running:
             self._proximity_manager.stop()
             LOGGER.info("[Camera] Toggled OFF by user")

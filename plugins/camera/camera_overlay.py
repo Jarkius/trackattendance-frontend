@@ -185,16 +185,19 @@ class CameraOverlay(QLabel):
 
     @pyqtSlot()
     def update_frame_slot(self) -> None:
-        """Called on main thread to paint the pending frame."""
-        if self._pending_frame is not None:
-            self.setPixmap(self._pending_frame)
-            self._pending_frame = None
+        """Called on main thread to convert QImage→QPixmap and paint."""
+        if self._pending_image is not None:
+            # QPixmap must be created on the main thread (macOS GPU requirement)
+            pixmap = QPixmap.fromImage(self._pending_image)
+            self.setPixmap(pixmap)
+            self._pending_image = None
 
     def update_frame(self, frame: "np.ndarray") -> None:
-        """Convert a BGR numpy frame to QPixmap and schedule UI update.
+        """Convert a BGR numpy frame to QImage and schedule UI update.
 
         Safe to call from any thread. Only works in preview mode;
-        icon mode ignores frame updates.
+        icon mode ignores frame updates. QImage is thread-safe;
+        QPixmap conversion happens on the main thread via the slot.
         """
         if self._mode != "preview":
             return
@@ -208,16 +211,15 @@ class CameraOverlay(QLabel):
             h, w, ch = rgb.shape
             bytes_per_line = ch * w
             qimg = QImage(rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888).copy()
-            pixmap = QPixmap.fromImage(qimg)
 
-            self._pending_frame = pixmap
+            self._pending_image = qimg
             QMetaObject.invokeMethod(
                 self, "update_frame_slot", QtConst.ConnectionType.QueuedConnection
             )
         except Exception as exc:
             LOGGER.debug("[CameraOverlay] Frame update error: %s", exc)
 
-    _pending_frame: QPixmap | None = None
+    _pending_image: QImage | None = None
 
     def hide_overlay(self) -> None:
         """Hide the overlay."""
