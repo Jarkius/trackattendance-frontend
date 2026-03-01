@@ -366,36 +366,25 @@ class AttendanceService:
         sheet = workbook.active
         sheet.title = "Scans"
 
-        employee_columns = [
-            header
-            for header in self._employee_headers
-            if header in REQUIRED_COLUMNS
+        export_headers = [
+            "Badge ID", "Full Name", "Email", "Business Unit", "Position",
+            "Station", "Scanned At", "Matched", "Scan Source",
         ]
-        if not employee_columns:
-            employee_columns = list(REQUIRED_COLUMNS)
-
-        export_headers = ["Submitted Value", "Matched"] + employee_columns + ["Email", "Station ID", "Timestamp", "Scan Source"]
         sheet.append(export_headers)
 
         for record in scans:
-            values_by_header = {
-                "Legacy ID": record.legacy_id or "",
-                "Full Name": record.employee_full_name or "Unknown",
-                "SL L1 Desc": record.sl_l1_desc or "",
-                "Position Desc": record.position_desc or "",
-            }
             matched = record.legacy_id is not None
             row = [
                 record.badge_id or "",
-                "Yes" if matched else "No",
-            ]
-            row.extend(values_by_header.get(header, "") for header in employee_columns)
-            row.extend([
+                record.employee_full_name or "Unknown",
                 record.email or "",
+                record.sl_l1_desc or "",
+                record.position_desc or "",
                 record.station_name or "",
                 _format_timestamp(record.scanned_at),
+                "Yes" if matched else "No",
                 record.scan_source or "badge",
-            ])
+            ]
             sheet.append(row)
 
         for col_idx, header in enumerate(export_headers, start=1):
