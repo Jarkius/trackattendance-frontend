@@ -34,6 +34,7 @@ class ScanRecord:
     sl_l1_desc: Optional[str]
     position_desc: Optional[str]
     email: Optional[str] = None
+    scan_source: str = "badge"
     sync_status: str = "pending"
     synced_at: Optional[str] = None
     sync_error: Optional[str] = None
@@ -223,7 +224,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   email, sync_status, synced_at, sync_error
+                   email, scan_source, sync_status, synced_at, sync_error
             FROM scans
             ORDER BY scanned_at DESC
             LIMIT ?
@@ -241,6 +242,7 @@ class DatabaseManager:
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
                 email=row["email"],
+                scan_source=row["scan_source"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],
@@ -281,7 +283,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   email, sync_status, synced_at, sync_error
+                   email, scan_source, sync_status, synced_at, sync_error
             FROM scans
             ORDER BY scanned_at ASC
             """
@@ -297,6 +299,7 @@ class DatabaseManager:
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
                 email=row["email"],
+                scan_source=row["scan_source"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],
@@ -362,7 +365,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   email, sync_status, synced_at, sync_error
+                   email, scan_source, sync_status, synced_at, sync_error
             FROM scans
             WHERE sync_status = 'pending'
             ORDER BY scanned_at ASC
@@ -381,6 +384,7 @@ class DatabaseManager:
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
                 email=row["email"],
+                scan_source=row["scan_source"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],

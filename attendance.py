@@ -374,7 +374,7 @@ class AttendanceService:
         if not employee_columns:
             employee_columns = list(REQUIRED_COLUMNS)
 
-        export_headers = ["Submitted Value", "Matched"] + employee_columns + ["Station ID", "Timestamp"]
+        export_headers = ["Submitted Value", "Matched"] + employee_columns + ["Email", "Station ID", "Timestamp", "Scan Source"]
         sheet.append(export_headers)
 
         for record in scans:
@@ -390,7 +390,12 @@ class AttendanceService:
                 "Yes" if matched else "No",
             ]
             row.extend(values_by_header.get(header, "") for header in employee_columns)
-            row.extend([record.station_name or "", _format_timestamp(record.scanned_at)])
+            row.extend([
+                record.email or "",
+                record.station_name or "",
+                _format_timestamp(record.scanned_at),
+                record.scan_source or "badge",
+            ])
             sheet.append(row)
 
         for col_idx, header in enumerate(export_headers, start=1):
