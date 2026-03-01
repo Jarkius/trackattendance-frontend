@@ -203,11 +203,11 @@ class AttendanceService:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Employees"
-        sheet.append(REQUIRED_COLUMNS)
+        sheet.append(REQUIRED_COLUMNS + ["Email"])
 
         sample_rows = [
-            ("100001", "Ada Lovelace", "Consulting", "Analyst"),
-            ("100002", "Grace Hopper", "Technology", "Engineer"),
+            ("100001", "Ada Lovelace", "Consulting", "Analyst", "alovelace@example.com"),
+            ("100002", "Grace Hopper", "Technology", "Engineer", "ghopper@example.com"),
         ]
         for row in sample_rows:
             sheet.append(row)
