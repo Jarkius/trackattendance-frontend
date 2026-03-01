@@ -149,21 +149,33 @@ class AttendanceService:
             # Detect optional columns present in this workbook
             email_index = header_to_index.get("Email")
 
-            seen_ids: set[str] = set()
-            duplicate_count = 0
+            seen_ids: dict[str, int] = {}  # legacy_id → first row number
+            duplicates: list[dict] = []  # detailed duplicate info
             employees: List[EmployeeRecord] = []
+            row_num = 1  # header is row 1
             for row in sheet.iter_rows(min_row=2, values_only=True):
+                row_num += 1
                 legacy_id_raw = row[header_to_index["Legacy ID"]] if header_to_index["Legacy ID"] < len(row) else None
                 if legacy_id_raw is None:
                     continue
                 legacy_id = str(legacy_id_raw).strip()
                 if not legacy_id:
                     continue
-                if legacy_id in seen_ids:
-                    duplicate_count += 1
-                    continue
                 full_name = _safe_string(row[header_to_index["Full Name"]] if header_to_index["Full Name"] < len(row) else None)
                 sl_l1_desc = _safe_string(row[header_to_index["SL L1 Desc"]] if header_to_index["SL L1 Desc"] < len(row) else None)
+                if legacy_id in seen_ids:
+                    duplicates.append({
+                        "legacy_id": legacy_id,
+                        "full_name": full_name,
+                        "business_unit": sl_l1_desc,
+                        "row": row_num,
+                        "first_row": seen_ids[legacy_id],
+                    })
+                    LOGGER.warning(
+                        "Roster: duplicate Legacy ID %s on row %d (first seen row %d) — %s [%s], skipped",
+                        legacy_id, row_num, seen_ids[legacy_id], full_name, sl_l1_desc,
+                    )
+                    continue
                 position_desc = _safe_string(row[header_to_index["Position Desc"]] if header_to_index["Position Desc"] < len(row) else None)
                 email = _safe_string(row[email_index] if email_index is not None and email_index < len(row) else None)
                 employees.append(
@@ -175,7 +187,7 @@ class AttendanceService:
                         email=email,
                     )
                 )
-                seen_ids.add(legacy_id)
+                seen_ids[legacy_id] = row_num
             if employees:
                 # Clear old employees and reimport
                 self._db.clear_employees()
@@ -183,12 +195,36 @@ class AttendanceService:
                 self._db.set_roster_hash(current_hash)
                 self._db.set_roster_meta("file_mtime", current_mtime)
                 LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
-                if duplicate_count:
-                    LOGGER.warning("Roster: skipped %d duplicate Legacy ID(s)", duplicate_count)
+                if duplicates:
+                    LOGGER.warning("Roster: skipped %d duplicate Legacy ID(s)", len(duplicates))
+                    self._export_duplicate_report(duplicates)
                 # Roster BU counts will be pushed to cloud after first
                 # successful health check (see main.py Api._run_check)
         finally:
             workbook.close()
+
+    def _export_duplicate_report(self, duplicates: list[dict]) -> None:
+        """Export duplicate Legacy IDs to an Excel file in the exports directory."""
+        try:
+            export_dir = self._export_directory
+            export_dir.mkdir(parents=True, exist_ok=True)
+            from datetime import datetime
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = export_dir / f"Roster_Duplicates_{ts}.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Duplicate Legacy IDs"
+            ws.append(["Legacy ID", "Name (Skipped)", "Business Unit", "Row in Excel", "First Seen Row"])
+            for d in duplicates:
+                ws.append([d["legacy_id"], d["full_name"], d["business_unit"], d["row"], d["first_row"]])
+            # Auto-width columns
+            for col in ws.columns:
+                max_len = max((len(str(cell.value or "")) for cell in col), default=10)
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+            wb.save(path)
+            LOGGER.warning("Roster: duplicate report exported to %s", path)
+        except Exception as exc:
+            LOGGER.error("Roster: failed to export duplicate report: %s", exc)
 
     @staticmethod
     def _hash_file(path: Path) -> str:
