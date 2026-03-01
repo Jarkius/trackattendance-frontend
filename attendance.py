@@ -150,18 +150,22 @@ class AttendanceService:
             email_index = header_to_index.get("Email")
 
             seen_ids: set[str] = set()
+            duplicate_count = 0
             employees: List[EmployeeRecord] = []
             for row in sheet.iter_rows(min_row=2, values_only=True):
-                legacy_id_raw = row[header_to_index["Legacy ID"]]
+                legacy_id_raw = row[header_to_index["Legacy ID"]] if header_to_index["Legacy ID"] < len(row) else None
                 if legacy_id_raw is None:
                     continue
                 legacy_id = str(legacy_id_raw).strip()
-                if not legacy_id or legacy_id in seen_ids:
+                if not legacy_id:
                     continue
-                full_name = _safe_string(row[header_to_index["Full Name"]])
-                sl_l1_desc = _safe_string(row[header_to_index["SL L1 Desc"]])
-                position_desc = _safe_string(row[header_to_index["Position Desc"]])
-                email = _safe_string(row[email_index]) if email_index is not None else ""
+                if legacy_id in seen_ids:
+                    duplicate_count += 1
+                    continue
+                full_name = _safe_string(row[header_to_index["Full Name"]] if header_to_index["Full Name"] < len(row) else None)
+                sl_l1_desc = _safe_string(row[header_to_index["SL L1 Desc"]] if header_to_index["SL L1 Desc"] < len(row) else None)
+                position_desc = _safe_string(row[header_to_index["Position Desc"]] if header_to_index["Position Desc"] < len(row) else None)
+                email = _safe_string(row[email_index] if email_index is not None and email_index < len(row) else None)
                 employees.append(
                     EmployeeRecord(
                         legacy_id=legacy_id,
@@ -179,6 +183,8 @@ class AttendanceService:
                 self._db.set_roster_hash(current_hash)
                 self._db.set_roster_meta("file_mtime", current_mtime)
                 LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
+                if duplicate_count:
+                    LOGGER.warning("Roster: skipped %d duplicate Legacy ID(s)", duplicate_count)
                 # Roster BU counts will be pushed to cloud after first
                 # successful health check (see main.py Api._run_check)
         finally:
