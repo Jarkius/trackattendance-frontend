@@ -110,6 +110,49 @@ body > header h1 {
     }
 }
 
+/* Camera Toggle - positioned left of dashboard icon */
+.camera-toggle {
+    position: fixed;
+    top: 20px;
+    right: 190px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.camera-toggle--hidden {
+    display: none;
+}
+
+.camera-toggle--on {
+    color: var(--deloitte-green);
+}
+
+.camera-toggle--on .camera-toggle__on { display: block; }
+.camera-toggle--on .camera-toggle__off { display: none; }
+
+.camera-toggle--off {
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.camera-toggle--off .camera-toggle__on { display: none; }
+.camera-toggle--off .camera-toggle__off { display: block; }
+
+.camera-toggle:hover {
+    color: var(--deloitte-green);
+    transform: scale(1.1);
+}
+
+.camera-toggle svg {
+    width: 20px;
+    height: 20px;
+}
+
 /* Dashboard Icon (Issue #27) - positioned next to connection status */
 .dashboard-icon {
     position: fixed;

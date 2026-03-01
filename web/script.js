@@ -149,6 +149,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncStatusMessage = document.getElementById('sync-status-message');
     const connectionStatusDot = document.getElementById('connection-status');
 
+    // Camera toggle element
+    const cameraToggle = document.getElementById('camera-toggle');
+
     // Dashboard overlay elements (Issue #27)
     const dashboardIcon = document.getElementById('dashboard-icon');
     const dashboardOverlay = document.getElementById('dashboard-overlay');
@@ -833,6 +836,7 @@ ${destination}` : message;
                 state.history = Array.isArray(payload?.scanHistory) ? payload.scanHistory : [];
                 applyDashboardState();
                 updateSyncStatus();  // Load sync status on startup
+                initCameraToggle();  // Set camera toggle initial state
                 // Delay connection check to reduce initial load time
                 // Indicator starts black (invisible), so no rush to show status
                 // Uses configurable delay from CONNECTION_CHECK_INITIAL_DELAY_SECONDS
@@ -846,6 +850,39 @@ ${destination}` : message;
             });
         });
     };
+
+    // ── Camera toggle ──────────────────────────────────────────────────
+
+    const setCameraToggleState = (running) => {
+        if (!cameraToggle) return;
+        cameraToggle.classList.remove('camera-toggle--hidden', 'camera-toggle--on', 'camera-toggle--off');
+        cameraToggle.classList.add(running ? 'camera-toggle--on' : 'camera-toggle--off');
+        cameraToggle.setAttribute('title', running ? 'Camera Detection: ON' : 'Camera Detection: OFF');
+    };
+
+    const initCameraToggle = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.get_camera_status) return;
+            bridge.get_camera_status((status) => {
+                if (!status?.enabled) return;  // keep hidden if not configured
+                setCameraToggleState(status.running);
+            });
+        });
+    };
+
+    const handleCameraToggle = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.toggle_camera) return;
+            bridge.toggle_camera((result) => {
+                if (result?.ok) {
+                    setCameraToggleState(result.running);
+                }
+                returnFocusToInput();
+            });
+        });
+    };
+
+    // ── Scan handling ────────────────────────────────────────────────────
 
     const handleScanResponse = (response) => {
         if (!response || response.ok === false) {
@@ -1301,6 +1338,15 @@ ${destination}` : message;
         syncNowBtn.addEventListener('click', (event) => {
             event.preventDefault();
             handleSyncNow();
+        });
+    }
+
+    // Camera toggle
+    if (cameraToggle) {
+        cameraToggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleCameraToggle();
         });
     }
 

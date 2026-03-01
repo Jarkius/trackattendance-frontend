@@ -604,6 +604,34 @@ class Api(QObject):
         return self._dashboard_service.export_to_excel()
 
     @pyqtSlot(result="QVariant")
+    def get_camera_status(self) -> dict:
+        """Return camera detection feature status."""
+        if not self._proximity_manager:
+            return {"enabled": False, "running": False}
+        return {
+            "enabled": True,
+            "running": bool(self._proximity_manager._running),
+        }
+
+    @pyqtSlot(result="QVariant")
+    def toggle_camera(self) -> dict:
+        """Toggle camera detection on/off at runtime."""
+        if not self._proximity_manager:
+            return {"ok": False, "running": False, "message": "Camera not configured"}
+        if self._proximity_manager._running:
+            self._proximity_manager.stop()
+            LOGGER.info("[Camera] Toggled OFF by user")
+            return {"ok": True, "running": False, "message": "Camera stopped"}
+        started = self._proximity_manager.start()
+        if started:
+            LOGGER.info("[Camera] Toggled ON by user")
+        return {
+            "ok": started,
+            "running": started,
+            "message": "Camera started" if started else "Camera failed to start",
+        }
+
+    @pyqtSlot(result="QVariant")
     def is_admin_enabled(self) -> dict:
         """Check if admin features are available."""
         return {"enabled": config.ADMIN_FEATURES_ENABLED}
