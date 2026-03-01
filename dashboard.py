@@ -276,8 +276,10 @@ class DashboardService:
                 else:
                     badge_id, station, scanned_at, matched = scan[0], scan[1], scan[2], scan[3]
 
-                # Lookup employee details from local cache
-                employee = employee_cache.get(badge_id)
+                # Use legacy_id from cloud meta if available, otherwise try badge_id
+                legacy_id = scan.get("legacy_id") if isinstance(scan, dict) else None
+                lookup_key = legacy_id or badge_id
+                employee = employee_cache.get(lookup_key)
                 if employee:
                     full_name = employee.full_name
                     business_unit = employee.sl_l1_desc or "--"
@@ -287,13 +289,14 @@ class DashboardService:
                     business_unit = "--"
                     position = "--"
 
-                scan_source = scan.get("scan_source", "badge") if isinstance(scan, dict) else "badge"
+                scan_source = scan.get("scan_source", "manual") if isinstance(scan, dict) else "manual"
                 enriched_scans.append({
-                    "Badge ID": badge_id,
+                    "Scan Value": badge_id,
+                    "Legacy ID": employee.legacy_id if employee else (legacy_id or ""),
                     "Full Name": full_name,
-                    "Email": employee.email if employee else "--",
-                    "Business Unit": business_unit,
-                    "Position": position,
+                    "SL L1 Desc": business_unit,
+                    "Position Desc": position,
+                    "Email": employee.email if employee else "",
                     "Station": station,
                     "Scanned At": scanned_at,
                     "Matched": "Yes" if matched else "No",
@@ -311,7 +314,7 @@ class DashboardService:
             header_fill = PatternFill(start_color="86bc25", end_color="86bc25", fill_type="solid")
             header_font = Font(bold=True, color="FFFFFF")
 
-            columns = ["Badge ID", "Full Name", "Email", "Business Unit", "Position", "Station", "Scanned At", "Matched", "Scan Source"]
+            columns = ["Scan Value", "Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Email", "Station", "Scanned At", "Matched", "Scan Source"]
             for col_idx, col_name in enumerate(columns, start=1):
                 cell = ws.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill
@@ -411,7 +414,7 @@ class DashboardService:
             not_scanned.sort(key=lambda e: (e.sl_l1_desc or "", e.full_name or ""))
 
             ws_missing = wb.create_sheet("Not Yet Scanned")
-            missing_headers = ["Badge ID", "Full Name", "Email", "Business Unit", "Position"]
+            missing_headers = ["Legacy ID", "Full Name", "Email", "SL L1 Desc", "Position Desc"]
             for col_idx, col_name in enumerate(missing_headers, start=1):
                 cell = ws_missing.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill

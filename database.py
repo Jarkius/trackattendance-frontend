@@ -34,7 +34,7 @@ class ScanRecord:
     sl_l1_desc: Optional[str]
     position_desc: Optional[str]
     email: Optional[str] = None
-    scan_source: str = "badge"
+    scan_source: str = "manual"
     sync_status: str = "pending"
     synced_at: Optional[str] = None
     sync_error: Optional[str] = None
@@ -102,7 +102,7 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass  # column already exists
         try:
-            self._connection.execute("ALTER TABLE scans ADD COLUMN scan_source TEXT DEFAULT 'badge'")
+            self._connection.execute("ALTER TABLE scans ADD COLUMN scan_source TEXT DEFAULT 'manual'")
         except sqlite3.OperationalError:
             pass  # column already exists
 
@@ -187,7 +187,7 @@ class DatabaseManager:
         station_name: str,
         employee: Optional[EmployeeRecord],
         scanned_at: Optional[str] = None,
-        scan_source: str = "badge",
+        scan_source: str = "manual",
     ) -> None:
         timestamp = scanned_at or datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         logger.info(f"RecordingScan: badge={badge_id}, station={station_name}, time={timestamp}, source={scan_source}")

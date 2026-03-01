@@ -958,7 +958,7 @@ ${destination}` : message;
                     btn.addEventListener('click', (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        handleManualScan(emp.legacy_id);
+                        handleManualScan(query, emp.legacy_id);
                     });
                     lookupResults.appendChild(card);
                 });
@@ -982,11 +982,11 @@ ${destination}` : message;
         returnFocusToInput();
     };
 
-    const handleManualScan = (legacyId) => {
+    const handleManualScan = (originalQuery, legacyId) => {
         hideLookupOverlay();
         queueOrRun((bridge) => {
             if (!bridge.submit_manual_scan) return;
-            bridge.submit_manual_scan(legacyId, (response) => {
+            bridge.submit_manual_scan(originalQuery, legacyId, (response) => {
                 handleScanResponse(response);
                 barcodeInput.value = '';
                 returnFocusToInput();
@@ -1078,8 +1078,8 @@ ${destination}` : message;
                     if (searchResult?.ok && searchResult.results && searchResult.results.length > 0) {
                         showLookupOverlay(badge, searchResult.results);
                     } else {
-                        // No lookup results — record as unmatched badge scan
-                        bridge.submit_scan(badge, (response) => {
+                        // No lookup results — record as unmatched manual (not badge)
+                        bridge.submit_manual_scan(badge, "", (response) => {
                             handleScanResponse(response);
                             returnFocusToInput();
                         });

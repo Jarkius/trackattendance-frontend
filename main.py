@@ -489,9 +489,9 @@ class Api(QObject):
                         except Exception as e:
                             LOGGER.warning(f"Roster sync after health check failed: {e}")
                             self._roster_synced = False  # retry next check
-                    # Check clear_epoch and send heartbeat
+                    # Check clear_epoch and send heartbeat (on main thread for SQLite safety)
                     if ok:
-                        self._handle_clear_epoch_and_heartbeat()
+                        QMetaObject.invokeMethod(self, "_handle_clear_epoch_and_heartbeat_slot", Qt.ConnectionType.QueuedConnection)
             except Exception as exc:  # noqa: BLE001
                 LOGGER.exception("Health check failed: %s", exc)
                 payload = {"ok": False, "message": f"Check failed: {exc}"}
@@ -773,8 +773,9 @@ class Api(QObject):
         except Exception:
             return {"count": 0}
 
-    def _handle_clear_epoch_and_heartbeat(self) -> None:
-        """Check clear_epoch from cloud and send heartbeat. Runs on health check thread."""
+    @pyqtSlot()
+    def _handle_clear_epoch_and_heartbeat_slot(self) -> None:
+        """Check clear_epoch and send heartbeat. Runs on MAIN thread (SQLite safe)."""
         if not self._sync_service:
             return
 
@@ -798,11 +799,16 @@ class Api(QObject):
             self._service._db.set_meta("last_clear_epoch", cloud_epoch)
             LOGGER.info("[Sync] Local data cleared after remote clear")
 
-        # Send heartbeat
+        # Send heartbeat (in background to avoid blocking main thread)
         station = self._service._db.get_station_name() or "Unknown"
         scan_count = self._service._db.count_scans_total()
         current_epoch = self._service._db.get_meta("last_clear_epoch")
-        self._sync_service.send_heartbeat(station, current_epoch, scan_count)
+        sync_svc = self._sync_service
+
+        def _send():
+            sync_svc.send_heartbeat(station, current_epoch, scan_count)
+
+        threading.Thread(target=_send, daemon=True, name="heartbeat").start()
 
     @pyqtSlot(result="QVariant")
     def get_voice_status(self) -> dict:
@@ -826,10 +832,17 @@ class Api(QObject):
         results = self._service.search_employee(query)
         return {"ok": True, "results": results}
 
-    @pyqtSlot(str, result="QVariant")
-    def submit_manual_scan(self, legacy_id: str) -> dict:
-        """Record a scan via manual employee lookup (forgot-badge flow)."""
-        result = self._service.register_scan(legacy_id, scan_source="manual_lookup")
+    @pyqtSlot(str, str, result="QVariant")
+    def submit_manual_scan(self, original_query: str, legacy_id: str = "") -> dict:
+        """Record a scan via manual employee lookup (forgot-badge flow).
+
+        original_query: what the user actually typed (stored as scan value)
+        legacy_id: matched employee's ID (used for employee lookup, may be empty)
+        """
+        result = self._service.register_scan(
+            original_query, scan_source="lookup" if legacy_id else "manual",
+            lookup_legacy_id=legacy_id or None,
+        )
 
         # Play voice confirmation on successful match
         if self._voice_player and result.get("matched") and not result.get("is_duplicate"):

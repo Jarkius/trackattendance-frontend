@@ -299,7 +299,9 @@ class AttendanceService:
                 break
         return results
 
-    def register_scan(self, badge_id: str, scan_source: str = "badge") -> Dict[str, object]:
+    def register_scan(self, badge_id: str, scan_source: str = "badge",
+                       lookup_legacy_id: str = None) -> Dict[str, object]:
+        import re
         import config
 
         sanitized = badge_id.strip()
@@ -309,8 +311,15 @@ class AttendanceService:
                 "message": "Badge ID is required.",
             }
 
-        # Get employee info first (needed for both success and duplicate rejection)
-        employee = self._employee_cache.get(sanitized)
+        # Only derive scan_source when caller used default (submit_scan passes "badge")
+        # Lookup/manual paths pass explicit scan_source — don't override
+        if scan_source == "badge":
+            scan_source = "badge" if re.match(r'^\d+[A-Za-z]?$', sanitized) else "manual"
+
+        # For lookup: user typed a name but selected an employee — resolve by legacy_id
+        # For badge/manual: resolve by the scan value itself
+        lookup_key = lookup_legacy_id if lookup_legacy_id else sanitized
+        employee = self._employee_cache.get(lookup_key)
 
         # Check for duplicate badge scan (Issue #20)
         is_duplicate = False
@@ -367,7 +376,8 @@ class AttendanceService:
         sheet.title = "Scans"
 
         export_headers = [
-            "Badge ID", "Full Name", "Email", "Business Unit", "Position",
+            "Scan Value", "Legacy ID", "Full Name",
+            "SL L1 Desc", "Position Desc", "Email",
             "Station", "Scanned At", "Matched", "Scan Source",
         ]
         sheet.append(export_headers)
@@ -376,14 +386,15 @@ class AttendanceService:
             matched = record.legacy_id is not None
             row = [
                 record.badge_id or "",
-                record.employee_full_name or "Unknown",
-                record.email or "",
+                record.legacy_id or "",
+                record.employee_full_name or "",
                 record.sl_l1_desc or "",
                 record.position_desc or "",
+                record.email or "",
                 record.station_name or "",
                 _format_timestamp(record.scanned_at),
                 "Yes" if matched else "No",
-                record.scan_source or "badge",
+                record.scan_source or "manual",
             ]
             sheet.append(row)
 

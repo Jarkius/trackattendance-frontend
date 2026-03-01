@@ -276,9 +276,10 @@ class SyncService:
                 "station_name": scan.station_name,
                 "scanned_at": scanned_at,
                 "business_unit": scan.sl_l1_desc or None,
-                "scan_source": scan.scan_source or "badge",
+                "scan_source": scan.scan_source or "manual",
                 "meta": {
                     "matched": scan.legacy_id is not None,
+                    "legacy_id": scan.legacy_id,
                     "local_id": scan.id,
                 },
             })
@@ -467,7 +468,7 @@ class SyncService:
             if response.status_code == 200:
                 data = response.json()
                 LOGGER.info(f"Cloud scans cleared: {data.get('deleted', 0)} records")
-                return {"ok": True, "deleted": data.get("deleted", 0), "message": data.get("message", "Scans cleared")}
+                return {"ok": True, "deleted": data.get("deleted", 0), "clear_epoch": data.get("clear_epoch", ""), "message": data.get("message", "Scans cleared")}
             elif response.status_code == 401:
                 return {"ok": False, "deleted": 0, "message": "Authentication failed"}
             else:

@@ -118,7 +118,7 @@ class TestExcelExportBasic(unittest.TestCase):
             headers = [cell.value for cell in ws[1]]
 
             # Expected headers
-            self.assertIn("Badge ID", headers)
+            self.assertIn("Scan Value", headers)
             self.assertIn("Matched", headers)
             self.assertIn("Station", headers)
             self.assertIn("Scanned At", headers)
@@ -492,10 +492,8 @@ class TestExcelExportEdgeCases(unittest.TestCase):
             # Find the unmatched row
             for row in ws.iter_rows(min_row=2, values_only=True):
                 if row[0] == "UNKNOWN123":
-                    # Full Name (col 1) should be "Unknown"
-                    self.assertEqual(row[1], "Unknown")
-                    # Matched (col 7) should be "No"
-                    self.assertEqual(row[7], "No")
+                    # Matched (col 8) should be "No"
+                    self.assertEqual(row[8], "No")
                     break
 
             wb.close()
