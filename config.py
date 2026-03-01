@@ -314,8 +314,8 @@ CAMERA_SHOW_OVERLAY = os.getenv("CAMERA_SHOW_OVERLAY", "True").lower() in ("true
 
 # Consecutive detected frames required before greeting fires.
 # Prevents false positives from shadows, posters, or brief flickers.
-# At ~15 FPS with skip_frames=2, 5 confirmations ≈ 1.0 seconds of real presence.
-CAMERA_CONFIRM_FRAMES = _safe_int("CAMERA_CONFIRM_FRAMES", 5, min_val=1, max_val=15)
+# At ~15 FPS with skip_frames=2, 3 confirmations ≈ 0.6 seconds of real presence.
+CAMERA_CONFIRM_FRAMES = _safe_int("CAMERA_CONFIRM_FRAMES", 3, min_val=1, max_val=15)
 
 # Minimum detection size as percentage of frame width.
 # Filters out distant people — only greet those close to the kiosk.

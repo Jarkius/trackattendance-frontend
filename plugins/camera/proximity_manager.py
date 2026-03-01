@@ -28,7 +28,7 @@ class ProximityGreetingManager:
         greeting_volume: float = 1.0,
         scan_busy_seconds: float = 30.0,
         absence_threshold: float = 3.0,
-        confirm_frames: int = 5,
+        confirm_frames: int = 3,
         show_overlay: bool = True,
         voice_player=None,
         min_size_pct: float = 0.20,
