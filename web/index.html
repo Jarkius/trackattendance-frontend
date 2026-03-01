@@ -22,6 +22,14 @@
             <h1>Station : <span id="station-name">--</span></h1>
         </div>
         <span class="connection-status connection-status--unknown" id="connection-status" aria-label="API connection status" title="Checking connection"></span>
+        <span class="camera-toggle camera-toggle--hidden" id="camera-toggle" title="Camera Detection">
+            <svg class="camera-toggle__on" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+            </svg>
+            <svg class="camera-toggle__off" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18L19.73 21 21 19.73 3.27 2z"/>
+            </svg>
+        </span>
         <span class="dashboard-icon" id="dashboard-icon" title="View Dashboard">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
                 <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
