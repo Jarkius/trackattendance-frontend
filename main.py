@@ -489,6 +489,9 @@ class Api(QObject):
                         except Exception as e:
                             LOGGER.warning(f"Roster sync after health check failed: {e}")
                             self._roster_synced = False  # retry next check
+                    # Check clear_epoch and send heartbeat
+                    if ok:
+                        self._handle_clear_epoch_and_heartbeat()
             except Exception as exc:  # noqa: BLE001
                 LOGGER.exception("Health check failed: %s", exc)
                 payload = {"ok": False, "message": f"Check failed: {exc}"}
@@ -660,38 +663,146 @@ class Api(QObject):
 
     @pyqtSlot(str, result="QVariant")
     def admin_clear_cloud_data(self, pin: str) -> dict:
-        """Clear cloud + local scan data after PIN verification."""
+        """Clear ALL stations: cloud scans + roster + local data. Sets clear_epoch."""
         if not config.ADMIN_FEATURES_ENABLED:
-            return {"ok": False, "message": "Admin features disabled", "cloud_deleted": 0, "local_deleted": 0}
+            return {"ok": False, "message": "Admin features disabled"}
         if pin != config.ADMIN_PIN:
-            return {"ok": False, "message": "Incorrect PIN", "cloud_deleted": 0, "local_deleted": 0}
+            return {"ok": False, "message": "Incorrect PIN"}
 
-        results = {"ok": True, "cloud_deleted": 0, "local_deleted": 0, "message": ""}
+        # Auto-export backup before clearing
+        backup_path = ""
+        try:
+            export_result = self._service.export_scans()
+            if export_result.get("ok"):
+                backup_path = export_result.get("absolutePath", "")
+                LOGGER.info(f"Admin clear: backup exported to {backup_path}")
+        except Exception as e:
+            LOGGER.warning(f"Admin clear: backup export failed (continuing): {e}")
 
-        # Clear cloud data
+        # Clear cloud data (scans + roster + set clear_epoch)
         if self._sync_service:
             cloud_result = self._sync_service.clear_cloud_scans()
             if not cloud_result["ok"]:
-                return {
-                    "ok": False,
-                    "message": f"Cloud clear failed: {cloud_result['message']}",
-                    "cloud_deleted": 0,
-                    "local_deleted": 0,
-                }
-            results["cloud_deleted"] = cloud_result.get("deleted", 0)
+                return {"ok": False, "message": f"Cloud clear failed: {cloud_result['message']}"}
+            cloud_deleted = cloud_result.get("deleted", 0)
+            clear_epoch = cloud_result.get("clear_epoch", "")
+        else:
+            cloud_deleted = 0
+            clear_epoch = ""
 
         # Clear local scans
         try:
             local_count = self._service._db.clear_all_scans()
-            results["local_deleted"] = local_count
         except Exception as e:
-            results["message"] = f"Cloud cleared but local clear failed: {e}"
-            results["ok"] = False
-            return results
+            return {"ok": False, "message": f"Cloud cleared but local clear failed: {e}"}
 
-        results["message"] = f"Cleared {results['cloud_deleted']} cloud + {results['local_deleted']} local records"
-        LOGGER.info(f"Admin clear: cloud={results['cloud_deleted']}, local={results['local_deleted']}")
-        return results
+        # Update local clear_epoch and send heartbeat immediately
+        if clear_epoch:
+            self._service._db.set_meta("last_clear_epoch", clear_epoch)
+            if self._sync_service:
+                station = self._service._db.get_station_name() or "Unknown"
+                self._sync_service.send_heartbeat(station, clear_epoch, 0)
+
+        msg = f"Cleared {cloud_deleted} cloud + {local_count} local records + roster"
+        LOGGER.info(f"Admin clear-all: {msg}")
+        return {
+            "ok": True,
+            "cloud_deleted": cloud_deleted,
+            "local_deleted": local_count,
+            "backup_path": backup_path,
+            "message": msg,
+        }
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_clear_station_data(self, pin: str) -> dict:
+        """Clear THIS station only: local scans + this station's cloud scans."""
+        if not config.ADMIN_FEATURES_ENABLED:
+            return {"ok": False, "message": "Admin features disabled"}
+        if pin != config.ADMIN_PIN:
+            return {"ok": False, "message": "Incorrect PIN"}
+
+        station = self._service._db.get_station_name() or "Unknown"
+
+        # Auto-export backup
+        backup_path = ""
+        try:
+            export_result = self._service.export_scans()
+            if export_result.get("ok"):
+                backup_path = export_result.get("absolutePath", "")
+        except Exception as e:
+            LOGGER.warning(f"Station clear: backup export failed (continuing): {e}")
+
+        # Delete this station's scans from cloud
+        cloud_deleted = 0
+        if self._sync_service:
+            cloud_result = self._sync_service.clear_station_scans(station)
+            if not cloud_result.get("ok"):
+                return {"ok": False, "message": f"Cloud clear failed: {cloud_result.get('message', 'unknown')}"}
+            cloud_deleted = cloud_result.get("deleted", 0)
+
+        # Clear local scans
+        try:
+            local_count = self._service._db.clear_all_scans()
+        except Exception as e:
+            return {"ok": False, "message": f"Cloud cleared but local clear failed: {e}"}
+
+        msg = f"Cleared {cloud_deleted} cloud + {local_count} local records for {station}"
+        LOGGER.info(f"Admin clear-station: {msg}")
+        return {
+            "ok": True,
+            "cloud_deleted": cloud_deleted,
+            "local_deleted": local_count,
+            "backup_path": backup_path,
+            "station": station,
+            "message": msg,
+        }
+
+    @pyqtSlot(result="QVariant")
+    def admin_get_station_status(self) -> dict:
+        """Get all station statuses for the admin panel live view."""
+        if not self._sync_service:
+            return {"error": "Sync service not configured"}
+        return self._sync_service.get_station_status()
+
+    @pyqtSlot(result="QVariant")
+    def admin_get_local_scan_count(self) -> dict:
+        """Get local scan count for admin panel display."""
+        try:
+            count = self._service._db.count_scans_total()
+            return {"count": count}
+        except Exception:
+            return {"count": 0}
+
+    def _handle_clear_epoch_and_heartbeat(self) -> None:
+        """Check clear_epoch from cloud and send heartbeat. Runs on health check thread."""
+        if not self._sync_service:
+            return
+
+        cloud_epoch = self._sync_service.last_clear_epoch
+        local_epoch = self._service._db.get_meta("last_clear_epoch")
+
+        # First time: initialize local epoch to cloud value (no clear needed)
+        if local_epoch is None and cloud_epoch:
+            self._service._db.set_meta("last_clear_epoch", cloud_epoch)
+            LOGGER.info("[Sync] First connection — initialized clear_epoch to %s", cloud_epoch)
+            local_epoch = cloud_epoch
+        # Existing station: detect remote clear
+        elif cloud_epoch and local_epoch and cloud_epoch != local_epoch:
+            LOGGER.info("[Sync] Remote clear detected (cloud=%s, local=%s) — exporting + clearing", cloud_epoch, local_epoch)
+            try:
+                self._service.export_scans()
+                LOGGER.info("[Sync] Backup exported before remote clear")
+            except Exception as e:
+                LOGGER.warning("[Sync] Backup export failed: %s", e)
+            self._service._db.clear_all_scans()
+            self._service._db.set_meta("last_clear_epoch", cloud_epoch)
+            LOGGER.info("[Sync] Local data cleared after remote clear")
+
+        # Send heartbeat
+        station = self._service._db.get_station_name() or "Unknown"
+        scan_count = self._service._db.count_scans_total()
+        current_epoch = self._service._db.get_meta("last_clear_epoch")
+        self._sync_service.send_heartbeat(station, current_epoch, scan_count)
 
     @pyqtSlot(result="QVariant")
     def get_voice_status(self) -> dict:

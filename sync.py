@@ -65,6 +65,8 @@ class SyncService:
 
         Returns:
             (success: bool, message: str)
+
+        Side-effect: stores clear_epoch from response in self.last_clear_epoch.
         """
         try:
             LOGGER.info(
@@ -79,6 +81,11 @@ class SyncService:
             response.encoding = 'utf-8'  # Force UTF-8 encoding
             if response.status_code == 200:
                 LOGGER.info("Health check success")
+                try:
+                    data = response.json()
+                    self.last_clear_epoch = data.get("clear_epoch")
+                except Exception:
+                    self.last_clear_epoch = None
                 return True, "Connected to cloud API"
             else:
                 LOGGER.warning("Health check failed: API returned %s", response.status_code)
@@ -92,6 +99,57 @@ class SyncService:
         except Exception as e:
             LOGGER.error("Health check error: %s", e)
             return False, f"Connection error: {str(e)}"
+
+    last_clear_epoch: str | None = None  # populated by test_connection()
+
+    def clear_station_scans(self, station_name: str) -> Dict[str, object]:
+        """Delete scans for a specific station from cloud."""
+        try:
+            response = requests.delete(
+                f"{self.api_url}/v1/admin/clear-station",
+                params={"station": station_name},
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "X-Confirm-Delete": "DELETE STATION SCANS",
+                },
+                timeout=self.connection_timeout,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return {"ok": False, "message": f"API returned {response.status_code}"}
+        except Exception as e:
+            return {"ok": False, "message": str(e)}
+
+    def send_heartbeat(self, station_name: str, last_clear_epoch: str | None, local_scan_count: int) -> bool:
+        """Report station status to cloud. Returns True on success."""
+        try:
+            response = requests.post(
+                f"{self.api_url}/v1/stations/heartbeat",
+                json={
+                    "station_name": station_name,
+                    "last_clear_epoch": last_clear_epoch,
+                    "local_scan_count": local_scan_count,
+                },
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=self.connection_timeout,
+            )
+            return response.status_code == 200
+        except Exception as e:
+            LOGGER.debug("Heartbeat failed: %s", e)
+            return False
+
+    def get_station_status(self) -> Dict[str, object]:
+        """Get all station statuses from cloud (public endpoint)."""
+        try:
+            response = requests.get(
+                f"{self.api_url}/v1/stations/status",
+                timeout=self.connection_timeout,
+            )
+            if response.status_code == 200:
+                return response.json()
+            return {"error": f"API returned {response.status_code}"}
+        except Exception as e:
+            return {"error": str(e)}
 
     def test_authentication(self) -> Tuple[bool, str]:
         """

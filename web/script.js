@@ -1559,11 +1559,18 @@ ${destination}` : message;
     const adminPinInput = document.getElementById('admin-pin-input');
     const adminPinError = document.getElementById('admin-pin-error');
     const adminCloudCount = document.getElementById('admin-cloud-count');
+    const adminLocalCount = document.getElementById('admin-local-count');
+    const adminConfirmTitle = document.getElementById('admin-confirm-title');
     const adminConfirmMessage = document.getElementById('admin-confirm-message');
+    const adminConfirmCode = document.getElementById('admin-confirm-code');
+    const adminConfirmCodeInput = document.getElementById('admin-confirm-code-input');
     const adminResultTitle = document.getElementById('admin-result-title');
     const adminResultMessage = document.getElementById('admin-result-message');
 
     let adminVerifiedPin = '';
+    let adminClearMode = ''; // 'station' or 'all'
+    let adminCurrentCode = '';
+    let adminStatusPollId = null;
 
     const checkAdminEnabled = () => {
         queueOrRun((bridge) => {
@@ -1574,8 +1581,9 @@ ${destination}` : message;
         });
     };
 
+    const ADMIN_VIEWS = ['admin-pin-view', 'admin-actions-view', 'admin-confirm-view', 'admin-result-view', 'admin-status-view'];
     const showAdminView = (viewId) => {
-        ['admin-pin-view', 'admin-actions-view', 'admin-confirm-view', 'admin-result-view'].forEach(id => {
+        ADMIN_VIEWS.forEach(id => {
             const el = document.getElementById(id);
             if (el) el.style.display = id === viewId ? '' : 'none';
         });
@@ -1584,6 +1592,7 @@ ${destination}` : message;
     const showAdminOverlay = () => {
         if (!adminOverlay) return;
         adminVerifiedPin = '';
+        adminClearMode = '';
         showAdminView('admin-pin-view');
         if (adminPinInput) { adminPinInput.value = ''; }
         if (adminPinError) { adminPinError.textContent = ''; }
@@ -1597,6 +1606,7 @@ ${destination}` : message;
         adminOverlay.classList.remove('admin-overlay--visible');
         adminOverlay.setAttribute('aria-hidden', 'true');
         adminVerifiedPin = '';
+        if (adminStatusPollId) { clearInterval(adminStatusPollId); adminStatusPollId = null; }
     };
 
     const handlePinSubmit = () => {
@@ -1611,8 +1621,13 @@ ${destination}` : message;
                     bridge.admin_get_cloud_scan_count((countResult) => {
                         if (adminCloudCount) {
                             adminCloudCount.textContent = countResult?.ok
-                                ? `Cloud database has ${Number(countResult.count).toLocaleString()} scan(s)`
+                                ? `Cloud: ${Number(countResult.count).toLocaleString()} scan(s)`
                                 : (countResult?.message || 'Could not check count');
+                        }
+                    });
+                    bridge.admin_get_local_scan_count((localResult) => {
+                        if (adminLocalCount) {
+                            adminLocalCount.textContent = `This station: ${Number(localResult?.count || 0).toLocaleString()} local scan(s)`;
                         }
                     });
                 } else {
@@ -1623,25 +1638,102 @@ ${destination}` : message;
         });
     };
 
+    const showConfirmView = (mode) => {
+        adminClearMode = mode;
+        adminCurrentCode = String(Math.floor(1000 + Math.random() * 9000));
+        if (adminConfirmCode) adminConfirmCode.textContent = adminCurrentCode;
+        if (adminConfirmCodeInput) { adminConfirmCodeInput.value = ''; }
+        const deleteBtn = document.getElementById('admin-confirm-delete');
+        if (deleteBtn) { deleteBtn.disabled = true; deleteBtn.textContent = 'Delete'; }
+        if (adminConfirmTitle) {
+            adminConfirmTitle.textContent = mode === 'all' ? 'Clear All Stations' : 'Clear This Station';
+        }
+        if (adminConfirmMessage) {
+            adminConfirmMessage.textContent = mode === 'all'
+                ? 'This will delete ALL scans + roster from cloud and all stations. A backup will be exported first.'
+                : 'This will delete scans from this station only (local + cloud). A backup will be exported first.';
+        }
+        showAdminView('admin-confirm-view');
+        setTimeout(() => { if (adminConfirmCodeInput) adminConfirmCodeInput.focus(); }, 100);
+    };
+
+    // Validate confirmation code input
+    if (adminConfirmCodeInput) {
+        adminConfirmCodeInput.addEventListener('input', () => {
+            const deleteBtn = document.getElementById('admin-confirm-delete');
+            if (deleteBtn) {
+                deleteBtn.disabled = adminConfirmCodeInput.value.trim() !== adminCurrentCode;
+            }
+        });
+    }
+
     const handleConfirmDelete = () => {
         if (!adminVerifiedPin) { hideAdminOverlay(); return; }
+        if (adminConfirmCodeInput && adminConfirmCodeInput.value.trim() !== adminCurrentCode) return;
+
         const btn = document.getElementById('admin-confirm-delete');
         if (btn) { btn.disabled = true; btn.textContent = 'Deleting...'; }
+
+        const bridgeMethod = adminClearMode === 'all' ? 'admin_clear_cloud_data' : 'admin_clear_station_data';
+
         queueOrRun((bridge) => {
-            bridge.admin_clear_cloud_data(adminVerifiedPin, (result) => {
-                if (btn) { btn.disabled = false; btn.textContent = 'Delete Everything'; }
-                showAdminView('admin-result-view');
+            bridge[bridgeMethod](adminVerifiedPin, (result) => {
+                if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
                 if (result?.ok) {
-                    if (adminResultTitle) { adminResultTitle.textContent = 'Cleared Successfully'; adminResultTitle.style.color = '#86bc25'; }
-                    if (adminResultMessage) adminResultMessage.textContent = result.message + '\nClosing app in 3 seconds...';
-                    dashboardDataCache = null;
-                    updateSyncStatus();
-                    window.setTimeout(() => {
-                        queueOrRun((b) => b.close_window());
-                    }, 3000);
+                    if (adminClearMode === 'all') {
+                        // Show live station status view
+                        showAdminView('admin-status-view');
+                        pollStationStatus();
+                        adminStatusPollId = setInterval(pollStationStatus, 5000);
+                    } else {
+                        // Station-only clear: show result and close
+                        showAdminView('admin-result-view');
+                        if (adminResultTitle) { adminResultTitle.textContent = 'Station Cleared'; adminResultTitle.style.color = '#86bc25'; }
+                        const backupMsg = result.backup_path ? `\nBackup: ${result.backup_path}` : '';
+                        if (adminResultMessage) adminResultMessage.textContent = result.message + backupMsg + '\nClosing app in 3 seconds...';
+                        dashboardDataCache = null;
+                        updateSyncStatus();
+                        window.setTimeout(() => { queueOrRun((b) => b.close_window()); }, 3000);
+                    }
                 } else {
+                    showAdminView('admin-result-view');
                     if (adminResultTitle) { adminResultTitle.textContent = 'Error'; adminResultTitle.style.color = '#c62828'; }
                     if (adminResultMessage) adminResultMessage.textContent = result?.message || 'Failed to clear data';
+                }
+            });
+        });
+    };
+
+    const pollStationStatus = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.admin_get_station_status) return;
+            bridge.admin_get_station_status((result) => {
+                const listEl = document.getElementById('admin-station-list');
+                const summaryEl = document.getElementById('admin-station-summary');
+                if (!listEl || !result?.stations) return;
+
+                listEl.innerHTML = result.stations.map(s => {
+                    const dotClass = 'admin-station-item__dot--' + s.status;
+                    const label = s.status === 'ready' ? 'Ready' : s.status === 'pending' ? 'Pending' : 'Offline';
+                    const ago = s.seconds_ago < 60 ? `${s.seconds_ago}s ago` : `${Math.floor(s.seconds_ago / 60)}m ago`;
+                    const scans = s.status === 'offline' ? '--' : s.local_scan_count;
+                    return `<div class="admin-station-item">
+                        <span class="admin-station-item__name">${s.station_name}</span>
+                        <span class="admin-station-item__status">
+                            <span class="admin-station-item__dot ${dotClass}"></span>
+                            ${label} &middot; ${scans} scans &middot; ${ago}
+                        </span>
+                    </div>`;
+                }).join('');
+
+                if (summaryEl) {
+                    summaryEl.textContent = `${result.ready_count}/${result.total_count} stations cleared`;
+                    if (result.ready_count === result.total_count && result.total_count > 0) {
+                        summaryEl.style.color = '#4caf50';
+                        summaryEl.textContent += ' — All ready!';
+                    } else {
+                        summaryEl.style.color = '#999';
+                    }
                 }
             });
         });
@@ -1655,14 +1747,18 @@ ${destination}` : message;
     if (adminCancelBtn) adminCancelBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
     const adminCloseBtn = document.getElementById('admin-close');
     if (adminCloseBtn) adminCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
+    const adminClearStationBtn = document.getElementById('admin-clear-station');
+    if (adminClearStationBtn) adminClearStationBtn.addEventListener('click', (e) => { e.preventDefault(); showConfirmView('station'); });
     const adminClearCloudBtn = document.getElementById('admin-clear-cloud');
-    if (adminClearCloudBtn) adminClearCloudBtn.addEventListener('click', (e) => { e.preventDefault(); showAdminView('admin-confirm-view'); });
+    if (adminClearCloudBtn) adminClearCloudBtn.addEventListener('click', (e) => { e.preventDefault(); showConfirmView('all'); });
     const adminConfirmCancelBtn = document.getElementById('admin-confirm-cancel');
     if (adminConfirmCancelBtn) adminConfirmCancelBtn.addEventListener('click', (e) => { e.preventDefault(); showAdminView('admin-actions-view'); });
     const adminConfirmDeleteBtn = document.getElementById('admin-confirm-delete');
     if (adminConfirmDeleteBtn) adminConfirmDeleteBtn.addEventListener('click', (e) => { e.preventDefault(); handleConfirmDelete(); });
     const adminResultCloseBtn = document.getElementById('admin-result-close');
     if (adminResultCloseBtn) adminResultCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
+    const adminStatusCloseBtn = document.getElementById('admin-status-close');
+    if (adminStatusCloseBtn) adminStatusCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
     if (adminOverlay) adminOverlay.addEventListener('click', (e) => { if (e.target === adminOverlay) hideAdminOverlay(); });
 
     document.addEventListener('click', (event) => {

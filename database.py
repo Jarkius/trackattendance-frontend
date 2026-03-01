@@ -476,15 +476,36 @@ class DatabaseManager:
         return int(cursor.fetchone()["cnt"] or 0)
 
     def clear_all_scans(self) -> int:
-        """Clear all scan records and station name from local database. Returns scan count deleted."""
+        """Clear all scan records from local database. Preserves station name. Returns scan count deleted."""
         cursor = self._connection.execute("SELECT COUNT(*) FROM scans")
         count = int(cursor.fetchone()[0])
         with self._connection:
             self._connection.execute("DELETE FROM scans")
             self._connection.execute("DELETE FROM sqlite_sequence WHERE name='scans'")
-            self._connection.execute("DELETE FROM stations")
-        logger.info(f"Cleared {count} local scan records + station name")
+        logger.info(f"Cleared {count} local scan records (station name preserved)")
         return count
+
+    def get_meta(self, key: str) -> Optional[str]:
+        """Get a value from the local roster_meta key-value store."""
+        cursor = self._connection.execute(
+            "SELECT value FROM roster_meta WHERE key = ?", (key,)
+        )
+        row = cursor.fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        """Set a value in the local roster_meta key-value store."""
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO roster_meta (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def count_scans_total(self) -> int:
+        """Count total scan records in local database."""
+        cursor = self._connection.execute("SELECT COUNT(*) AS cnt FROM scans")
+        return int(cursor.fetchone()["cnt"] or 0)
 
     def close(self) -> None:
         self._connection.close()
