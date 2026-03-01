@@ -215,21 +215,10 @@ class ProximityGreetingManager:
             time.sleep(0.066)
 
     def stop(self) -> None:
-        """Stop thread, release camera and MediaPipe resources."""
+        """Stop camera — immediate UI cleanup, deferred resource release."""
         self._running = False
 
-        if self._thread is not None:
-            self._thread.join(timeout=0.5)
-            self._thread = None
-
-        if self._cap is not None:
-            self._cap.release()
-            self._cap = None
-
-        if self._detector is not None:
-            self._detector.close()
-            self._detector = None
-
+        # Immediate: hide Qt widgets (must be on main thread, which we are)
         if self._overlay is not None:
             self._overlay.hide_overlay()
             self._overlay = None
@@ -238,4 +227,22 @@ class ProximityGreetingManager:
             self._greeting_player.stop()
             self._greeting_player = None
 
-        LOGGER.info("[Proximity] Stopped")
+        # Deferred: thread join + camera release in background (avoids blocking UI)
+        thread = self._thread
+        cap = self._cap
+        detector = self._detector
+        self._thread = None
+        self._cap = None
+        self._detector = None
+
+        def _cleanup():
+            if thread is not None:
+                thread.join(timeout=2.0)
+            if cap is not None:
+                cap.release()
+            if detector is not None:
+                detector.close()
+            LOGGER.info("[Proximity] Stopped")
+
+        cleanup_thread = threading.Thread(target=_cleanup, daemon=True, name="proximity-cleanup")
+        cleanup_thread.start()
