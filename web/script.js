@@ -1769,6 +1769,45 @@ ${destination}` : message;
     const adminVoiceToggle = document.getElementById('admin-voice-toggle');
     const adminVolumeSlider = document.getElementById('admin-volume-slider');
     const adminVolumeValue = document.getElementById('admin-volume-value');
+    const adminCameraSection = document.getElementById('admin-camera-section');
+    const adminCameraDetectionToggle = document.getElementById('admin-camera-detection-toggle');
+    const adminCameraOverlayToggle = document.getElementById('admin-camera-overlay-toggle');
+    const adminCooldownNum = document.getElementById('admin-cooldown-num');
+    const adminMinsizeNum = document.getElementById('admin-minsize-num');
+    const adminAbsenceNum = document.getElementById('admin-absence-num');
+    const adminFeedbackNum = document.getElementById('admin-feedback-num');
+    const adminConncheckNum = document.getElementById('admin-conncheck-num');
+    const adminDashboardUrl = document.getElementById('admin-dashboard-url');
+
+    // Helper: bind stepper (+/- buttons + number input) with a save callback
+    const bindStepper = (numInput, saveFn) => {
+        if (!numInput) return;
+        const stepper = numInput.closest('.adm-stepper');
+        if (stepper) {
+            stepper.querySelectorAll('.adm-stepper__btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const dir = parseInt(btn.dataset.dir);
+                    const step = parseFloat(numInput.step) || 1;
+                    const min = parseFloat(numInput.min);
+                    const max = parseFloat(numInput.max);
+                    let v = parseFloat(numInput.value) + dir * step;
+                    v = Math.max(min, Math.min(max, parseFloat(v.toFixed(2))));
+                    numInput.value = v;
+                    saveFn(v);
+                });
+            });
+        }
+        numInput.addEventListener('change', () => {
+            const min = parseFloat(numInput.min);
+            const max = parseFloat(numInput.max);
+            let v = parseFloat(numInput.value);
+            if (isNaN(v)) v = min;
+            v = Math.max(min, Math.min(max, v));
+            numInput.value = v;
+            saveFn(v);
+        });
+    };
 
     const loadAllSettings = () => {
         // Load refresh setting
@@ -1817,6 +1856,29 @@ ${destination}` : message;
                     }
                     if (adminVolumeValue) {
                         adminVolumeValue.textContent = volume + '%';
+                    }
+                    // Camera section — hide if not configured
+                    if (adminCameraSection) {
+                        adminCameraSection.classList.toggle('adm-section--hidden', !result.camera_enabled);
+                    }
+                    if (result.camera_enabled) {
+                        if (adminCameraDetectionToggle) {
+                            adminCameraDetectionToggle.classList.toggle('active', !!result.camera_running);
+                        }
+                        if (adminCameraOverlayToggle) {
+                            adminCameraOverlayToggle.classList.toggle('active', !!result.camera_overlay && !!result.camera_running);
+                            adminCameraOverlayToggle.disabled = !result.camera_running;
+                        }
+                        if (adminCooldownNum) adminCooldownNum.value = result.greeting_cooldown || 60;
+                        if (adminMinsizeNum) adminMinsizeNum.value = Math.round((result.min_size_pct || 0.20) * 100);
+                        if (adminAbsenceNum) adminAbsenceNum.value = result.absence_threshold || 3;
+                    }
+                    // Display section
+                    if (adminFeedbackNum) adminFeedbackNum.value = (result.scan_feedback_ms || 2000) / 1000;
+                    if (adminConncheckNum) adminConncheckNum.value = result.connection_check_s ?? 10;
+                    // Dashboard URL
+                    if (adminDashboardUrl) {
+                        adminDashboardUrl.textContent = result.dashboard_url || 'Not configured';
                     }
                 });
             }
@@ -1926,17 +1988,97 @@ ${destination}` : message;
         });
     }
 
+    // Camera detection toggle — also controls overlay visibility
+    if (adminCameraDetectionToggle) {
+        adminCameraDetectionToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            queueOrRun((bridge) => {
+                if (bridge.toggle_camera) {
+                    bridge.toggle_camera((result) => {
+                        if (result?.ok) {
+                            adminCameraDetectionToggle.classList.toggle('active', result.running);
+                            setCameraToggleState(result.running);
+                            // Disable overlay toggle when detection is off
+                            if (adminCameraOverlayToggle) {
+                                adminCameraOverlayToggle.disabled = !result.running;
+                                if (!result.running) {
+                                    adminCameraOverlayToggle.classList.remove('active');
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    // Camera overlay toggle (icon ↔ live preview)
+    if (adminCameraOverlayToggle) {
+        adminCameraOverlayToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (adminCameraOverlayToggle.disabled) return;
+            const newState = !adminCameraOverlayToggle.classList.contains('active');
+            adminCameraOverlayToggle.classList.toggle('active', newState);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_camera_overlay) {
+                    bridge.admin_set_camera_overlay(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Camera steppers: cooldown, min face size, absence threshold
+    bindStepper(adminCooldownNum, (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_greeting_cooldown) bridge.admin_set_greeting_cooldown(v, () => {});
+        });
+    });
+    bindStepper(adminMinsizeNum, (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_min_size_pct) bridge.admin_set_min_size_pct(v / 100, () => {});
+        });
+    });
+    bindStepper(adminAbsenceNum, (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_absence_threshold) bridge.admin_set_absence_threshold(v, () => {});
+        });
+    });
+
+    // Display steppers: scan feedback (seconds → ms), connection check
+    bindStepper(adminFeedbackNum, (v) => {
+        const ms = Math.round(v * 1000);
+        scanFeedbackDurationMs = ms;
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_scan_feedback_duration) bridge.admin_set_scan_feedback_duration(ms, () => {});
+        });
+    });
+    bindStepper(adminConncheckNum, (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_connection_check) bridge.admin_set_connection_check(v, () => {});
+        });
+    });
+
     if (adminOverlay) adminOverlay.addEventListener('click', (e) => { if (e.target === adminOverlay) hideAdminOverlay(); });
 
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
-            returnFocusToInput();
+            // Don't steal focus from admin overlay inputs (sliders, number fields)
+            const inAdmin = adminOverlay && adminOverlay.contains(event.target);
+            const inDashboard = dashboardOverlay && dashboardOverlay.contains(event.target);
+            if (!inAdmin && !inDashboard) {
+                returnFocusToInput();
+            }
         }
     });
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-            // First check if dashboard overlay is open
+            // First check if admin overlay is open
+            if (adminOverlay && adminOverlay.classList.contains('admin-overlay--visible')) {
+                hideAdminOverlay();
+                return;
+            }
+            // Then dashboard overlay
             if (dashboardOverlay && dashboardOverlay.classList.contains('dashboard-overlay--visible')) {
                 hideDashboardOverlay();
                 return;
@@ -1944,7 +2086,10 @@ ${destination}` : message;
             queueOrRun((bridge) => bridge.close_window());
             return;
         }
-        if (event.target !== barcodeInput && event.key.length === 1) {
+        // Don't steal focus from admin/dashboard overlay inputs
+        const inOverlay = (adminOverlay && adminOverlay.contains(event.target))
+            || (dashboardOverlay && dashboardOverlay.contains(event.target));
+        if (!inOverlay && event.target !== barcodeInput && event.key.length === 1) {
             returnFocusToInput();
         }
     });
@@ -1953,12 +2098,14 @@ ${destination}` : message;
     }, 5000);
 
     window.addEventListener('focus', () => {
-        returnFocusToInput();
+        const adminOpen = adminOverlay && adminOverlay.classList.contains('admin-overlay--visible');
+        if (!adminOpen) returnFocusToInput();
         debouncedRefreshConnection();
     });
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-            returnFocusToInput();
+            const adminOpen = adminOverlay && adminOverlay.classList.contains('admin-overlay--visible');
+            if (!adminOpen) returnFocusToInput();
             debouncedRefreshConnection();
         }
     });

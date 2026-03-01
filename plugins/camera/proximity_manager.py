@@ -131,6 +131,20 @@ class ProximityGreetingManager:
                 self._cap = None
             return False
 
+    def set_overlay_mode(self, preview: bool) -> None:
+        """Switch overlay between preview (live camera) and icon mode at runtime."""
+        self._show_overlay = preview
+        if self._overlay is not None and self._parent_window is not None:
+            try:
+                from plugins.camera.camera_overlay import CameraOverlay
+                self._overlay.hide()
+                mode = "preview" if preview else "icon"
+                self._overlay = CameraOverlay(self._parent_window, mode=mode)
+                self._overlay.show_overlay()
+                LOGGER.info("[Proximity] Overlay switched to %s mode", mode)
+            except Exception as exc:
+                LOGGER.warning("[Proximity] Overlay mode switch failed: %s", exc)
+
     def notify_scan_activity(self) -> None:
         """Called when a badge is scanned. Suppresses greetings while queue is active."""
         self._busy_until = time.time() + self._scan_busy_seconds

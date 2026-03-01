@@ -628,10 +628,12 @@ class Api(QObject):
         self._camera_toggle_at = now
         if self._proximity_manager._running:
             self._proximity_manager.stop()
+            self._save_setting("camera_running", "False")
             LOGGER.info("[Camera] Toggled OFF by user")
             return {"ok": True, "running": False, "message": "Camera stopped"}
         started = self._proximity_manager.start()
         if started:
+            self._save_setting("camera_running", "True")
             LOGGER.info("[Camera] Toggled ON by user")
         return {
             "ok": started,
@@ -792,43 +794,74 @@ class Api(QObject):
     @pyqtSlot(result="QVariant")
     def admin_get_local_settings(self) -> dict:
         """Return all runtime-adjustable local settings."""
+        camera_running = False
+        camera_overlay = config.CAMERA_SHOW_OVERLAY
+        greeting_cooldown = config.CAMERA_GREETING_COOLDOWN_SECONDS
+        min_size_pct = config.CAMERA_MIN_SIZE_PCT
+        absence_threshold = config.CAMERA_ABSENCE_THRESHOLD_SECONDS
+        if self._proximity_manager:
+            camera_running = bool(self._proximity_manager._running)
+            camera_overlay = bool(self._proximity_manager._show_overlay)
+            greeting_cooldown = self._proximity_manager._cooldown
+            min_size_pct = self._proximity_manager._min_size_pct
+            absence_threshold = self._proximity_manager._absence_threshold
+        # Build dashboard URL from cloud API base
+        dashboard_url = ""
+        if config.CLOUD_API_URL:
+            dashboard_url = config.CLOUD_API_URL.rstrip("/") + "/dashboard/"
         return {
             "duplicate_window": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
             "duplicate_action": config.DUPLICATE_BADGE_ACTION,
             "voice_enabled": self._voice_player.enabled if self._voice_player else False,
             "voice_volume": self._voice_player._volume if self._voice_player else 1.0,
+            "camera_enabled": self._proximity_manager is not None,
+            "camera_running": camera_running,
+            "camera_overlay": camera_overlay,
+            "greeting_cooldown": greeting_cooldown,
+            "min_size_pct": min_size_pct,
+            "absence_threshold": absence_threshold,
+            "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
+            "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
+            "dashboard_url": dashboard_url,
         }
+
+    # ------------------------------------------------------------------
+    # All admin settings persist to SQLite via _save_setting()
+    # ------------------------------------------------------------------
 
     @pyqtSlot(int, result="QVariant")
     def admin_set_duplicate_window(self, seconds: int) -> dict:
-        """Set duplicate badge time window (runtime only)."""
+        """Set duplicate badge time window. Persisted across restarts."""
         seconds = max(1, min(3600, seconds))
         config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = seconds
+        self._save_setting("duplicate_window", str(seconds))
         LOGGER.info("[Admin] Duplicate window set to %ds", seconds)
         return {"ok": True, "value": seconds}
 
     @pyqtSlot(str, result="QVariant")
     def admin_set_duplicate_action(self, action: str) -> dict:
-        """Set duplicate badge action: block, warn, or silent (runtime only)."""
+        """Set duplicate badge action: block, warn, or silent. Persisted across restarts."""
         action = action.lower()
         if action not in ("block", "warn", "silent"):
             return {"ok": False, "message": f"Invalid action: {action}"}
         config.DUPLICATE_BADGE_ACTION = action
+        self._save_setting("duplicate_action", action)
         LOGGER.info("[Admin] Duplicate action set to '%s'", action)
         return {"ok": True, "value": action}
 
     @pyqtSlot(bool, result="QVariant")
     def admin_set_voice_enabled(self, enabled: bool) -> dict:
-        """Enable/disable voice confirmation (runtime only)."""
+        """Enable/disable voice confirmation. Persisted across restarts."""
         if not self._voice_player:
             return {"ok": False, "message": "Voice not configured"}
         self._voice_player.enabled = enabled
+        self._save_setting("voice_enabled", str(enabled))
         LOGGER.info("[Admin] Voice %s", "enabled" if enabled else "disabled")
         return {"ok": True, "enabled": enabled}
 
     @pyqtSlot(float, result="QVariant")
     def admin_set_voice_volume(self, volume: float) -> dict:
-        """Set voice volume 0.0-1.0 (runtime only). Updates both scan and greeting audio."""
+        """Set voice volume 0.0-1.0. Persisted across restarts."""
         if not self._voice_player:
             return {"ok": False, "message": "Voice not configured"}
         volume = max(0.0, min(1.0, volume))
@@ -840,8 +873,162 @@ class Api(QObject):
             if gp and hasattr(gp, '_audio_output') and gp._audio_output:
                 gp._volume = volume
                 gp._audio_output.setVolume(volume)
+        self._save_setting("voice_volume", str(round(volume, 2)))
         LOGGER.info("[Admin] Voice volume set to %.0f%%", volume * 100)
         return {"ok": True, "volume": volume}
+
+    def _save_setting(self, key: str, value: str) -> None:
+        """Persist a setting to the local SQLite key-value store."""
+        try:
+            self._service._db.set_meta(f"setting:{key}", value)
+            LOGGER.info("[Admin] Saved setting:%s = %s", key, value)
+        except Exception as exc:
+            LOGGER.warning("[Admin] Failed to persist setting %s: %s", key, exc)
+
+    def load_saved_settings(self) -> None:
+        """Load persisted settings from SQLite and override config defaults."""
+        db = self._service._db
+        count = 0
+        # Scanning settings
+        v = db.get_meta("setting:duplicate_window")
+        if v is not None:
+            try:
+                config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = max(1, min(3600, int(v)))
+                count += 1
+            except ValueError:
+                pass
+        v = db.get_meta("setting:duplicate_action")
+        if v is not None and v in ("block", "warn", "silent"):
+            config.DUPLICATE_BADGE_ACTION = v
+            count += 1
+        # Audio settings — apply directly to VoicePlayer
+        v = db.get_meta("setting:voice_enabled")
+        if v is not None and self._voice_player:
+            self._voice_player.enabled = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:voice_volume")
+        if v is not None and self._voice_player:
+            try:
+                vol = max(0.0, min(1.0, float(v)))
+                self._voice_player._volume = vol
+                self._voice_player._audio_output.setVolume(vol)
+                count += 1
+            except ValueError:
+                pass
+        # Camera settings
+        v = db.get_meta("setting:camera_overlay")
+        if v is not None:
+            config.CAMERA_SHOW_OVERLAY = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:greeting_cooldown")
+        if v is not None:
+            try:
+                config.CAMERA_GREETING_COOLDOWN_SECONDS = max(5.0, min(300.0, float(v)))
+                count += 1
+            except ValueError:
+                pass
+        v = db.get_meta("setting:scan_feedback_ms")
+        if v is not None:
+            try:
+                config.SCAN_FEEDBACK_DURATION_MS = max(500, min(30000, int(v)))
+                count += 1
+            except ValueError:
+                pass
+        v = db.get_meta("setting:connection_check_s")
+        if v is not None:
+            try:
+                config.CONNECTION_CHECK_INTERVAL_MS = max(0, int(float(v) * 1000))
+                count += 1
+            except ValueError:
+                pass
+        v = db.get_meta("setting:min_size_pct")
+        if v is not None:
+            try:
+                config.CAMERA_MIN_SIZE_PCT = max(0.05, min(0.80, float(v)))
+                count += 1
+            except ValueError:
+                pass
+        v = db.get_meta("setting:absence_threshold")
+        if v is not None:
+            try:
+                config.CAMERA_ABSENCE_THRESHOLD_SECONDS = max(1.0, min(30.0, float(v)))
+                count += 1
+            except ValueError:
+                pass
+        if count:
+            LOGGER.info("[Admin] Loaded %d saved setting(s) from database", count)
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_camera_overlay(self, enabled: bool) -> dict:
+        """Toggle camera overlay between preview (True) and icon (False). Persisted."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        self._proximity_manager.set_overlay_mode(enabled)
+        config.CAMERA_SHOW_OVERLAY = enabled
+        self._save_setting("camera_overlay", str(enabled))
+        mode = "preview" if enabled else "icon"
+        LOGGER.info("[Admin] Camera overlay mode: %s", mode)
+        return {"ok": True, "enabled": enabled}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_greeting_cooldown(self, seconds: int) -> dict:
+        """Set greeting cooldown in seconds. Persisted across restarts."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        seconds = max(5, min(300, seconds))
+        self._proximity_manager._cooldown = float(seconds)
+        config.CAMERA_GREETING_COOLDOWN_SECONDS = float(seconds)
+        self._save_setting("greeting_cooldown", str(seconds))
+        LOGGER.info("[Admin] Greeting cooldown set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_scan_feedback_duration(self, ms: int) -> dict:
+        """Set scan feedback display duration in ms. Persisted across restarts."""
+        ms = max(500, min(30000, ms))
+        config.SCAN_FEEDBACK_DURATION_MS = ms
+        self._save_setting("scan_feedback_ms", str(ms))
+        LOGGER.info("[Admin] Scan feedback duration set to %dms", ms)
+        return {"ok": True, "value": ms}
+
+    @pyqtSlot(float, result="QVariant")
+    def admin_set_connection_check(self, seconds: float) -> dict:
+        """Set connection check interval in seconds. Persisted across restarts."""
+        seconds = max(0, min(600, seconds))
+        config.CONNECTION_CHECK_INTERVAL_MS = int(seconds * 1000)
+        self._save_setting("connection_check_s", str(seconds))
+        LOGGER.info("[Admin] Connection check interval set to %.0fs", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(float, result="QVariant")
+    def admin_set_min_size_pct(self, pct: float) -> dict:
+        """Set camera min face size percentage. Persisted across restarts."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        pct = max(0.05, min(0.80, pct))
+        self._proximity_manager._min_size_pct = pct
+        # Also update detector if running
+        if self._proximity_manager._detector:
+            self._proximity_manager._detector._min_size_pct = pct
+        config.CAMERA_MIN_SIZE_PCT = pct
+        self._save_setting("min_size_pct", str(round(pct, 2)))
+        LOGGER.info("[Admin] Min face size set to %.0f%%", pct * 100)
+        return {"ok": True, "value": pct}
+
+    @pyqtSlot(float, result="QVariant")
+    def admin_set_absence_threshold(self, seconds: float) -> dict:
+        """Set camera absence threshold in seconds. Persisted across restarts."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        seconds = max(1.0, min(30.0, seconds))
+        self._proximity_manager._absence_threshold = seconds
+        # Also update detector if running
+        if self._proximity_manager._detector:
+            self._proximity_manager._detector._absence_threshold = seconds
+        config.CAMERA_ABSENCE_THRESHOLD_SECONDS = seconds
+        self._save_setting("absence_threshold", str(round(seconds, 1)))
+        LOGGER.info("[Admin] Absence threshold set to %.1fs", seconds)
+        return {"ok": True, "value": seconds}
 
     @pyqtSlot()
     def _handle_clear_epoch_and_heartbeat_slot(self) -> None:
@@ -1107,6 +1294,8 @@ def main() -> None:
     api_object = getattr(window, '_api', None)
     if isinstance(api_object, Api):
         api_object._auto_sync_manager = auto_sync_manager
+        # Load persisted admin settings (SQLite overrides .env defaults)
+        api_object.load_saved_settings()
 
     # Load camera proximity plugin (optional)
     proximity_manager = None
@@ -1190,11 +1379,20 @@ def main() -> None:
                 print("[Main] Starting auto-sync manager...")
                 auto_sync_manager.start()
             if proximity_manager:
-                started = proximity_manager.start()
-                if started:
-                    LOGGER.info("[Proximity] Greeting active on camera %d", config.CAMERA_DEVICE_ID)
+                # Respect saved camera state — if user turned it off, don't auto-start
+                _api = getattr(window, '_api', None)
+                _saved_off = False
+                if isinstance(_api, Api):
+                    v = _api._service._db.get_meta("setting:camera_running")
+                    _saved_off = (v is not None and v.lower() in ("false", "0"))
+                if _saved_off:
+                    LOGGER.info("[Proximity] Camera kept OFF (saved preference)")
                 else:
-                    LOGGER.warning("[Proximity] Camera not available. App continues normally.")
+                    started = proximity_manager.start()
+                    if started:
+                        LOGGER.info("[Proximity] Greeting active on camera %d", config.CAMERA_DEVICE_ID)
+                    else:
+                        LOGGER.warning("[Proximity] Camera not available. App continues normally.")
         try:
             view.loadFinished.disconnect(_start_services_on_load)
         except TypeError:
