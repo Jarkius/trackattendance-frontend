@@ -188,6 +188,23 @@ class AttendanceService:
                     )
                 )
                 seen_ids[legacy_id] = row_num
+            # Abort import if duplicates found — admin must fix the roster first
+            if duplicates:
+                LOGGER.error(
+                    "Roster: IMPORT BLOCKED — %d duplicate Legacy ID(s) found. "
+                    "Fix employee.xlsx and restart the application.",
+                    len(duplicates),
+                )
+                self._export_duplicate_report(duplicates)
+                raise SystemExit(
+                    f"\n{'='*60}\n"
+                    f"  ROSTER ERROR: {len(duplicates)} duplicate Legacy ID(s) found\n"
+                    f"  in employee.xlsx. Import blocked.\n\n"
+                    f"  Duplicate report saved to exports/\n"
+                    f"  Fix the roster and restart the application.\n"
+                    f"{'='*60}"
+                )
+
             if employees:
                 # Clear old employees and reimport
                 self._db.clear_employees()
@@ -195,9 +212,6 @@ class AttendanceService:
                 self._db.set_roster_hash(current_hash)
                 self._db.set_roster_meta("file_mtime", current_mtime)
                 LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
-                if duplicates:
-                    LOGGER.warning("Roster: skipped %d duplicate Legacy ID(s)", len(duplicates))
-                    self._export_duplicate_report(duplicates)
                 # Roster BU counts will be pushed to cloud after first
                 # successful health check (see main.py Api._run_check)
         finally:
