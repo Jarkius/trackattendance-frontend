@@ -1,16 +1,17 @@
 # Track Attendance
 
-A desktop kiosk application for tracking employee attendance using barcode/QR code scanners.
+A desktop kiosk application for tracking employee attendance using barcode/QR code scanners and manual employee lookup.
 
 ## 📋 What It Does
 
-**Track Attendance** turns any Windows PC with a barcode scanner into a check-in station:
+**Track Attendance** turns any PC with a barcode scanner into a check-in station:
 
 1. **Employee scans their badge** → App reads the barcode
-2. **Instant feedback** → Shows employee name and confirms the scan
-3. **Data saved locally** → All scans stored in SQLite database
-4. **Auto-sync to cloud** → Uploads to central server when online
-5. **Export to Excel** → One-click report generation
+2. **Forgot badge?** → Type name or email to look up and record manually
+3. **Instant feedback** → Shows employee name and confirms the scan
+4. **Data saved locally** → All scans stored in SQLite database
+5. **Auto-sync to cloud** → Uploads to central server when online
+6. **Export to Excel** → One-click report generation
 
 | Benefit | Description |
 |---------|-------------|
@@ -22,19 +23,22 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 ## ✨ Features
 
 - Barcode-first workflow with instant visual feedback (name, "THANK YOU" banner)
+- **Employee lookup** — forgot-badge users type name or email to find their record and check in manually
+- **Voice toggle** — mute/unmute scan confirmation audio from the header bar without restarting
 - Voice confirmation on successful scans (ElevenLabs MP3s)
 - Duplicate badge detection — configurable: `warn`, `block`, or `silent` (see [docs/SYNC.md](docs/SYNC.md))
 - Dashboard with business unit breakdown and unmatched badge tracking
 - Auto-sync to cloud when idle; manual sync button available
-- One-click Excel export; automatic export on shutdown
+- One-click Excel export with unified columns (Badge ID, Full Name, Email, Business Unit, Position, Station, Scanned At, Matched, Scan Source)
 - Fully offline — runs without network; syncs when connection returns
 - Admin panel (PIN-protected) to clear cloud + local database before events
 - Welcome animation and configurable party/event background
 - **Email field support** — optional `Email` column in roster xlsx (stays local, never synced)
+- **Scan source tracking** — distinguishes badge scans from manual lookups (`badge` / `manual_lookup`)
 - **Business unit sync to cloud** — BU names synced for the mobile dashboard (organisational labels, not PII)
 - **Public mobile attendance dashboard** — real-time, no auth required; view live attendance from any device
 - **Roster summary sync** — hash-based deduplication prevents redundant uploads
-- **CI/CD pipeline** — automated `pytest` runs on every push and PR (244 tests)
+- **CI/CD pipeline** — automated `pytest` runs on every push and PR (268 tests)
 - **[Experimental]** Camera proximity greeting — detects when someone approaches an idle kiosk and plays a bilingual welcome audio (disabled by default, presence-aware: greets once per person, not on repeat)
 
 ## 💻 Requirements
@@ -113,7 +117,7 @@ TrackAttendance/
 ## 🧪 Testing
 
 ```bash
-# Full unit test suite (244 tests)
+# Full unit test suite (268 tests)
 python -m pytest tests/ -v
 
 # Stress test (end-to-end with UI)
@@ -165,7 +169,8 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
-- **v1.6.0** — Email field, BU sync to cloud, public mobile dashboard, roster summary sync, CI/CD test pipeline (244 tests), stress test with local vs cloud dashboard verification
+- **v1.7.0** — Voice toggle (mute/unmute from header), employee email/name lookup for forgot-badge users, scan source tracking (`badge` / `manual_lookup`), unified export columns, `scan_source` column in cloud DB, requirements.txt cleanup (268 tests)
+- **v1.6.0** — Email field, BU sync to cloud, public mobile dashboard, roster summary sync, CI/CD test pipeline, stress test with local vs cloud dashboard verification
 - **v1.5.1** — Animated camera icon: dot turns amber on detection, reverts to green when person leaves, with pulse animation on state transitions
 - **v1.5.0** — Camera proximity greeting plugin (experimental, opt-in), bilingual audio greetings, presence-aware state machine with hysteresis, VoicePlayer.is_playing(), 13 unit tests, voice volume control
 - **v1.4.0** — Welcome animation, party background, duplicate silent fix
