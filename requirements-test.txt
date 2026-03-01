@@ -1,0 +1,7 @@
+# Minimal dependencies for CI test runs
+# Usage: pip install -r requirements-test.txt
+pytest
+requests
+openpyxl
+pandas
+python-dotenv
