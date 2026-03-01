@@ -219,7 +219,7 @@ class ProximityGreetingManager:
         self._running = False
 
         if self._thread is not None:
-            self._thread.join(timeout=2.0)
+            self._thread.join(timeout=0.5)
             self._thread = None
 
         if self._cap is not None:
