@@ -359,6 +359,34 @@ class DatabaseManager:
             return True, result["id"]
         return False, None
 
+    def check_if_duplicate_employee(
+        self,
+        legacy_id: str,
+        station_name: str,
+        time_window_seconds: int = 60,
+    ) -> tuple[bool, Optional[int]]:
+        """Check if an employee (by legacy_id) was recently scanned at the same station."""
+        cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=time_window_seconds)
+        cutoff_timestamp = cutoff_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        cursor = self._connection.execute(
+            """
+            SELECT id FROM scans
+            WHERE legacy_id = ?
+            AND station_name = ?
+            AND scanned_at >= ?
+            ORDER BY scanned_at DESC
+            LIMIT 1
+            """,
+            (legacy_id, station_name, cutoff_timestamp),
+        )
+
+        result = cursor.fetchone()
+        if result:
+            logger.info(f"DuplicateCheck: FOUND duplicate employee (legacy_id={legacy_id}, scan_id={result[0]})")
+            return True, result["id"]
+        return False, None
+
     def fetch_pending_scans(self, limit: int = 100) -> List[ScanRecord]:
         """Fetch scans that need to be synced to cloud."""
         cursor = self._connection.execute(

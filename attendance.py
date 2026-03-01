@@ -378,6 +378,8 @@ class AttendanceService:
         employee = self._employee_cache.get(lookup_key)
 
         # Check for duplicate badge scan (Issue #20)
+        # Check both raw input AND resolved Legacy ID to catch same employee
+        # scanned via different methods (badge, lookup, manual)
         is_duplicate = False
         if config.DUPLICATE_BADGE_DETECTION_ENABLED:
             is_dup, original_id = self._db.check_if_duplicate_badge(
@@ -386,6 +388,14 @@ class AttendanceService:
                 config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS
             )
             is_duplicate = is_dup
+            # Also check by legacy_id column — catches same employee via different input
+            if not is_duplicate and employee:
+                is_dup, original_id = self._db.check_if_duplicate_employee(
+                    employee.legacy_id,
+                    self.station_name,
+                    config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS
+                )
+                is_duplicate = is_dup
 
             # If duplicate and action is 'block', reject the scan
             if is_duplicate and config.DUPLICATE_BADGE_ACTION == 'block':
