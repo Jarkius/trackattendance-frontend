@@ -287,6 +287,7 @@ class DashboardService:
                     business_unit = "--"
                     position = "--"
 
+                scan_source = scan.get("scan_source", "badge") if isinstance(scan, dict) else "badge"
                 enriched_scans.append({
                     "Badge ID": badge_id,
                     "Full Name": full_name,
@@ -296,6 +297,7 @@ class DashboardService:
                     "Station": station,
                     "Scanned At": scanned_at,
                     "Matched": "Yes" if matched else "No",
+                    "Scan Source": scan_source,
                 })
 
             df = pd.DataFrame(enriched_scans)
@@ -309,7 +311,7 @@ class DashboardService:
             header_fill = PatternFill(start_color="86bc25", end_color="86bc25", fill_type="solid")
             header_font = Font(bold=True, color="FFFFFF")
 
-            columns = ["Badge ID", "Full Name", "Email", "Business Unit", "Position", "Station", "Scanned At", "Matched"]
+            columns = ["Badge ID", "Full Name", "Email", "Business Unit", "Position", "Station", "Scanned At", "Matched", "Scan Source"]
             for col_idx, col_name in enumerate(columns, start=1):
                 cell = ws.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill

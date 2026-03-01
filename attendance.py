@@ -203,11 +203,11 @@ class AttendanceService:
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Employees"
-        sheet.append(REQUIRED_COLUMNS)
+        sheet.append(REQUIRED_COLUMNS + ["Email"])
 
         sample_rows = [
-            ("100001", "Ada Lovelace", "Consulting", "Analyst"),
-            ("100002", "Grace Hopper", "Technology", "Engineer"),
+            ("100001", "Ada Lovelace", "Consulting", "Analyst", "alovelace@example.com"),
+            ("100002", "Grace Hopper", "Technology", "Engineer", "ghopper@example.com"),
         ]
         for row in sample_rows:
             sheet.append(row)
@@ -279,7 +279,27 @@ class AttendanceService:
             "debugMode": os.getenv("DEBUG", "False").lower() == "true",
         }
 
-    def register_scan(self, badge_id: str) -> Dict[str, object]:
+    def search_employee(self, query: str) -> List[Dict[str, object]]:
+        """Search employees by email prefix or partial name match."""
+        query = query.strip().lower()
+        if not query:
+            return []
+        results = []
+        for emp in self._employee_cache.values():
+            email_prefix = emp.email.split("@")[0].lower() if emp.email else ""
+            name_lower = emp.full_name.lower()
+            if (email_prefix and email_prefix == query) or query in name_lower:
+                results.append({
+                    "legacy_id": emp.legacy_id,
+                    "full_name": emp.full_name,
+                    "email": emp.email,
+                    "business_unit": emp.sl_l1_desc,
+                })
+            if len(results) >= 10:
+                break
+        return results
+
+    def register_scan(self, badge_id: str, scan_source: str = "badge") -> Dict[str, object]:
         import config
 
         sanitized = badge_id.strip()
@@ -313,7 +333,7 @@ class AttendanceService:
                     "fullName": employee.full_name if employee else "Unknown",
                 }
         timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
-        self._db.record_scan(sanitized, self.station_name, employee, timestamp)
+        self._db.record_scan(sanitized, self.station_name, employee, timestamp, scan_source=scan_source)
         history = self._db.get_recent_scans()
         # Only flag as duplicate for UI alert if action is 'warn' (not 'silent')
         # 'silent' mode accepts duplicates without any UI alert
@@ -346,31 +366,25 @@ class AttendanceService:
         sheet = workbook.active
         sheet.title = "Scans"
 
-        employee_columns = [
-            header
-            for header in self._employee_headers
-            if header in REQUIRED_COLUMNS
+        export_headers = [
+            "Badge ID", "Full Name", "Email", "Business Unit", "Position",
+            "Station", "Scanned At", "Matched", "Scan Source",
         ]
-        if not employee_columns:
-            employee_columns = list(REQUIRED_COLUMNS)
-
-        export_headers = ["Submitted Value", "Matched"] + employee_columns + ["Station ID", "Timestamp"]
         sheet.append(export_headers)
 
         for record in scans:
-            values_by_header = {
-                "Legacy ID": record.legacy_id or "",
-                "Full Name": record.employee_full_name or "Unknown",
-                "SL L1 Desc": record.sl_l1_desc or "",
-                "Position Desc": record.position_desc or "",
-            }
             matched = record.legacy_id is not None
             row = [
                 record.badge_id or "",
+                record.employee_full_name or "Unknown",
+                record.email or "",
+                record.sl_l1_desc or "",
+                record.position_desc or "",
+                record.station_name or "",
+                _format_timestamp(record.scanned_at),
                 "Yes" if matched else "No",
+                record.scan_source or "badge",
             ]
-            row.extend(values_by_header.get(header, "") for header in employee_columns)
-            row.extend([record.station_name or "", _format_timestamp(record.scanned_at)])
             sheet.append(row)
 
         for col_idx, header in enumerate(export_headers, start=1):

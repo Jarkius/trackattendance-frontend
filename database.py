@@ -34,6 +34,7 @@ class ScanRecord:
     sl_l1_desc: Optional[str]
     position_desc: Optional[str]
     email: Optional[str] = None
+    scan_source: str = "badge"
     sync_status: str = "pending"
     synced_at: Optional[str] = None
     sync_error: Optional[str] = None
@@ -98,6 +99,10 @@ class DatabaseManager:
             pass  # column already exists
         try:
             self._connection.execute("ALTER TABLE scans ADD COLUMN email TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        try:
+            self._connection.execute("ALTER TABLE scans ADD COLUMN scan_source TEXT DEFAULT 'badge'")
         except sqlite3.OperationalError:
             pass  # column already exists
 
@@ -182,9 +187,10 @@ class DatabaseManager:
         station_name: str,
         employee: Optional[EmployeeRecord],
         scanned_at: Optional[str] = None,
+        scan_source: str = "badge",
     ) -> None:
         timestamp = scanned_at or datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
-        logger.info(f"RecordingScan: badge={badge_id}, station={station_name}, time={timestamp}")
+        logger.info(f"RecordingScan: badge={badge_id}, station={station_name}, time={timestamp}, source={scan_source}")
         with self._connection:
             self._connection.execute(
                 """
@@ -196,8 +202,9 @@ class DatabaseManager:
                     legacy_id,
                     sl_l1_desc,
                     position_desc,
-                    email
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    email,
+                    scan_source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     badge_id,
@@ -208,6 +215,7 @@ class DatabaseManager:
                     employee.sl_l1_desc if employee else None,
                     employee.position_desc if employee else None,
                     employee.email if employee else None,
+                    scan_source,
                 ),
             )
 
@@ -216,7 +224,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   email, sync_status, synced_at, sync_error
+                   email, scan_source, sync_status, synced_at, sync_error
             FROM scans
             ORDER BY scanned_at DESC
             LIMIT ?
@@ -234,6 +242,7 @@ class DatabaseManager:
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
                 email=row["email"],
+                scan_source=row["scan_source"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],
@@ -274,7 +283,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   email, sync_status, synced_at, sync_error
+                   email, scan_source, sync_status, synced_at, sync_error
             FROM scans
             ORDER BY scanned_at ASC
             """
@@ -290,6 +299,7 @@ class DatabaseManager:
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
                 email=row["email"],
+                scan_source=row["scan_source"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],
@@ -355,7 +365,7 @@ class DatabaseManager:
             """
             SELECT id, badge_id, scanned_at, station_name,
                    employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   email, sync_status, synced_at, sync_error
+                   email, scan_source, sync_status, synced_at, sync_error
             FROM scans
             WHERE sync_status = 'pending'
             ORDER BY scanned_at ASC
@@ -374,6 +384,7 @@ class DatabaseManager:
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
                 email=row["email"],
+                scan_source=row["scan_source"],
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],

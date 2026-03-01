@@ -688,6 +688,47 @@ class Api(QObject):
         LOGGER.info(f"Admin clear: cloud={results['cloud_deleted']}, local={results['local_deleted']}")
         return results
 
+    @pyqtSlot(result="QVariant")
+    def get_voice_status(self) -> dict:
+        """Return voice confirmation feature status."""
+        if not self._voice_player:
+            return {"enabled": False}
+        return {"enabled": self._voice_player.enabled}
+
+    @pyqtSlot(result="QVariant")
+    def toggle_voice(self) -> dict:
+        """Toggle voice confirmation on/off at runtime."""
+        if not self._voice_player:
+            return {"ok": False, "enabled": False, "message": "Voice not configured"}
+        self._voice_player.enabled = not self._voice_player.enabled
+        LOGGER.info("[Voice] Toggled %s by user", "ON" if self._voice_player.enabled else "OFF")
+        return {"ok": True, "enabled": self._voice_player.enabled}
+
+    @pyqtSlot(str, result="QVariant")
+    def search_employee(self, query: str) -> dict:
+        """Search employees by email prefix or name for manual lookup."""
+        results = self._service.search_employee(query)
+        return {"ok": True, "results": results}
+
+    @pyqtSlot(str, result="QVariant")
+    def submit_manual_scan(self, legacy_id: str) -> dict:
+        """Record a scan via manual employee lookup (forgot-badge flow)."""
+        result = self._service.register_scan(legacy_id, scan_source="manual_lookup")
+
+        # Play voice confirmation on successful match
+        if self._voice_player and result.get("matched") and not result.get("is_duplicate"):
+            self._voice_player.play_random()
+            if self._proximity_manager:
+                self._proximity_manager.notify_voice_playing()
+
+        if self._auto_sync_manager:
+            self._auto_sync_manager.on_scan()
+
+        if self._proximity_manager:
+            self._proximity_manager.notify_scan_activity()
+
+        return result
+
     @pyqtSlot(str)
     def open_export_folder(self, file_path: str) -> None:
         """Open Windows Explorer with the exported file selected."""
