@@ -1902,6 +1902,8 @@ ${destination}` : message;
             e.preventDefault();
             const newState = !adminVoiceToggle.classList.contains('active');
             adminVoiceToggle.classList.toggle('active', newState);
+            // Sync header bar icon
+            setVoiceToggleState(newState);
             queueOrRun((bridge) => {
                 if (bridge.admin_set_voice_enabled) {
                     bridge.admin_set_voice_enabled(newState, () => {});

@@ -828,12 +828,18 @@ class Api(QObject):
 
     @pyqtSlot(float, result="QVariant")
     def admin_set_voice_volume(self, volume: float) -> dict:
-        """Set voice volume 0.0-1.0 (runtime only)."""
+        """Set voice volume 0.0-1.0 (runtime only). Updates both scan and greeting audio."""
         if not self._voice_player:
             return {"ok": False, "message": "Voice not configured"}
         volume = max(0.0, min(1.0, volume))
         self._voice_player._volume = volume
         self._voice_player._audio_output.setVolume(volume)
+        # Also update greeting player volume if camera proximity is active
+        if self._proximity_manager and hasattr(self._proximity_manager, '_greeting_player'):
+            gp = self._proximity_manager._greeting_player
+            if gp and hasattr(gp, '_audio_output') and gp._audio_output:
+                gp._volume = volume
+                gp._audio_output.setVolume(volume)
         LOGGER.info("[Admin] Voice volume set to %.0f%%", volume * 100)
         return {"ok": True, "volume": volume}
 
