@@ -113,7 +113,7 @@ class DashboardService:
                 data = response.json()
                 result["total_scans"] = data.get("total_scans", 0)
                 result["scanned"] = data.get("unique_badges", 0)
-                result["stations"] = [
+                result["stations"] = sorted([
                     {
                         "name": s.get("name", "--"),
                         "scans": s.get("scans", 0),
@@ -121,7 +121,7 @@ class DashboardService:
                         "last_scan": self._format_time(s.get("last_scan")),
                     }
                     for s in data.get("stations", [])
-                ]
+                ], key=lambda s: s["name"])
                 logger.info(
                     f"Dashboard: total_scans={result['total_scans']}, "
                     f"unique_badges={result['scanned']}, stations={len(result['stations'])}"
