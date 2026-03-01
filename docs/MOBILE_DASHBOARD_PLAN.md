@@ -77,10 +77,25 @@ GET /v1/dashboard/public/stats
 | Attendance rate | Percentage of registered employees scanned |
 | Scanned / total | Absolute counts (e.g. 362 / 500) |
 | Per-BU breakdown | Each business unit: registered count + scanned count |
-| Per-station counts | Scan count per kiosk station |
+| Per-station counts | Scan count per kiosk station, with live status dot (green=ready, amber=pending, red=offline) |
 | Last updated | Timestamp from API response |
+| Theme | Light/dark — follows device preference by default; toggle button to override (persisted in localStorage) |
+
+**Sorting**: BUs and stations are sorted **alphabetically A-Z**, with "Unmatched" always at the bottom.
 
 The BU registered counts come from the **roster summary** synced by the desktop kiosk (see below). Without a roster summary sync the BU registered counts will be absent or zero.
+
+### Station Status
+
+Each desktop station sends a heartbeat to the cloud via `POST /v1/stations/heartbeat` on every health check (~60s). The mobile dashboard polls `GET /v1/stations/status` every 30s and displays a status indicator per station:
+
+| Status | Dot | Meaning |
+|--------|-----|---------|
+| Ready | Green | Station online, clear epoch matches |
+| Pending | Amber | Station online but hasn't processed latest clear |
+| Offline | Red | No heartbeat received recently (>2 min) |
+
+Station heartbeat entries are cleared on admin clear operations (Clear All truncates all; Clear Station deletes that station's entry).
 
 ---
 
@@ -139,4 +154,4 @@ The simplified approach eliminates a separate deployment pipeline, removes all f
 
 ---
 
-*Document updated by Claude Code — reflects implemented state as of 2026-03-01*
+*Document updated by Claude Code — reflects implemented state as of 2026-03-01 (v1.8.0)*

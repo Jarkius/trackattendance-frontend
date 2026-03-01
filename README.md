@@ -29,15 +29,17 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Duplicate badge detection — configurable: `warn`, `block`, or `silent` (see [docs/SYNC.md](docs/SYNC.md))
 - Dashboard with business unit breakdown and unmatched badge tracking
 - Auto-sync to cloud when idle; manual sync button available
-- One-click Excel export with unified columns (Badge ID, Full Name, Email, Business Unit, Position, Station, Scanned At, Matched, Scan Source)
+- One-click Excel export with unified columns (Scan Value, Legacy ID, Full Name, Email, Business Unit, Position, Station, Scanned At, Matched, Scan Source)
 - Fully offline — runs without network; syncs when connection returns
 - Admin panel (PIN-protected) to clear cloud + local database before events
 - Welcome animation and configurable party/event background
 - **Email field support** — optional `Email` column in roster xlsx (stays local, never synced)
-- **Scan source tracking** — distinguishes badge scans from manual lookups (`badge` / `manual_lookup`)
+- **Scan source tracking** — distinguishes badge scans, name lookups, and manual entries (`badge` / `lookup` / `manual`)
 - **Business unit sync to cloud** — BU names synced for the mobile dashboard (organisational labels, not PII)
-- **Public mobile attendance dashboard** — real-time, no auth required; view live attendance from any device
+- **Public mobile attendance dashboard** — real-time with light/dark theme (follows device, toggle available); view live attendance from any device
 - **Roster summary sync** — hash-based deduplication prevents redundant uploads
+- **Station heartbeat & status** — stations report health via heartbeat; mobile dashboard shows online/offline status per station
+- **Clear This Station / Clear All** — separate admin actions; Clear All resets all stations + roster via `clear_epoch` coordination
 - **CI/CD pipeline** — automated `pytest` runs on every push and PR (268 tests)
 - **[Experimental]** Camera proximity greeting — detects when someone approaches an idle kiosk and plays a bilingual welcome audio (disabled by default, presence-aware: greets once per person, not on repeat)
 
@@ -169,6 +171,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v1.8.0** — Scan source tracking refined (`badge`/`lookup`/`manual`), Scan Value + Legacy ID columns in export, station heartbeat & live status on mobile dashboard, clear this station / clear all with `clear_epoch` coordination, light/dark theme toggle on mobile dashboard, alphabetical BU/station sorting (Unmatched last), offline station red dot indicator, .env.example fully documented
 - **v1.7.0** — Voice toggle (mute/unmute from header), employee email/name lookup for forgot-badge users, scan source tracking (`badge` / `manual_lookup`), unified export columns, `scan_source` column in cloud DB, requirements.txt cleanup (268 tests)
 - **v1.6.0** — Email field, BU sync to cloud, public mobile dashboard, roster summary sync, CI/CD test pipeline, stress test with local vs cloud dashboard verification
 - **v1.5.1** — Animated camera icon: dot turns amber on detection, reverts to green when person leaves, with pulse animation on state transitions
