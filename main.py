@@ -731,10 +731,14 @@ class Api(QObject):
 
     @pyqtSlot(str)
     def open_export_folder(self, file_path: str) -> None:
-        """Open Windows Explorer with the exported file selected."""
+        """Open file manager with the exported file selected."""
         import subprocess
+        import platform
         try:
-            subprocess.Popen(["explorer", "/select,", file_path.replace("/", "\\")])
+            if platform.system() == "Darwin":
+                subprocess.Popen(["open", "-R", file_path])
+            else:
+                subprocess.Popen(["explorer", "/select,", file_path.replace("/", "\\")])
         except Exception as e:
             LOGGER.error("Failed to open export folder: %s", e)
 

@@ -967,6 +967,10 @@ ${destination}` : message;
 
         lookupOverlay.classList.add('lookup-overlay--visible');
         lookupOverlay.setAttribute('aria-hidden', 'false');
+
+        // Focus the first Record Scan button so admin can press Enter
+        const firstBtn = lookupResults?.querySelector('.lookup-overlay__result-btn');
+        if (firstBtn) firstBtn.focus();
     };
 
     const hideLookupOverlay = () => {
