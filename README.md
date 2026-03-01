@@ -30,11 +30,16 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Fully offline — runs without network; syncs when connection returns
 - Admin panel (PIN-protected) to clear cloud + local database before events
 - Welcome animation and configurable party/event background
+- **Email field support** — optional `Email` column in roster xlsx (stays local, never synced)
+- **Business unit sync to cloud** — BU names synced for the mobile dashboard (organisational labels, not PII)
+- **Public mobile attendance dashboard** — real-time, no auth required; view live attendance from any device
+- **Roster summary sync** — hash-based deduplication prevents redundant uploads
+- **CI/CD pipeline** — automated `pytest` runs on every push and PR (244 tests)
 - **[Experimental]** Camera proximity greeting — detects when someone approaches an idle kiosk and plays a bilingual welcome audio (disabled by default, presence-aware: greets once per person, not on repeat)
 
 ## 💻 Requirements
 
-- Windows 10/11 (packaged build target)
+- Windows 10/11 or macOS (packaged build target; both supported)
 - Python 3.11+ (PyQt6 + WebEngine)
 - Keyboard-emulating barcode scanner (manual typing + Enter works for testing)
 - **Camera plugin (optional)**: USB/built-in webcam, `opencv-python`, `mediapipe`, `edge-tts`
@@ -108,6 +113,9 @@ TrackAttendance/
 ## 🧪 Testing
 
 ```bash
+# Full unit test suite (244 tests)
+python -m pytest tests/ -v
+
 # Stress test (end-to-end with UI)
 python tests/stress_full_app.py --iterations 100 --delay-ms 30
 
@@ -118,6 +126,9 @@ python tests/test_connection_scenarios.py
 
 # Camera proximity detector (unit tests, no hardware needed)
 python tests/test_proximity_detector.py
+
+# Multi-station cloud dashboard verification
+python tests/simulate_multi_station.py
 
 # Utilities
 python scripts/reset_failed_scans.py        # Reset failed scans to pending
@@ -132,6 +143,7 @@ main.py              PyQt6 window, QWebEngineView, AutoSyncManager
 attendance.py        Roster import, scan recording, duplicate detection, export
 database.py          SQLite schema, queries, sync_status tracking
 sync.py              Cloud sync client (batch upload, idempotency, retry)
+dashboard.py         Local dashboard with Excel export, BU breakdown
 config.py            All configuration with .env override
 web/                 Embedded kiosk UI (HTML/CSS/JS)
 plugins/camera/      Proximity detection plugin (opt-in, disabled by default)
@@ -146,12 +158,14 @@ docs/                Technical documentation
 - [Architecture](docs/ARCHITECTURE.md) — Component design, data flow, error handling
 - [Cloud API](docs/API.md) — Endpoint specs, auth, request/response formats
 - [Sync & Duplicate Detection](docs/SYNC.md) — Offline sync, auto-sync, batch processing, duplicate modes
+- [Mobile Dashboard Plan](docs/MOBILE_DASHBOARD_PLAN.md) — Public real-time attendance dashboard design
 - [Product Requirements](docs/PRD.md) — Feature requirements
 - [Feature: Indicator Redesign](docs/FEATURE_INDICATOR_REDESIGN.md) — Connection indicator design
 - [Claude Code Action](docs/CLAUDE_CODE_ACTION.md) — AI-powered code assistance setup
 
 ## 📝 Version History
 
+- **v1.6.0** — Email field, BU sync to cloud, public mobile dashboard, roster summary sync, CI/CD test pipeline (244 tests), stress test with local vs cloud dashboard verification
 - **v1.5.1** — Animated camera icon: dot turns amber on detection, reverts to green when person leaves, with pulse animation on state transitions
 - **v1.5.0** — Camera proximity greeting plugin (experimental, opt-in), bilingual audio greetings, presence-aware state machine with hysteresis, VoicePlayer.is_playing(), 13 unit tests, voice volume control
 - **v1.4.0** — Welcome animation, party background, duplicate silent fix
@@ -184,6 +198,8 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `CAMERA_MIN_SIZE_PCT` | `0.20` | Minimum detection size as fraction of frame width — filters out distant people |
 | `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `3` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |
 | `CAMERA_CONFIRM_FRAMES` | `3` | Consecutive detected frames required before greeting (prevents false positives) |
+| `SCAN_FEEDBACK_DURATION_MS` | `5000` | Duration to show employee name after scan |
+| `DUPLICATE_BADGE_ALERT_DURATION_MS` | `3000` | Duplicate alert display duration |
 
 See `.env.example` for the full list.
 
@@ -202,3 +218,6 @@ See `.env.example` for the full list.
 ## 🔒 Data Privacy
 
 Employee names and rosters stay local. Never commit `data/`, `exports/`, or `.env` files.
+
+- **Email addresses** — stored in the local database only; never synced to the cloud
+- **Business unit names** — synced to cloud for the mobile dashboard; these are organisational labels, not personally identifiable information

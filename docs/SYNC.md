@@ -78,6 +78,67 @@ result = sync_service.sync_pending_scans()
 result = sync_service.sync_pending_scans(sync_all=True, max_batches=50)
 ```
 
+## Business Unit Sync
+
+Each scan record synced to the cloud includes a `business_unit` field derived from the `sl_l1_desc` column in the employee roster. This field is populated at scan time and included in the batch payload sent to `POST /v1/scans/batch`.
+
+```json
+{
+  "badge_id": "ABC123",
+  "station": "Main Gate",
+  "scanned_at": "2026-02-27T08:45:30Z",
+  "business_unit": "Engineering"
+}
+```
+
+If the employee is not matched or the roster does not contain `sl_l1_desc`, the field is omitted or `null`.
+
+## Roster Summary Sync
+
+The desktop app syncs a roster summary to the cloud so the mobile dashboard can display per-BU registered counts and attendance rates without access to the local SQLite database.
+
+### Trigger
+
+The first successful health check response from the cloud API triggers an automatic roster summary sync. Subsequent syncs use **hash-based deduplication**: the app computes a SHA256 hash of the summary payload and only re-POSTs if the hash differs from the last accepted hash.
+
+### Endpoint
+
+```
+POST /v1/roster/summary
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "total_registered": 500,
+  "business_units": [
+    {"name": "Engineering", "registered": 120},
+    {"name": "Sales", "registered": 95},
+    {"name": "HR", "registered": 40}
+  ],
+  "payload_hash": "sha256:<hex>"
+}
+```
+
+The cloud API returns `200` (accepted) or `204` (hash unchanged, no update needed).
+
+### Implementation: `sync_roster_summary_from_data()`
+
+Located in `sync.py`, this function:
+
+1. Reads the current roster from SQLite (employees table, grouped by `business_unit`).
+2. Builds the summary payload (total count + per-BU breakdown).
+3. Computes a SHA256 hash of the serialised payload.
+4. Compares against the cached hash from the previous sync.
+5. If the hash is new or changed, POSTs to `/v1/roster/summary` and caches the accepted hash.
+6. Called from the health check thread after the first successful API ping.
+
+```python
+# Called from health check thread after first successful ping
+sync_service.sync_roster_summary_from_data()
+```
+
+The main thread populates the in-memory BU cache from SQLite at startup; the health check thread reads from that cache when building the summary payload, keeping the sync non-blocking.
+
 ## Duplicate Badge Detection (v1.3.0+)
 
 Prevents accidental duplicate scans within a configurable time window.
