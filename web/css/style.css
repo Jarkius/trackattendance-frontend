@@ -110,6 +110,49 @@ body > header h1 {
     }
 }
 
+/* Voice Toggle - positioned left of camera toggle */
+.voice-toggle {
+    position: fixed;
+    top: 20px;
+    right: 230px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.voice-toggle--hidden {
+    display: none;
+}
+
+.voice-toggle--on {
+    color: var(--deloitte-green);
+}
+
+.voice-toggle--on .voice-toggle__on { display: block; }
+.voice-toggle--on .voice-toggle__off { display: none; }
+
+.voice-toggle--off {
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.voice-toggle--off .voice-toggle__on { display: none; }
+.voice-toggle--off .voice-toggle__off { display: block; }
+
+.voice-toggle:hover {
+    color: var(--deloitte-green);
+    transform: scale(1.1);
+}
+
+.voice-toggle svg {
+    width: 20px;
+    height: 20px;
+}
+
 /* Camera Toggle - positioned left of dashboard icon */
 .camera-toggle {
     position: fixed;
@@ -1309,6 +1352,137 @@ body.dashboard-open {
 /* Admin button in dashboard header */
 .dash__btn--admin { opacity: 0.7; }
 .dash__btn--admin:hover { opacity: 1; }
+
+/* ---- Employee Lookup Overlay ---- */
+.lookup-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.94);
+    border-radius: 12px;
+    text-align: center;
+    padding: 32px;
+    z-index: 5;
+}
+
+.lookup-overlay--visible {
+    display: flex;
+}
+
+.lookup-overlay__dialog {
+    background-color: var(--background);
+    border: 3px solid var(--deloitte-green);
+    border-radius: 12px;
+    padding: 24px 28px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+    max-width: 520px;
+    width: 100%;
+}
+
+.lookup-overlay__title {
+    font-size: 1.4rem;
+    margin: 0 0 8px;
+    color: var(--deloitte-black);
+    font-weight: 700;
+}
+
+.lookup-overlay__search {
+    font-size: 0.85rem;
+    color: var(--deloitte-grey-medium);
+    margin: 0 0 16px;
+}
+
+.lookup-overlay__results {
+    max-height: 240px;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.lookup-overlay__result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    background: #FAFAFA;
+    border: 1px solid #EFEFEF;
+    border-radius: 8px;
+    transition: border-color 0.15s ease;
+}
+
+.lookup-overlay__result:hover {
+    border-color: var(--deloitte-green);
+}
+
+.lookup-overlay__result-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.lookup-overlay__result-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--deloitte-black);
+    margin-bottom: 2px;
+}
+
+.lookup-overlay__result-meta {
+    font-size: 0.75rem;
+    color: var(--deloitte-grey-medium);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lookup-overlay__result-btn {
+    padding: 6px 14px;
+    background: var(--deloitte-green);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+    margin-left: 12px;
+    transition: background 0.15s ease;
+}
+
+.lookup-overlay__result-btn:hover {
+    background: #7aa722;
+}
+
+.lookup-overlay__empty {
+    padding: 20px;
+    color: var(--deloitte-grey-medium);
+    font-size: 0.9rem;
+}
+
+.lookup-overlay__actions {
+    margin-top: 16px;
+    display: flex;
+    justify-content: center;
+}
+
+.lookup-overlay__btn {
+    padding: 8px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.lookup-overlay__btn--cancel {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.lookup-overlay__btn--cancel:hover {
+    background: #d0d0d0;
+}
 
 /* ---- Admin Overlay ---- */
 .admin-overlay {

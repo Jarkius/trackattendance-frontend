@@ -279,7 +279,27 @@ class AttendanceService:
             "debugMode": os.getenv("DEBUG", "False").lower() == "true",
         }
 
-    def register_scan(self, badge_id: str) -> Dict[str, object]:
+    def search_employee(self, query: str) -> List[Dict[str, object]]:
+        """Search employees by email prefix or partial name match."""
+        query = query.strip().lower()
+        if not query:
+            return []
+        results = []
+        for emp in self._employee_cache.values():
+            email_prefix = emp.email.split("@")[0].lower() if emp.email else ""
+            name_lower = emp.full_name.lower()
+            if (email_prefix and email_prefix == query) or query in name_lower:
+                results.append({
+                    "legacy_id": emp.legacy_id,
+                    "full_name": emp.full_name,
+                    "email": emp.email,
+                    "business_unit": emp.sl_l1_desc,
+                })
+            if len(results) >= 10:
+                break
+        return results
+
+    def register_scan(self, badge_id: str, scan_source: str = "badge") -> Dict[str, object]:
         import config
 
         sanitized = badge_id.strip()
@@ -313,7 +333,7 @@ class AttendanceService:
                     "fullName": employee.full_name if employee else "Unknown",
                 }
         timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
-        self._db.record_scan(sanitized, self.station_name, employee, timestamp)
+        self._db.record_scan(sanitized, self.station_name, employee, timestamp, scan_source=scan_source)
         history = self._db.get_recent_scans()
         # Only flag as duplicate for UI alert if action is 'warn' (not 'silent')
         # 'silent' mode accepts duplicates without any UI alert

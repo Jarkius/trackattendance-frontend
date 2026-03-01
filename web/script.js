@@ -149,6 +149,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const syncStatusMessage = document.getElementById('sync-status-message');
     const connectionStatusDot = document.getElementById('connection-status');
 
+    // Voice toggle element
+    const voiceToggle = document.getElementById('voice-toggle');
+
+    // Lookup overlay elements
+    const lookupOverlay = document.getElementById('lookup-overlay');
+    const lookupSearchQuery = document.getElementById('lookup-search-query');
+    const lookupResults = document.getElementById('lookup-results');
+    const lookupCancel = document.getElementById('lookup-cancel');
+
     // Camera toggle element
     const cameraToggle = document.getElementById('camera-toggle');
 
@@ -837,6 +846,7 @@ ${destination}` : message;
                 applyDashboardState();
                 updateSyncStatus();  // Load sync status on startup
                 initCameraToggle();  // Set camera toggle initial state
+                initVoiceToggle();  // Set voice toggle initial state
                 // Delay connection check to reduce initial load time
                 // Indicator starts black (invisible), so no rush to show status
                 // Uses configurable delay from CONNECTION_CHECK_INITIAL_DELAY_SECONDS
@@ -882,6 +892,97 @@ ${destination}` : message;
                 if (result?.ok) {
                     setCameraToggleState(result.running);
                 }
+                returnFocusToInput();
+            });
+        });
+    };
+
+    // ── Voice toggle ──────────────────────────────────────────────────
+
+    let voiceToggling = false;
+
+    const setVoiceToggleState = (enabled) => {
+        if (!voiceToggle) return;
+        voiceToggle.classList.remove('voice-toggle--hidden', 'voice-toggle--on', 'voice-toggle--off');
+        voiceToggle.classList.add(enabled ? 'voice-toggle--on' : 'voice-toggle--off');
+        voiceToggle.setAttribute('title', enabled ? 'Voice: ON' : 'Voice: OFF');
+    };
+
+    const initVoiceToggle = () => {
+        queueOrRun((bridge) => {
+            if (!bridge.get_voice_status) return;
+            bridge.get_voice_status((status) => {
+                // Always show voice toggle (voice player exists if status returned)
+                setVoiceToggleState(status?.enabled ?? false);
+            });
+        });
+    };
+
+    const handleVoiceToggle = () => {
+        if (voiceToggling) return;
+        voiceToggling = true;
+        queueOrRun((bridge) => {
+            if (!bridge.toggle_voice) { voiceToggling = false; return; }
+            bridge.toggle_voice((result) => {
+                voiceToggling = false;
+                if (result?.ok) {
+                    setVoiceToggleState(result.enabled);
+                }
+                returnFocusToInput();
+            });
+        });
+    };
+
+    // ── Employee Lookup ───────────────────────────────────────────────
+
+    const showLookupOverlay = (query, results) => {
+        if (!lookupOverlay) return;
+        if (lookupSearchQuery) lookupSearchQuery.textContent = `Search: "${query}"`;
+
+        if (lookupResults) {
+            lookupResults.innerHTML = '';
+            if (results.length === 0) {
+                lookupResults.innerHTML = '<div class="lookup-overlay__empty">No employees found</div>';
+            } else {
+                results.forEach((emp) => {
+                    const card = document.createElement('div');
+                    card.className = 'lookup-overlay__result';
+                    card.innerHTML = `
+                        <div class="lookup-overlay__result-info">
+                            <div class="lookup-overlay__result-name">${escapeHtml(emp.full_name)} (${escapeHtml(emp.legacy_id)})</div>
+                            <div class="lookup-overlay__result-meta">${escapeHtml(emp.business_unit)}${emp.email ? ' · ' + escapeHtml(emp.email) : ''}</div>
+                        </div>
+                        <button class="lookup-overlay__result-btn" data-legacy-id="${escapeHtml(emp.legacy_id)}">Record Scan</button>
+                    `;
+                    const btn = card.querySelector('.lookup-overlay__result-btn');
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleManualScan(emp.legacy_id);
+                    });
+                    lookupResults.appendChild(card);
+                });
+            }
+        }
+
+        lookupOverlay.classList.add('lookup-overlay--visible');
+        lookupOverlay.setAttribute('aria-hidden', 'false');
+    };
+
+    const hideLookupOverlay = () => {
+        if (!lookupOverlay) return;
+        lookupOverlay.classList.remove('lookup-overlay--visible');
+        lookupOverlay.setAttribute('aria-hidden', 'true');
+        returnFocusToInput();
+    };
+
+    const handleManualScan = (legacyId) => {
+        hideLookupOverlay();
+        queueOrRun((bridge) => {
+            if (!bridge.submit_manual_scan) return;
+            bridge.submit_manual_scan(legacyId, (response) => {
+                handleScanResponse(response);
+                barcodeInput.value = '';
                 returnFocusToInput();
             });
         });
@@ -942,13 +1043,49 @@ ${destination}` : message;
         if (!badge) {
             return;
         }
-        queueOrRun((bridge) => {
-            bridge.submit_scan(badge, (response) => {
-                handleScanResponse(response);
-                barcodeInput.value = '';
-                returnFocusToInput();
+        // Check if input looks like an email username (contains letters, not a pure number)
+        const looksLikeBadge = /^\d+$/.test(badge);
+
+        if (looksLikeBadge) {
+            // Normal badge scan flow
+            queueOrRun((bridge) => {
+                bridge.submit_scan(badge, (response) => {
+                    handleScanResponse(response);
+                    barcodeInput.value = '';
+                    returnFocusToInput();
+                });
             });
-        });
+        } else {
+            // Non-numeric input → try badge first, then fallback to employee lookup
+            queueOrRun((bridge) => {
+                bridge.submit_scan(badge, (response) => {
+                    if (response?.matched) {
+                        // Badge matched even though it contains letters — proceed normally
+                        handleScanResponse(response);
+                        barcodeInput.value = '';
+                        returnFocusToInput();
+                    } else {
+                        // No badge match → trigger employee lookup
+                        if (!bridge.search_employee) {
+                            handleScanResponse(response);
+                            barcodeInput.value = '';
+                            returnFocusToInput();
+                            return;
+                        }
+                        bridge.search_employee(badge, (searchResult) => {
+                            barcodeInput.value = '';
+                            if (searchResult?.ok && searchResult.results && searchResult.results.length > 0) {
+                                showLookupOverlay(badge, searchResult.results);
+                            } else {
+                                // No lookup results — show original "Unknown" response
+                                handleScanResponse(response);
+                                returnFocusToInput();
+                            }
+                        });
+                    }
+                });
+            });
+        }
     };
 
 
@@ -1346,12 +1483,29 @@ ${destination}` : message;
         });
     }
 
+    // Voice toggle
+    if (voiceToggle) {
+        voiceToggle.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleVoiceToggle();
+        });
+    }
+
     // Camera toggle
     if (cameraToggle) {
         cameraToggle.addEventListener('click', (event) => {
             event.preventDefault();
             event.stopPropagation();
             handleCameraToggle();
+        });
+    }
+
+    // Employee lookup cancel
+    if (lookupCancel) {
+        lookupCancel.addEventListener('click', (event) => {
+            event.preventDefault();
+            hideLookupOverlay();
         });
     }
 

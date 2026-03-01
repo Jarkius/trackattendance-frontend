@@ -100,6 +100,10 @@ class DatabaseManager:
             self._connection.execute("ALTER TABLE scans ADD COLUMN email TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists
+        try:
+            self._connection.execute("ALTER TABLE scans ADD COLUMN scan_source TEXT DEFAULT 'badge'")
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     def get_station_name(self) -> Optional[str]:
         cursor = self._connection.execute("SELECT name FROM stations WHERE id = 1")
@@ -182,9 +186,10 @@ class DatabaseManager:
         station_name: str,
         employee: Optional[EmployeeRecord],
         scanned_at: Optional[str] = None,
+        scan_source: str = "badge",
     ) -> None:
         timestamp = scanned_at or datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
-        logger.info(f"RecordingScan: badge={badge_id}, station={station_name}, time={timestamp}")
+        logger.info(f"RecordingScan: badge={badge_id}, station={station_name}, time={timestamp}, source={scan_source}")
         with self._connection:
             self._connection.execute(
                 """
@@ -196,8 +201,9 @@ class DatabaseManager:
                     legacy_id,
                     sl_l1_desc,
                     position_desc,
-                    email
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    email,
+                    scan_source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     badge_id,
@@ -208,6 +214,7 @@ class DatabaseManager:
                     employee.sl_l1_desc if employee else None,
                     employee.position_desc if employee else None,
                     employee.email if employee else None,
+                    scan_source,
                 ),
             )
 
