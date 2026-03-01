@@ -481,6 +481,50 @@ class SyncService:
             return {"ok": False, "deleted": 0, "message": f"Error: {str(e)}"}
 
 
+    def get_dashboard_refresh(self) -> Tuple[bool, int, str]:
+        """Get current dashboard refresh interval from cloud.
+
+        Returns:
+            (success, interval_seconds, message)
+        """
+        try:
+            response = requests.get(
+                f"{self.api_url}/v1/dashboard/public/config",
+                timeout=10,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return True, data.get("refresh_interval", 60), "OK"
+            return False, 60, f"API error: {response.status_code}"
+        except Exception as e:
+            return False, 60, f"Error: {str(e)}"
+
+    def set_dashboard_refresh(self, interval: int) -> Tuple[bool, str]:
+        """Set dashboard refresh interval on cloud.
+
+        Args:
+            interval: 0 (manual only) or 10-600 seconds
+
+        Returns:
+            (success, message)
+        """
+        try:
+            response = requests.put(
+                f"{self.api_url}/v1/dashboard/config",
+                json={"refresh_interval": interval},
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                return True, f"Refresh set to {interval}s" if interval > 0 else "Auto-refresh disabled"
+            elif response.status_code == 400:
+                data = response.json()
+                return False, data.get("error", "Invalid value")
+            return False, f"API error: {response.status_code}"
+        except Exception as e:
+            return False, f"Error: {str(e)}"
+
+
 def sync_roster_summary(db: DatabaseManager, api_url: str, api_key: str) -> dict:
     """Push BU roster counts to cloud for dashboard progress display."""
     bu_data = db.get_employees_by_bu()

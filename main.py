@@ -773,6 +773,22 @@ class Api(QObject):
         except Exception:
             return {"count": 0}
 
+    @pyqtSlot(result="QVariant")
+    def admin_get_dashboard_refresh(self) -> dict:
+        """Get current dashboard refresh interval from cloud."""
+        if not self._sync_service:
+            return {"ok": False, "interval": 60, "message": "Sync not configured"}
+        ok, interval, message = self._sync_service.get_dashboard_refresh()
+        return {"ok": ok, "interval": interval, "message": message}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_dashboard_refresh(self, interval: int) -> dict:
+        """Set dashboard refresh interval on cloud."""
+        if not self._sync_service:
+            return {"ok": False, "message": "Sync not configured"}
+        ok, message = self._sync_service.set_dashboard_refresh(interval)
+        return {"ok": ok, "message": message}
+
     @pyqtSlot()
     def _handle_clear_epoch_and_heartbeat_slot(self) -> None:
         """Check clear_epoch and send heartbeat. Runs on MAIN thread (SQLite safe)."""

@@ -1525,6 +1525,15 @@ body.dashboard-open {
 }
 .admin-overlay__btn--warning:hover { background: #e65100; }
 .admin-overlay__btn--warning i { font-size: 18px; }
+.admin-refresh-opt {
+    flex: 1; min-width: 48px; text-align: center;
+    background: #e0e0e0; color: #333; padding: 8px 12px;
+    border: 2px solid transparent; border-radius: 6px;
+    cursor: pointer; font-size: 0.85rem; font-weight: 500;
+    transition: border-color 0.2s, background 0.2s;
+}
+.admin-refresh-opt:hover { background: #d0d0d0; }
+.admin-refresh-opt.active { border-color: #86bc25; background: #86bc2520; color: #86bc25; font-weight: 600; }
 .admin-confirm-code {
     font-family: 'Courier New', monospace;
     font-size: 32px; font-weight: bold; letter-spacing: 12px;

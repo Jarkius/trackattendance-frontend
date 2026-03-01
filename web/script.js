@@ -1581,7 +1581,7 @@ ${destination}` : message;
         });
     };
 
-    const ADMIN_VIEWS = ['admin-pin-view', 'admin-actions-view', 'admin-confirm-view', 'admin-result-view', 'admin-status-view'];
+    const ADMIN_VIEWS = ['admin-pin-view', 'admin-actions-view', 'admin-confirm-view', 'admin-result-view', 'admin-status-view', 'admin-settings-view'];
     const showAdminView = (viewId) => {
         ADMIN_VIEWS.forEach(id => {
             const el = document.getElementById(id);
@@ -1759,6 +1759,56 @@ ${destination}` : message;
     if (adminResultCloseBtn) adminResultCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
     const adminStatusCloseBtn = document.getElementById('admin-status-close');
     if (adminStatusCloseBtn) adminStatusCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
+    // Settings panel
+    const adminSettingsBtn = document.getElementById('admin-settings-btn');
+    const adminSettingsBack = document.getElementById('admin-settings-back');
+    const adminRefreshStatus = document.getElementById('admin-refresh-status');
+
+    const loadRefreshSetting = () => {
+        if (adminRefreshStatus) adminRefreshStatus.textContent = 'Loading...';
+        document.querySelectorAll('.admin-refresh-opt').forEach(b => b.classList.remove('active'));
+        queueOrRun((bridge) => {
+            bridge.admin_get_dashboard_refresh((result) => {
+                const val = result?.ok ? result.interval : 60;
+                if (adminRefreshStatus) {
+                    adminRefreshStatus.textContent = val === 0 ? 'Current: Manual (pull-to-refresh only)' : `Current: ${val}s auto-refresh`;
+                }
+                document.querySelectorAll('.admin-refresh-opt').forEach(b => {
+                    b.classList.toggle('active', parseInt(b.dataset.val) === val);
+                });
+            });
+        });
+    };
+
+    if (adminSettingsBtn) adminSettingsBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        showAdminView('admin-settings-view');
+        loadRefreshSetting();
+    });
+    if (adminSettingsBack) adminSettingsBack.addEventListener('click', (e) => {
+        e.preventDefault();
+        showAdminView('admin-actions-view');
+    });
+
+    document.querySelectorAll('.admin-refresh-opt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const val = parseInt(btn.dataset.val);
+            if (adminRefreshStatus) adminRefreshStatus.textContent = 'Saving...';
+            document.querySelectorAll('.admin-refresh-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            queueOrRun((bridge) => {
+                bridge.admin_set_dashboard_refresh(val, (result) => {
+                    if (adminRefreshStatus) {
+                        adminRefreshStatus.textContent = result?.ok
+                            ? (val === 0 ? 'Saved: Manual (pull-to-refresh only)' : `Saved: ${val}s auto-refresh`)
+                            : `Error: ${result?.message || 'Failed'}`;
+                    }
+                });
+            });
+        });
+    });
+
     if (adminOverlay) adminOverlay.addEventListener('click', (e) => { if (e.target === adminOverlay) hideAdminOverlay(); });
 
     document.addEventListener('click', (event) => {
