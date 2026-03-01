@@ -25,6 +25,113 @@ from main import (
 )
 
 from openpyxl import load_workbook
+import requests
+
+def _get_local_dashboard_stats(service: AttendanceService) -> Dict[str, Any]:
+    """Get dashboard stats from local SQLite — same data the local dashboard shows."""
+    db = service._db
+    stats = db.get_sync_statistics()
+    all_scans = db.fetch_all_scans()
+
+    unique_badges = set()
+    bu_counts: Dict[str, int] = {}
+    station_counts: Dict[str, int] = {}
+
+    for scan in all_scans:
+        badge = scan.legacy_id
+        unique_badges.add(badge)
+        bu = scan.sl_l1_desc or 'Unknown'
+        bu_counts[bu] = bu_counts.get(bu, 0) + 1
+        station = scan.station_name or 'Unknown'
+        if station not in station_counts:
+            station_counts[station] = set()
+        station_counts[station].add(badge)
+
+    bu_unique: Dict[str, int] = {}
+    for scan in all_scans:
+        bu = scan.sl_l1_desc or 'Unknown'
+        if bu not in bu_unique:
+            bu_unique[bu] = set()
+        bu_unique[bu].add(scan.legacy_id)
+
+    employees_by_bu = db.get_employees_by_bu()
+    bu_registered = {row['bu_name']: row['count'] for row in employees_by_bu}
+
+    return {
+        'total_scans': len(all_scans),
+        'unique_badges': len(unique_badges),
+        'total_registered': sum(bu_registered.values()),
+        'stations': [
+            {'name': name, 'unique': len(badges)}
+            for name, badges in sorted(station_counts.items(), key=lambda x: -len(x[1]))
+        ],
+        'business_units': [
+            {
+                'name': bu,
+                'registered': bu_registered.get(bu, 0),
+                'unique': len(badges),
+            }
+            for bu, badges in sorted(bu_unique.items(), key=lambda x: -len(x[1]))
+        ],
+    }
+
+
+def _get_cloud_dashboard_stats() -> Dict[str, Any]:
+    """Fetch public dashboard stats from cloud API."""
+    try:
+        r = requests.get(
+            f'{config.CLOUD_API_URL}/v1/dashboard/public/stats',
+            timeout=15,
+        )
+        if r.status_code == 200:
+            return r.json()
+        return {'error': f'HTTP {r.status_code}'}
+    except Exception as e:
+        return {'error': str(e)}
+
+
+def _compare_dashboards(local: Dict, cloud: Dict) -> List[str]:
+    """Compare local vs cloud dashboard stats. Returns list of mismatches."""
+    mismatches = []
+
+    if cloud.get('error'):
+        mismatches.append(f'Cloud API error: {cloud["error"]}')
+        return mismatches
+
+    if local['unique_badges'] != cloud.get('unique_badges', 0):
+        mismatches.append(
+            f'Unique badges: local={local["unique_badges"]} vs cloud={cloud.get("unique_badges", 0)}'
+        )
+
+    if local['total_scans'] != cloud.get('total_scans', 0):
+        mismatches.append(
+            f'Total scans: local={local["total_scans"]} vs cloud={cloud.get("total_scans", 0)}'
+        )
+
+    local_bus = {b['name']: b for b in local.get('business_units', [])}
+    cloud_bus = {b['name']: b for b in cloud.get('business_units', [])}
+
+    all_bu_names = set(local_bus.keys()) | set(cloud_bus.keys())
+    for bu_name in sorted(all_bu_names):
+        lb = local_bus.get(bu_name, {})
+        cb = cloud_bus.get(bu_name, {})
+        if lb.get('unique', 0) != cb.get('unique', 0):
+            mismatches.append(
+                f'BU "{bu_name}": local={lb.get("unique", 0)} vs cloud={cb.get("unique", 0)}'
+            )
+
+    local_stations = {s['name']: s['unique'] for s in local.get('stations', [])}
+    cloud_stations = {s['name']: s['unique'] for s in cloud.get('stations', [])}
+
+    all_station_names = set(local_stations.keys()) | set(cloud_stations.keys())
+    for sn in sorted(all_station_names):
+        if local_stations.get(sn, 0) != cloud_stations.get(sn, 0):
+            mismatches.append(
+                f'Station "{sn}": local={local_stations.get(sn, 0)} vs cloud={cloud_stations.get(sn, 0)}'
+            )
+
+    return mismatches
+
 
 SPECIAL_CASE_BARCODES = [
     '999999',               # intentionally invalid control scan
@@ -346,6 +453,63 @@ def run_stress_test(
                 sync_attempted = True
                 sync_success = False
 
+        # ---- Dashboard Comparison: Local vs Cloud ----
+        dashboard_match = None
+        if sync_attempted and sync_success:
+            print(f'\n[dashboard] Comparing local vs cloud dashboard data...')
+            try:
+                # Sync roster summary so cloud has registered counts
+                from sync import sync_roster_summary_from_data
+                bu_data = service._db.get_employees_by_bu()
+                if bu_data:
+                    sync_roster_summary_from_data(bu_data, config.CLOUD_API_URL, config.CLOUD_API_KEY)
+
+                local_stats = _get_local_dashboard_stats(service)
+                cloud_stats = _get_cloud_dashboard_stats()
+
+                print(f'\n{"="*60}')
+                print(f'LOCAL DASHBOARD')
+                print(f'{"="*60}')
+                print(f'Total registered: {local_stats["total_registered"]}')
+                print(f'Unique badges:    {local_stats["unique_badges"]}')
+                print(f'Total scans:      {local_stats["total_scans"]}')
+                rate = (local_stats["unique_badges"] / local_stats["total_registered"] * 100) if local_stats["total_registered"] > 0 else 0
+                print(f'Attendance rate:  {rate:.1f}%')
+                for s in local_stats['stations']:
+                    print(f'  Station {s["name"]}: {s["unique"]} unique')
+                for bu in local_stats['business_units']:
+                    pct = f' ({bu["unique"]*100/bu["registered"]:.1f}%)' if bu['registered'] > 0 else ''
+                    print(f'  BU {bu["name"]}: {bu["unique"]}/{bu["registered"]}{pct}')
+
+                print(f'\n{"="*60}')
+                print(f'CLOUD DASHBOARD (mobile)')
+                print(f'{"="*60}')
+                if cloud_stats.get('error'):
+                    print(f'  [ERROR] {cloud_stats["error"]}')
+                else:
+                    print(f'Total registered: {cloud_stats.get("total_registered", "N/A")}')
+                    print(f'Unique badges:    {cloud_stats.get("unique_badges", 0)}')
+                    print(f'Total scans:      {cloud_stats.get("total_scans", 0)}')
+                    for s in cloud_stats.get('stations', []):
+                        print(f'  Station {s["name"]}: {s["unique"]} unique')
+                    for bu in cloud_stats.get('business_units', []):
+                        pct = f' ({bu["unique"]*100/bu["registered"]:.1f}%)' if bu.get('registered', 0) > 0 else ''
+                        print(f'  BU {bu["name"]}: {bu["unique"]}/{bu.get("registered", 0)}{pct}')
+
+                mismatches = _compare_dashboards(local_stats, cloud_stats)
+                print(f'\n{"="*60}')
+                if mismatches:
+                    dashboard_match = False
+                    print(f'DASHBOARD COMPARISON: MISMATCH ({len(mismatches)} differences)')
+                    for m in mismatches:
+                        print(f'  [X] {m}')
+                else:
+                    dashboard_match = True
+                    print(f'DASHBOARD COMPARISON: MATCH — local and cloud data are identical')
+                print(f'{"="*60}')
+            except Exception as exc:
+                print(f'[dashboard] Comparison failed: {exc}')
+
         export_info = None
         try:
             export_info = service.export_scans()
@@ -433,6 +597,8 @@ def run_stress_test(
             print(f'Sync success    : {"Yes" if sync_success else "No"}')
             print(f'Scans synced    : {synced_count}')
             print(f'Scans failed    : {failed_count}')
+            if dashboard_match is not None:
+                print(f'Dashboard match : {"Yes" if dashboard_match else "MISMATCH"}')
         else:
             print(f'\n--- Cloud Sync Results ---')
             print(f'Sync attempted  : No (no pending scans)')
