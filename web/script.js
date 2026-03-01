@@ -853,6 +853,8 @@ ${destination}` : message;
 
     // ── Camera toggle ──────────────────────────────────────────────────
 
+    let cameraToggling = false;
+
     const setCameraToggleState = (running) => {
         if (!cameraToggle) return;
         cameraToggle.classList.remove('camera-toggle--hidden', 'camera-toggle--on', 'camera-toggle--off');
@@ -871,9 +873,12 @@ ${destination}` : message;
     };
 
     const handleCameraToggle = () => {
+        if (cameraToggling) return;  // Prevent rapid clicks
+        cameraToggling = true;
         queueOrRun((bridge) => {
-            if (!bridge.toggle_camera) return;
+            if (!bridge.toggle_camera) { cameraToggling = false; return; }
             bridge.toggle_camera((result) => {
+                cameraToggling = false;
                 if (result?.ok) {
                     setCameraToggleState(result.running);
                 }

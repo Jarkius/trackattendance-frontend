@@ -156,7 +156,7 @@ class GreetingPlayer(QObject):
 
         self._player.setSource(self._QUrl.fromLocalFile(str(self._pending_file.resolve())))
         self._player.play()
-        LOGGER.debug("[Greeting] Playing: %s", self._pending_file.name)
+        LOGGER.info("[Greeting] Playing: %s", self._pending_file.name)
         self._pending_file = None
 
     def stop(self) -> None:
