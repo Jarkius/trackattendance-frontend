@@ -28,10 +28,11 @@ class ProximityGreetingManager:
         greeting_volume: float = 1.0,
         scan_busy_seconds: float = 30.0,
         absence_threshold: float = 3.0,
-        confirm_frames: int = 3,
+        confirm_frames: int = 5,
         show_overlay: bool = True,
         voice_player=None,
         min_size_pct: float = 0.20,
+        haar_min_neighbors: int = 5,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
@@ -42,6 +43,7 @@ class ProximityGreetingManager:
         self._absence_threshold = absence_threshold
         self._confirm_frames = confirm_frames
         self._min_size_pct = min_size_pct
+        self._haar_min_neighbors = haar_min_neighbors
         self._show_overlay = show_overlay
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
 
@@ -84,6 +86,7 @@ class ProximityGreetingManager:
                 absence_threshold=self._absence_threshold,
                 confirm_frames=self._confirm_frames,
                 min_size_pct=self._min_size_pct,
+                haar_min_neighbors=self._haar_min_neighbors,
             )
             self._detector.add_detection_callback(self._on_person_detected)
 

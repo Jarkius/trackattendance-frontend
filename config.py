@@ -314,13 +314,17 @@ CAMERA_SHOW_OVERLAY = os.getenv("CAMERA_SHOW_OVERLAY", "True").lower() in ("true
 
 # Consecutive detected frames required before greeting fires.
 # Prevents false positives from shadows, posters, or brief flickers.
-# At ~15 FPS with skip_frames=2, 3 confirmations ≈ 0.6 seconds of real presence.
-CAMERA_CONFIRM_FRAMES = _safe_int("CAMERA_CONFIRM_FRAMES", 3, min_val=1, max_val=15)
+# At ~15 FPS with skip_frames=2, 5 confirmations ≈ 1.0 seconds of real presence.
+CAMERA_CONFIRM_FRAMES = _safe_int("CAMERA_CONFIRM_FRAMES", 5, min_val=1, max_val=15)
 
 # Minimum detection size as percentage of frame width.
 # Filters out distant people — only greet those close to the kiosk.
 # 0.20 = face/body must fill at least 20% of the frame (~0.5-1m distance).
 CAMERA_MIN_SIZE_PCT = _safe_float("CAMERA_MIN_SIZE_PCT", 0.20, min_val=0.05, max_val=0.80)
+
+# Haar cascade minNeighbors — higher = fewer false positives but may miss real faces.
+# Only applies when MediaPipe is unavailable. 3 = sensitive, 5-6 = balanced, 8+ = strict.
+CAMERA_HAAR_MIN_NEIGHBORS = _safe_int("CAMERA_HAAR_MIN_NEIGHBORS", 5, min_val=2, max_val=10)
 
 # Camera resolution
 CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320, max_val=4096)

@@ -46,8 +46,10 @@ class ProximityDetector:
     def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0,
                  min_face_confidence: float = 0.5, min_pose_confidence: float = 0.5,
                  skip_frames: int = 2, absence_threshold: float = 3.0,
-                 confirm_frames: int = 3, min_size_pct: float = 0.20):
+                 confirm_frames: int = 5, min_size_pct: float = 0.20,
+                 haar_min_neighbors: int = 5):
         self.sensitivity = sensitivity  # for motion fallback
+        self.haar_min_neighbors = haar_min_neighbors  # Haar cascade strictness
         self.cooldown = cooldown  # minimum seconds between greetings
         self.min_face_confidence = min_face_confidence
         self.min_pose_confidence = min_pose_confidence
@@ -207,7 +209,7 @@ class ProximityDetector:
         faces = self._haar_cascade.detectMultiScale(
             gray,
             scaleFactor=1.1,
-            minNeighbors=3,
+            minNeighbors=self.haar_min_neighbors,
             minSize=(min_px, min_px),
         )
 
