@@ -1536,13 +1536,19 @@ body.dashboard-open {
     display: none;
 }
 .adm-section__header {
-    display: flex; align-items: center; gap: 6px;
-    margin: 0 0 10px;
-    font-size: 0.65rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    color: #999;
+    display: flex; align-items: center; gap: 8px;
+    margin: 0 0 12px;
+    font-size: 0.82rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #444;
 }
-.adm-section__header i { font-size: 14px; }
+.adm-section__header i { font-size: 18px; }
+.adm-section__header--dashboard i { color: #2196F3; }
+.adm-section__header--scanning i { color: #FF9800; }
+.adm-section__header--audio i { color: #9C27B0; }
+.adm-section__header--camera i { color: #4CAF50; }
+.adm-section__header--display i { color: #00BCD4; }
+.adm-section__header--link i { color: #607D8B; }
 
 /* ---- Admin Preset Buttons (pills) ---- */
 .adm-opt-group { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1609,56 +1615,15 @@ body.dashboard-open {
     border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 .adm-slider-row__value {
-    font-size: 0.8rem; font-weight: 600; color: #555;
-    min-width: 32px; text-align: right;
+    font-size: 0.9rem; font-weight: 600; color: #333;
+    min-width: 52px; text-align: right; white-space: nowrap;
     font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
 }
 .adm-slider-row__unit {
     font-size: 0.75rem; font-weight: 500; color: #888;
     min-width: 14px;
 }
-/* ---- Admin Stepper (+/- controls) ---- */
-.adm-stepper-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 4px 0;
-}
-.adm-stepper-row__label { font-size: 0.85rem; font-weight: 500; color: #333; white-space: nowrap; min-width: 80px; }
-.adm-stepper-row__unit { font-size: 0.75rem; font-weight: 500; color: #888; min-width: 14px; }
-.adm-stepper {
-    display: flex; align-items: center; gap: 0;
-    border: 1px solid #ddd; border-radius: 6px; overflow: hidden;
-    background: #fff;
-}
-.adm-stepper__btn {
-    width: 32px; height: 32px; border: none; background: #f5f5f5;
-    font-size: 1.1rem; font-weight: 600; color: #333; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s;
-    line-height: 1; padding: 0;
-}
-.adm-stepper__btn:hover { background: #e8e8e8; }
-.adm-stepper__btn:active { background: #86bc25; color: #fff; }
-.adm-stepper__input {
-    width: 52px; text-align: center; border: none; border-left: 1px solid #ddd; border-right: 1px solid #ddd;
-    font-size: 0.85rem; font-weight: 600; color: #333; height: 32px;
-    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-    -moz-appearance: textfield; outline: none; background: #fff;
-}
-.adm-stepper__input::-webkit-outer-spin-button,
-.adm-stepper__input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 
-.adm-number-input {
-    width: 52px; text-align: center;
-    border: 1px solid #ddd; border-radius: 4px;
-    font-size: 0.8rem; font-weight: 600; color: #555;
-    padding: 3px 2px;
-    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
-    -moz-appearance: textfield;
-}
-.adm-number-input::-webkit-outer-spin-button,
-.adm-number-input::-webkit-inner-spin-button {
-    -webkit-appearance: none; margin: 0;
-}
 
 /* ---- Admin Back Button ---- */
 .adm-back {

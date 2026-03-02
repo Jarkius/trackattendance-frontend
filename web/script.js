@@ -1772,39 +1772,38 @@ ${destination}` : message;
     const adminCameraSection = document.getElementById('admin-camera-section');
     const adminCameraDetectionToggle = document.getElementById('admin-camera-detection-toggle');
     const adminCameraOverlayToggle = document.getElementById('admin-camera-overlay-toggle');
-    const adminCooldownNum = document.getElementById('admin-cooldown-num');
-    const adminMinsizeNum = document.getElementById('admin-minsize-num');
-    const adminAbsenceNum = document.getElementById('admin-absence-num');
-    const adminFeedbackNum = document.getElementById('admin-feedback-num');
-    const adminConncheckNum = document.getElementById('admin-conncheck-num');
+    const adminCooldownSlider = document.getElementById('admin-cooldown-slider');
+    const adminCooldownValue = document.getElementById('admin-cooldown-value');
+    const adminMinsizeSlider = document.getElementById('admin-minsize-slider');
+    const adminMinsizeValue = document.getElementById('admin-minsize-value');
+    const adminAbsenceSlider = document.getElementById('admin-absence-slider');
+    const adminAbsenceValue = document.getElementById('admin-absence-value');
+    const adminFeedbackSlider = document.getElementById('admin-feedback-slider');
+    const adminFeedbackValue = document.getElementById('admin-feedback-value');
+    const adminConncheckSlider = document.getElementById('admin-conncheck-slider');
+    const adminConncheckValue = document.getElementById('admin-conncheck-value');
     const adminDashboardUrl = document.getElementById('admin-dashboard-url');
 
-    // Helper: bind stepper (+/- buttons + number input) with a save callback
-    const bindStepper = (numInput, saveFn) => {
-        if (!numInput) return;
-        const stepper = numInput.closest('.adm-stepper');
-        if (stepper) {
-            stepper.querySelectorAll('.adm-stepper__btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const dir = parseInt(btn.dataset.dir);
-                    const step = parseFloat(numInput.step) || 1;
-                    const min = parseFloat(numInput.min);
-                    const max = parseFloat(numInput.max);
-                    let v = parseFloat(numInput.value) + dir * step;
-                    v = Math.max(min, Math.min(max, parseFloat(v.toFixed(2))));
-                    numInput.value = v;
-                    saveFn(v);
-                });
-            });
+    // Helper: update slider fill and value label
+    const syncSlider = (slider, valueEl, val, min, max, unit) => {
+        if (slider) {
+            slider.value = val;
+            const pct = max > min ? ((val - min) / (max - min)) * 100 : 0;
+            slider.style.setProperty('--fill', pct + '%');
         }
-        numInput.addEventListener('change', () => {
-            const min = parseFloat(numInput.min);
-            const max = parseFloat(numInput.max);
-            let v = parseFloat(numInput.value);
-            if (isNaN(v)) v = min;
-            v = Math.max(min, Math.min(max, v));
-            numInput.value = v;
+        if (valueEl) valueEl.textContent = val + ' ' + unit;
+    };
+
+    // Helper: bind slider with value label update + save callback
+    const bindSlider = (slider, valueEl, unit, saveFn) => {
+        if (!slider) return;
+        slider.addEventListener('input', () => {
+            const min = parseFloat(slider.min);
+            const max = parseFloat(slider.max);
+            const v = parseFloat(slider.value);
+            const pct = max > min ? ((v - min) / (max - min)) * 100 : 0;
+            slider.style.setProperty('--fill', pct + '%');
+            if (valueEl) valueEl.textContent = v + ' ' + unit;
             saveFn(v);
         });
     };
@@ -1869,13 +1868,18 @@ ${destination}` : message;
                             adminCameraOverlayToggle.classList.toggle('active', !!result.camera_overlay && !!result.camera_running);
                             adminCameraOverlayToggle.disabled = !result.camera_running;
                         }
-                        if (adminCooldownNum) adminCooldownNum.value = result.greeting_cooldown || 60;
-                        if (adminMinsizeNum) adminMinsizeNum.value = Math.round((result.min_size_pct || 0.20) * 100);
-                        if (adminAbsenceNum) adminAbsenceNum.value = result.absence_threshold || 3;
+                        const cooldown = result.greeting_cooldown || 60;
+                        syncSlider(adminCooldownSlider, adminCooldownValue, cooldown, 5, 300, 'sec');
+                        const minPct = Math.round((result.min_size_pct || 0.20) * 100);
+                        syncSlider(adminMinsizeSlider, adminMinsizeValue, minPct, 5, 80, '%');
+                        const absence = result.absence_threshold || 3;
+                        syncSlider(adminAbsenceSlider, adminAbsenceValue, absence, 1, 30, 'sec');
                     }
                     // Display section
-                    if (adminFeedbackNum) adminFeedbackNum.value = (result.scan_feedback_ms || 2000) / 1000;
-                    if (adminConncheckNum) adminConncheckNum.value = result.connection_check_s ?? 10;
+                    const feedbackSec = Math.round((result.scan_feedback_ms || 2000) / 1000);
+                    syncSlider(adminFeedbackSlider, adminFeedbackValue, feedbackSec, 1, 10, 'sec');
+                    const connCheck = result.connection_check_s ?? 120;
+                    syncSlider(adminConncheckSlider, adminConncheckValue, connCheck, 0, 600, 'sec');
                     // Dashboard URL
                     if (adminDashboardUrl) {
                         adminDashboardUrl.textContent = result.dashboard_url || 'Not configured';
@@ -2027,32 +2031,32 @@ ${destination}` : message;
         });
     }
 
-    // Camera steppers: cooldown, min face size, absence threshold
-    bindStepper(adminCooldownNum, (v) => {
+    // Camera sliders: cooldown, min face size, absence threshold
+    bindSlider(adminCooldownSlider, adminCooldownValue, 'sec', (v) => {
         queueOrRun((bridge) => {
             if (bridge.admin_set_greeting_cooldown) bridge.admin_set_greeting_cooldown(v, () => {});
         });
     });
-    bindStepper(adminMinsizeNum, (v) => {
+    bindSlider(adminMinsizeSlider, adminMinsizeValue, '%', (v) => {
         queueOrRun((bridge) => {
             if (bridge.admin_set_min_size_pct) bridge.admin_set_min_size_pct(v / 100, () => {});
         });
     });
-    bindStepper(adminAbsenceNum, (v) => {
+    bindSlider(adminAbsenceSlider, adminAbsenceValue, 'sec', (v) => {
         queueOrRun((bridge) => {
             if (bridge.admin_set_absence_threshold) bridge.admin_set_absence_threshold(v, () => {});
         });
     });
 
-    // Display steppers: scan feedback (seconds → ms), connection check
-    bindStepper(adminFeedbackNum, (v) => {
+    // Display sliders: scan feedback (seconds → ms), connection check
+    bindSlider(adminFeedbackSlider, adminFeedbackValue, 'sec', (v) => {
         const ms = Math.round(v * 1000);
         scanFeedbackDurationMs = ms;
         queueOrRun((bridge) => {
             if (bridge.admin_set_scan_feedback_duration) bridge.admin_set_scan_feedback_duration(ms, () => {});
         });
     });
-    bindStepper(adminConncheckNum, (v) => {
+    bindSlider(adminConncheckSlider, adminConncheckValue, 'sec', (v) => {
         queueOrRun((bridge) => {
             if (bridge.admin_set_connection_check) bridge.admin_set_connection_check(v, () => {});
         });

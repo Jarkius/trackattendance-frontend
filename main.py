@@ -1096,8 +1096,11 @@ class Api(QObject):
         original_query: what the user actually typed (stored as scan value)
         legacy_id: matched employee's ID (used for employee lookup, may be empty)
         """
+        # Use legacy_id as badge value when employee was selected from lookup
+        # (original_query is just the search text, not the actual badge)
+        badge_value = legacy_id if legacy_id else original_query
         result = self._service.register_scan(
-            original_query, scan_source="lookup" if legacy_id else "manual",
+            badge_value, scan_source="lookup" if legacy_id else "manual",
             lookup_legacy_id=legacy_id or None,
         )
 
