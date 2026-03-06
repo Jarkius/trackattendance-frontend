@@ -106,7 +106,19 @@ EXPORT_DIRECTORY = EXEC_ROOT / "exports"
 DATABASE_PATH = DATA_DIRECTORY / "database.db"
 EMPLOYEE_WORKBOOK_PATH = DATA_DIRECTORY / "employee.xlsx"
 UI_INDEX_HTML = RESOURCE_ROOT / "web" / "index.html"
-VOICES_DIRECTORY = RESOURCE_ROOT / "assets" / "voices"
+def _voices_dir() -> Path:
+    """Resolve voices directory with fallback chain.
+
+    Frozen exe: voices/ next to .exe (override) → bundled in assets/voices (fallback)
+    Dev mode:   assets/voices/ (as-is)
+    """
+    if getattr(sys, 'frozen', False):
+        override = EXEC_ROOT / "voices"
+        if override.is_dir() and any(override.glob("*.mp3")):
+            return override
+    return RESOURCE_ROOT / "assets" / "voices"
+
+VOICES_DIRECTORY = _voices_dir()
 
 DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
