@@ -82,6 +82,7 @@ class DatabaseManager:
 
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status ON scans(sync_status);
                 CREATE INDEX IF NOT EXISTS idx_scans_badge_station_time ON scans(badge_id, station_name, scanned_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_scans_legacy_station_time ON scans(legacy_id, station_name, scanned_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status_time ON scans(sync_status, scanned_at);
                 CREATE INDEX IF NOT EXISTS idx_scans_station_name ON scans(station_name);
                 CREATE INDEX IF NOT EXISTS idx_employees_sl_l1_desc ON employees(sl_l1_desc);
@@ -268,10 +269,6 @@ class DatabaseManager:
         """)
         return [{"bu_name": row["bu_name"], "count": row["count"]} for row in cursor.fetchall()]
 
-    def count_scans_total(self) -> int:
-        cursor = self._connection.execute("SELECT COUNT(1) FROM scans")
-        return int(cursor.fetchone()[0])
-
     def count_scans_today(self) -> int:
         cursor = self._connection.execute(
             "SELECT COUNT(1) FROM scans WHERE DATE(scanned_at, 'localtime') = DATE('now', 'localtime')"
@@ -341,8 +338,8 @@ class DatabaseManager:
         cursor = self._connection.execute(
             """
             SELECT id FROM scans
-            WHERE badge_id = ?
-            AND station_name = ?
+            WHERE badge_id = ? COLLATE NOCASE
+            AND station_name = ? COLLATE NOCASE
             AND scanned_at >= ?
             ORDER BY scanned_at DESC
             LIMIT 1
@@ -372,8 +369,8 @@ class DatabaseManager:
         cursor = self._connection.execute(
             """
             SELECT id FROM scans
-            WHERE legacy_id = ?
-            AND station_name = ?
+            WHERE legacy_id = ? COLLATE NOCASE
+            AND station_name = ? COLLATE NOCASE
             AND scanned_at >= ?
             ORDER BY scanned_at DESC
             LIMIT 1

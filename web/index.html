@@ -243,20 +243,31 @@
                 </div>
             </div>
             <div id="admin-actions-view" style="display:none;">
-                <h5 class="admin-overlay__title">Admin Panel</h5>
-                <div class="admin-overlay__section">
-                    <p id="admin-cloud-count">Checking scan count...</p>
-                    <p id="admin-local-count" style="margin-top:4px;font-size:13px;color:#999;"></p>
-                    <button class="admin-overlay__btn admin-overlay__btn--warning" id="admin-clear-station" style="margin-bottom:8px;">
-                        <i class="material-icons">location_off</i> Clear This Station
-                    </button>
-                    <button class="admin-overlay__btn admin-overlay__btn--danger" id="admin-clear-cloud">
-                        <i class="material-icons">delete_forever</i> Clear All Stations
-                    </button>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                    <h5 class="admin-overlay__title" style="margin:0;">Admin Panel</h5>
                 </div>
-                <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:12px;padding-top:12px;">
-                    <button class="admin-overlay__btn admin-overlay__btn--submit" id="admin-settings-btn" style="margin-bottom:0;">
-                        <i class="material-icons">settings</i> Settings
+                <div class="adm-section">
+                    <div class="adm-section__header"><i class="material-icons">cloud</i> Status</div>
+                    <div class="adm-readout">
+                        <p id="admin-cloud-count" style="margin:0;"><i class="material-icons">cloud_queue</i> Checking scan count...</p>
+                        <p id="admin-local-count" style="margin:4px 0 0;"><i class="material-icons">computer</i> --</p>
+                    </div>
+                </div>
+                <div class="adm-section">
+                    <div class="adm-section__header"><i class="material-icons">delete_outline</i> Data Management</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                        <button class="admin-overlay__btn admin-overlay__btn--warning" id="admin-clear-station" style="width:100%;">
+                            <i class="material-icons">location_off</i> Clear This Station
+                        </button>
+                        <button class="admin-overlay__btn admin-overlay__btn--danger" id="admin-clear-cloud" style="width:100%;">
+                            <i class="material-icons">delete_forever</i> Clear All Stations
+                        </button>
+                    </div>
+                </div>
+                <div class="adm-section">
+                    <div class="adm-section__header"><i class="material-icons">settings</i> Settings</div>
+                    <button class="adm-link-btn" id="admin-settings-btn">
+                        Settings <i class="material-icons">chevron_right</i>
                     </button>
                 </div>
                 <div class="admin-overlay__actions">
@@ -264,20 +275,94 @@
                 </div>
             </div>
             <div id="admin-settings-view" style="display:none;">
-                <h5 class="admin-overlay__title">Settings</h5>
-                <div class="admin-overlay__section">
-                    <p style="font-size:13px;color:#999;margin-bottom:8px;">Dashboard Auto-Refresh</p>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <button class="admin-overlay__btn admin-refresh-opt" data-val="0">Off</button>
-                        <button class="admin-overlay__btn admin-refresh-opt" data-val="30">30s</button>
-                        <button class="admin-overlay__btn admin-refresh-opt" data-val="60">60s</button>
-                        <button class="admin-overlay__btn admin-refresh-opt" data-val="120">2m</button>
-                        <button class="admin-overlay__btn admin-refresh-opt" data-val="300">5m</button>
+                <button class="adm-back" id="admin-settings-back"><i class="material-icons">arrow_back</i> Settings</button>
+                <div class="adm-section">
+                    <div class="adm-section__header adm-section__header--dashboard"><i class="material-icons">dashboard</i> Dashboard</div>
+                    <p style="font-size:0.78rem;color:#666;margin:0 0 8px;">Auto-Refresh</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-refresh-opt" data-val="0">Off</button>
+                        <button class="adm-opt adm-refresh-opt" data-val="30">30s</button>
+                        <button class="adm-opt adm-refresh-opt" data-val="60">60s</button>
+                        <button class="adm-opt adm-refresh-opt" data-val="120">2m</button>
+                        <button class="adm-opt adm-refresh-opt" data-val="300">5m</button>
                     </div>
-                    <p id="admin-refresh-status" style="margin-top:8px;font-size:12px;color:#999;">Loading...</p>
+                    <p class="adm-status" id="admin-refresh-status">Loading...</p>
+                </div>
+                <div class="adm-section">
+                    <div class="adm-section__header adm-section__header--scanning"><i class="material-icons">badge</i> Scanning</div>
+                    <p style="font-size:0.78rem;color:#666;margin:0 0 8px;">Duplicate Window</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-dup-window-opt" data-val="60">1m</button>
+                        <button class="adm-opt adm-dup-window-opt" data-val="180">3m</button>
+                        <button class="adm-opt adm-dup-window-opt" data-val="300">5m</button>
+                        <button class="adm-opt adm-dup-window-opt" data-val="600">10m</button>
+                    </div>
+                    <p class="adm-status" id="admin-dup-window-status">--</p>
+                    <p style="font-size:0.78rem;color:#666;margin:12px 0 8px 0;">Duplicate Action</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-dup-action-opt" data-val="block">Block</button>
+                        <button class="adm-opt adm-dup-action-opt" data-val="warn">Warn</button>
+                        <button class="adm-opt adm-dup-action-opt" data-val="silent">Silent</button>
+                    </div>
+                    <p class="adm-status" id="admin-dup-action-status">--</p>
+                </div>
+                <div class="adm-section">
+                    <div class="adm-section__header adm-section__header--audio"><i class="material-icons">volume_up</i> Audio</div>
+                    <div class="adm-toggle-row">
+                        <span class="adm-toggle-row__label">Voice</span>
+                        <button class="adm-toggle" id="admin-voice-toggle" type="button"></button>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:10px;">
+                        <span class="adm-slider-row__label">Volume</span>
+                        <input type="range" class="adm-slider" id="admin-volume-slider" min="0" max="100" value="80" style="--fill:80%;">
+                        <span class="adm-slider-row__value" id="admin-volume-value">80%</span>
+                    </div>
+                </div>
+                <div class="adm-section" id="admin-camera-section">
+                    <div class="adm-section__header adm-section__header--camera"><i class="material-icons">videocam</i> Camera</div>
+                    <div class="adm-toggle-row">
+                        <span class="adm-toggle-row__label">Detection</span>
+                        <button class="adm-toggle" id="admin-camera-detection-toggle" type="button"></button>
+                    </div>
+                    <div class="adm-toggle-row" style="margin-top:8px;">
+                        <span class="adm-toggle-row__label">Live Preview</span>
+                        <button class="adm-toggle" id="admin-camera-overlay-toggle" type="button"></button>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:10px;">
+                        <span class="adm-slider-row__label">Cooldown</span>
+                        <input type="range" class="adm-slider" id="admin-cooldown-slider" min="5" max="300" value="60" step="5" style="--fill:18%;">
+                        <span class="adm-slider-row__value" id="admin-cooldown-value">60 sec</span>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Min Face</span>
+                        <input type="range" class="adm-slider" id="admin-minsize-slider" min="5" max="80" value="20" step="1" style="--fill:20%;">
+                        <span class="adm-slider-row__value" id="admin-minsize-value">20%</span>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Absence</span>
+                        <input type="range" class="adm-slider" id="admin-absence-slider" min="1" max="30" value="3" step="1" style="--fill:7%;">
+                        <span class="adm-slider-row__value" id="admin-absence-value">3 sec</span>
+                    </div>
+                </div>
+                <div class="adm-section">
+                    <div class="adm-section__header adm-section__header--display"><i class="material-icons">tv</i> Display</div>
+                    <div class="adm-slider-row">
+                        <span class="adm-slider-row__label">Feedback</span>
+                        <input type="range" class="adm-slider" id="admin-feedback-slider" min="1" max="10" value="2" step="1" style="--fill:11%;">
+                        <span class="adm-slider-row__value" id="admin-feedback-value">2 sec</span>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Health Chk</span>
+                        <input type="range" class="adm-slider" id="admin-conncheck-slider" min="0" max="600" value="120" step="10" style="--fill:20%;">
+                        <span class="adm-slider-row__value" id="admin-conncheck-value">120 sec</span>
+                    </div>
+                </div>
+                <div class="adm-section">
+                    <div class="adm-section__header adm-section__header--link"><i class="material-icons">link</i> Dashboard URL</div>
+                    <p class="adm-status" id="admin-dashboard-url" style="word-break:break-all;user-select:all;cursor:text;">--</p>
                 </div>
                 <div class="admin-overlay__actions">
-                    <button class="admin-overlay__btn admin-overlay__btn--cancel" id="admin-settings-back">Back</button>
+                    <button class="admin-overlay__btn admin-overlay__btn--cancel" id="admin-settings-back-bottom">Back</button>
                 </div>
             </div>
             <div id="admin-confirm-view" style="display:none;">

@@ -1617,17 +1617,17 @@ ${destination}` : message;
                 if (result?.ok) {
                     adminVerifiedPin = pin;
                     showAdminView('admin-actions-view');
-                    if (adminCloudCount) adminCloudCount.textContent = 'Checking scan count...';
+                    if (adminCloudCount) adminCloudCount.innerHTML = '<i class="material-icons">cloud_queue</i> Checking...';
                     bridge.admin_get_cloud_scan_count((countResult) => {
                         if (adminCloudCount) {
-                            adminCloudCount.textContent = countResult?.ok
-                                ? `Cloud: ${Number(countResult.count).toLocaleString()} scan(s)`
-                                : (countResult?.message || 'Could not check count');
+                            adminCloudCount.innerHTML = countResult?.ok
+                                ? `<i class="material-icons">cloud_queue</i> Cloud: ${Number(countResult.count).toLocaleString()} scans`
+                                : `<i class="material-icons">cloud_off</i> ${countResult?.message || 'Could not check count'}`;
                         }
                     });
                     bridge.admin_get_local_scan_count((localResult) => {
                         if (adminLocalCount) {
-                            adminLocalCount.textContent = `This station: ${Number(localResult?.count || 0).toLocaleString()} local scan(s)`;
+                            adminLocalCount.innerHTML = `<i class="material-icons">computer</i> This station: ${Number(localResult?.count || 0).toLocaleString()} local scans`;
                         }
                     });
                 } else {
@@ -1762,40 +1762,149 @@ ${destination}` : message;
     // Settings panel
     const adminSettingsBtn = document.getElementById('admin-settings-btn');
     const adminSettingsBack = document.getElementById('admin-settings-back');
+    const adminSettingsBackBottom = document.getElementById('admin-settings-back-bottom');
     const adminRefreshStatus = document.getElementById('admin-refresh-status');
+    const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
+    const adminDupActionStatus = document.getElementById('admin-dup-action-status');
+    const adminVoiceToggle = document.getElementById('admin-voice-toggle');
+    const adminVolumeSlider = document.getElementById('admin-volume-slider');
+    const adminVolumeValue = document.getElementById('admin-volume-value');
+    const adminCameraSection = document.getElementById('admin-camera-section');
+    const adminCameraDetectionToggle = document.getElementById('admin-camera-detection-toggle');
+    const adminCameraOverlayToggle = document.getElementById('admin-camera-overlay-toggle');
+    const adminCooldownSlider = document.getElementById('admin-cooldown-slider');
+    const adminCooldownValue = document.getElementById('admin-cooldown-value');
+    const adminMinsizeSlider = document.getElementById('admin-minsize-slider');
+    const adminMinsizeValue = document.getElementById('admin-minsize-value');
+    const adminAbsenceSlider = document.getElementById('admin-absence-slider');
+    const adminAbsenceValue = document.getElementById('admin-absence-value');
+    const adminFeedbackSlider = document.getElementById('admin-feedback-slider');
+    const adminFeedbackValue = document.getElementById('admin-feedback-value');
+    const adminConncheckSlider = document.getElementById('admin-conncheck-slider');
+    const adminConncheckValue = document.getElementById('admin-conncheck-value');
+    const adminDashboardUrl = document.getElementById('admin-dashboard-url');
 
-    const loadRefreshSetting = () => {
+    // Helper: update slider fill and value label
+    const syncSlider = (slider, valueEl, val, min, max, unit) => {
+        if (slider) {
+            slider.value = val;
+            const pct = max > min ? ((val - min) / (max - min)) * 100 : 0;
+            slider.style.setProperty('--fill', pct + '%');
+        }
+        if (valueEl) valueEl.textContent = val + ' ' + unit;
+    };
+
+    // Helper: bind slider with value label update + save callback
+    const bindSlider = (slider, valueEl, unit, saveFn) => {
+        if (!slider) return;
+        slider.addEventListener('input', () => {
+            const min = parseFloat(slider.min);
+            const max = parseFloat(slider.max);
+            const v = parseFloat(slider.value);
+            const pct = max > min ? ((v - min) / (max - min)) * 100 : 0;
+            slider.style.setProperty('--fill', pct + '%');
+            if (valueEl) valueEl.textContent = v + ' ' + unit;
+            saveFn(v);
+        });
+    };
+
+    const loadAllSettings = () => {
+        // Load refresh setting
         if (adminRefreshStatus) adminRefreshStatus.textContent = 'Loading...';
-        document.querySelectorAll('.admin-refresh-opt').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.adm-refresh-opt').forEach(b => b.classList.remove('active'));
         queueOrRun((bridge) => {
             bridge.admin_get_dashboard_refresh((result) => {
                 const val = result?.ok ? result.interval : 60;
                 if (adminRefreshStatus) {
                     adminRefreshStatus.textContent = val === 0 ? 'Current: Manual (pull-to-refresh only)' : `Current: ${val}s auto-refresh`;
                 }
-                document.querySelectorAll('.admin-refresh-opt').forEach(b => {
+                document.querySelectorAll('.adm-refresh-opt').forEach(b => {
                     b.classList.toggle('active', parseInt(b.dataset.val) === val);
                 });
             });
+            // Load local settings (duplicate, voice, volume)
+            if (bridge.admin_get_local_settings) {
+                bridge.admin_get_local_settings((result) => {
+                    if (!result) return;
+                    // Duplicate window
+                    const dupWindow = result.duplicate_window || 60;
+                    document.querySelectorAll('.adm-dup-window-opt').forEach(b => {
+                        b.classList.toggle('active', parseInt(b.dataset.val) === dupWindow);
+                    });
+                    if (adminDupWindowStatus) {
+                        adminDupWindowStatus.textContent = `Current: ${dupWindow >= 60 ? (dupWindow / 60) + 'm' : dupWindow + 's'}`;
+                    }
+                    // Duplicate action
+                    const dupAction = result.duplicate_action || 'warn';
+                    document.querySelectorAll('.adm-dup-action-opt').forEach(b => {
+                        b.classList.toggle('active', b.dataset.val === dupAction);
+                    });
+                    if (adminDupActionStatus) {
+                        adminDupActionStatus.textContent = `Current: ${dupAction}`;
+                    }
+                    // Voice toggle
+                    const voiceEnabled = result.voice_enabled !== false;
+                    if (adminVoiceToggle) {
+                        adminVoiceToggle.classList.toggle('active', voiceEnabled);
+                    }
+                    // Volume slider
+                    const volume = Math.round((result.voice_volume ?? 1.0) * 100);
+                    if (adminVolumeSlider) {
+                        adminVolumeSlider.value = volume;
+                        adminVolumeSlider.style.setProperty('--fill', volume + '%');
+                    }
+                    if (adminVolumeValue) {
+                        adminVolumeValue.textContent = volume + '%';
+                    }
+                    // Camera section — hide if not configured
+                    if (adminCameraSection) {
+                        adminCameraSection.classList.toggle('adm-section--hidden', !result.camera_enabled);
+                    }
+                    if (result.camera_enabled) {
+                        if (adminCameraDetectionToggle) {
+                            adminCameraDetectionToggle.classList.toggle('active', !!result.camera_running);
+                        }
+                        if (adminCameraOverlayToggle) {
+                            adminCameraOverlayToggle.classList.toggle('active', !!result.camera_overlay && !!result.camera_running);
+                            adminCameraOverlayToggle.disabled = !result.camera_running;
+                        }
+                        const cooldown = result.greeting_cooldown || 60;
+                        syncSlider(adminCooldownSlider, adminCooldownValue, cooldown, 5, 300, 'sec');
+                        const minPct = Math.round((result.min_size_pct || 0.20) * 100);
+                        syncSlider(adminMinsizeSlider, adminMinsizeValue, minPct, 5, 80, '%');
+                        const absence = result.absence_threshold || 3;
+                        syncSlider(adminAbsenceSlider, adminAbsenceValue, absence, 1, 30, 'sec');
+                    }
+                    // Display section
+                    const feedbackSec = Math.round((result.scan_feedback_ms || 2000) / 1000);
+                    syncSlider(adminFeedbackSlider, adminFeedbackValue, feedbackSec, 1, 10, 'sec');
+                    const connCheck = result.connection_check_s ?? 120;
+                    syncSlider(adminConncheckSlider, adminConncheckValue, connCheck, 0, 600, 'sec');
+                    // Dashboard URL
+                    if (adminDashboardUrl) {
+                        adminDashboardUrl.textContent = result.dashboard_url || 'Not configured';
+                    }
+                });
+            }
         });
     };
 
     if (adminSettingsBtn) adminSettingsBtn.addEventListener('click', (e) => {
         e.preventDefault();
         showAdminView('admin-settings-view');
-        loadRefreshSetting();
+        loadAllSettings();
     });
-    if (adminSettingsBack) adminSettingsBack.addEventListener('click', (e) => {
-        e.preventDefault();
-        showAdminView('admin-actions-view');
-    });
+    const goBackToActions = (e) => { e.preventDefault(); showAdminView('admin-actions-view'); };
+    if (adminSettingsBack) adminSettingsBack.addEventListener('click', goBackToActions);
+    if (adminSettingsBackBottom) adminSettingsBackBottom.addEventListener('click', goBackToActions);
 
-    document.querySelectorAll('.admin-refresh-opt').forEach(btn => {
+    // Dashboard refresh preset buttons
+    document.querySelectorAll('.adm-refresh-opt').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const val = parseInt(btn.dataset.val);
             if (adminRefreshStatus) adminRefreshStatus.textContent = 'Saving...';
-            document.querySelectorAll('.admin-refresh-opt').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.adm-refresh-opt').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             queueOrRun((bridge) => {
                 bridge.admin_set_dashboard_refresh(val, (result) => {
@@ -1809,17 +1918,171 @@ ${destination}` : message;
         });
     });
 
+    // Duplicate window preset buttons
+    document.querySelectorAll('.adm-dup-window-opt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const val = parseInt(btn.dataset.val);
+            document.querySelectorAll('.adm-dup-window-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (adminDupWindowStatus) adminDupWindowStatus.textContent = 'Saving...';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_duplicate_window) {
+                    bridge.admin_set_duplicate_window(val, (result) => {
+                        if (adminDupWindowStatus) {
+                            adminDupWindowStatus.textContent = result?.ok
+                                ? `Saved: ${val >= 60 ? (val / 60) + 'm' : val + 's'}`
+                                : `Error: ${result?.message || 'Failed'}`;
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // Duplicate action preset buttons
+    document.querySelectorAll('.adm-dup-action-opt').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const val = btn.dataset.val;
+            document.querySelectorAll('.adm-dup-action-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (adminDupActionStatus) adminDupActionStatus.textContent = 'Saving...';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_duplicate_action) {
+                    bridge.admin_set_duplicate_action(val, (result) => {
+                        if (adminDupActionStatus) {
+                            adminDupActionStatus.textContent = result?.ok
+                                ? `Saved: ${val}`
+                                : `Error: ${result?.message || 'Failed'}`;
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // Voice toggle
+    if (adminVoiceToggle) {
+        adminVoiceToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminVoiceToggle.classList.contains('active');
+            adminVoiceToggle.classList.toggle('active', newState);
+            // Sync header bar icon
+            setVoiceToggleState(newState);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_voice_enabled) {
+                    bridge.admin_set_voice_enabled(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Volume slider
+    if (adminVolumeSlider) {
+        adminVolumeSlider.addEventListener('input', () => {
+            const pct = parseInt(adminVolumeSlider.value);
+            adminVolumeSlider.style.setProperty('--fill', pct + '%');
+            if (adminVolumeValue) adminVolumeValue.textContent = pct + '%';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_voice_volume) {
+                    bridge.admin_set_voice_volume(pct / 100.0, () => {});
+                }
+            });
+        });
+    }
+
+    // Camera detection toggle — also controls overlay visibility
+    if (adminCameraDetectionToggle) {
+        adminCameraDetectionToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            queueOrRun((bridge) => {
+                if (bridge.toggle_camera) {
+                    bridge.toggle_camera((result) => {
+                        if (result?.ok) {
+                            adminCameraDetectionToggle.classList.toggle('active', result.running);
+                            setCameraToggleState(result.running);
+                            // Disable overlay toggle when detection is off
+                            if (adminCameraOverlayToggle) {
+                                adminCameraOverlayToggle.disabled = !result.running;
+                                if (!result.running) {
+                                    adminCameraOverlayToggle.classList.remove('active');
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    }
+
+    // Camera overlay toggle (icon ↔ live preview)
+    if (adminCameraOverlayToggle) {
+        adminCameraOverlayToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (adminCameraOverlayToggle.disabled) return;
+            const newState = !adminCameraOverlayToggle.classList.contains('active');
+            adminCameraOverlayToggle.classList.toggle('active', newState);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_camera_overlay) {
+                    bridge.admin_set_camera_overlay(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Camera sliders: cooldown, min face size, absence threshold
+    bindSlider(adminCooldownSlider, adminCooldownValue, 'sec', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_greeting_cooldown) bridge.admin_set_greeting_cooldown(v, () => {});
+        });
+    });
+    bindSlider(adminMinsizeSlider, adminMinsizeValue, '%', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_min_size_pct) bridge.admin_set_min_size_pct(v / 100, () => {});
+        });
+    });
+    bindSlider(adminAbsenceSlider, adminAbsenceValue, 'sec', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_absence_threshold) bridge.admin_set_absence_threshold(v, () => {});
+        });
+    });
+
+    // Display sliders: scan feedback (seconds → ms), connection check
+    bindSlider(adminFeedbackSlider, adminFeedbackValue, 'sec', (v) => {
+        const ms = Math.round(v * 1000);
+        scanFeedbackDurationMs = ms;
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_scan_feedback_duration) bridge.admin_set_scan_feedback_duration(ms, () => {});
+        });
+    });
+    bindSlider(adminConncheckSlider, adminConncheckValue, 'sec', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_connection_check) bridge.admin_set_connection_check(v, () => {});
+        });
+    });
+
     if (adminOverlay) adminOverlay.addEventListener('click', (e) => { if (e.target === adminOverlay) hideAdminOverlay(); });
 
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
-            returnFocusToInput();
+            // Don't steal focus from admin overlay inputs (sliders, number fields)
+            const inAdmin = adminOverlay && adminOverlay.contains(event.target);
+            const inDashboard = dashboardOverlay && dashboardOverlay.contains(event.target);
+            if (!inAdmin && !inDashboard) {
+                returnFocusToInput();
+            }
         }
     });
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-            // First check if dashboard overlay is open
+            // First check if admin overlay is open
+            if (adminOverlay && adminOverlay.classList.contains('admin-overlay--visible')) {
+                hideAdminOverlay();
+                return;
+            }
+            // Then dashboard overlay
             if (dashboardOverlay && dashboardOverlay.classList.contains('dashboard-overlay--visible')) {
                 hideDashboardOverlay();
                 return;
@@ -1827,7 +2090,10 @@ ${destination}` : message;
             queueOrRun((bridge) => bridge.close_window());
             return;
         }
-        if (event.target !== barcodeInput && event.key.length === 1) {
+        // Don't steal focus from admin/dashboard overlay inputs
+        const inOverlay = (adminOverlay && adminOverlay.contains(event.target))
+            || (dashboardOverlay && dashboardOverlay.contains(event.target));
+        if (!inOverlay && event.target !== barcodeInput && event.key.length === 1) {
             returnFocusToInput();
         }
     });
@@ -1836,12 +2102,14 @@ ${destination}` : message;
     }, 5000);
 
     window.addEventListener('focus', () => {
-        returnFocusToInput();
+        const adminOpen = adminOverlay && adminOverlay.classList.contains('admin-overlay--visible');
+        if (!adminOpen) returnFocusToInput();
         debouncedRefreshConnection();
     });
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-            returnFocusToInput();
+            const adminOpen = adminOverlay && adminOverlay.classList.contains('admin-overlay--visible');
+            if (!adminOpen) returnFocusToInput();
             debouncedRefreshConnection();
         }
     });
