@@ -1617,6 +1617,9 @@ ${destination}` : message;
                 if (result?.ok) {
                     adminVerifiedPin = pin;
                     showAdminView('admin-actions-view');
+                    // Populate station name input
+                    if (adminStationNameInput) { adminStationNameInput.value = state.stationName || ''; }
+                    if (adminRenameStatus) adminRenameStatus.textContent = '';
                     if (adminCloudCount) adminCloudCount.innerHTML = '<i class="material-icons">cloud_queue</i> Checking...';
                     bridge.admin_get_cloud_scan_count((countResult) => {
                         if (adminCloudCount) {
@@ -1759,6 +1762,32 @@ ${destination}` : message;
     if (adminResultCloseBtn) adminResultCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
     const adminStatusCloseBtn = document.getElementById('admin-status-close');
     if (adminStatusCloseBtn) adminStatusCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
+    // Station rename
+    const adminStationNameInput = document.getElementById('admin-station-name');
+    const adminRenameBtn = document.getElementById('admin-rename-btn');
+    const adminRenameStatus = document.getElementById('admin-rename-status');
+    if (adminRenameBtn && adminStationNameInput) {
+        adminRenameBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newName = adminStationNameInput.value.trim();
+            if (!newName) {
+                if (adminRenameStatus) { adminRenameStatus.textContent = 'Please enter a station name'; adminRenameStatus.style.color = '#e53935'; }
+                return;
+            }
+            if (adminRenameStatus) { adminRenameStatus.textContent = 'Renaming...'; adminRenameStatus.style.color = '#888'; }
+            api.admin_rename_station(newName, (result) => {
+                if (result && result.ok) {
+                    state.stationName = result.new_name;
+                    const stationEl = document.getElementById('station-name');
+                    if (stationEl) stationEl.textContent = result.new_name;
+                    if (adminRenameStatus) { adminRenameStatus.textContent = 'Renamed: ' + result.old_name + ' → ' + result.new_name; adminRenameStatus.style.color = '#86bc25'; }
+                } else {
+                    if (adminRenameStatus) { adminRenameStatus.textContent = (result && result.message) || 'Rename failed'; adminRenameStatus.style.color = '#e53935'; }
+                }
+            });
+        });
+        adminStationNameInput.addEventListener('keyup', (e) => { if (e.key === 'Enter') adminRenameBtn.click(); });
+    }
     // Settings panel
     const adminSettingsBtn = document.getElementById('admin-settings-btn');
     const adminSettingsBack = document.getElementById('admin-settings-back');

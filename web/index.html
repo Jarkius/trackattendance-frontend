@@ -265,6 +265,18 @@
                     </div>
                 </div>
                 <div class="adm-section">
+                    <div class="adm-section__header"><i class="material-icons">edit_location</i> Station Name</div>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input type="text" id="admin-station-name" placeholder="Station name..."
+                            style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:0.9rem;outline:none;">
+                        <button class="admin-overlay__btn" id="admin-rename-btn"
+                            style="white-space:nowrap;padding:8px 16px;background:#86bc25;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">
+                            Rename
+                        </button>
+                    </div>
+                    <p id="admin-rename-status" style="margin:6px 0 0;font-size:0.8rem;color:#888;"></p>
+                </div>
+                <div class="adm-section">
                     <div class="adm-section__header"><i class="material-icons">settings</i> Settings</div>
                     <button class="adm-link-btn" id="admin-settings-btn">
                         Settings <i class="material-icons">chevron_right</i>

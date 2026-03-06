@@ -1059,6 +1059,10 @@ class Api(QObject):
         # Existing station: detect remote clear
         elif cloud_epoch and local_epoch and cloud_epoch != local_epoch:
             LOGGER.info("[Sync] Remote clear detected (cloud=%s, local=%s) — exporting + clearing", cloud_epoch, local_epoch)
+            # Pause auto-sync to prevent re-uploading stale data
+            if self._auto_sync_manager:
+                self._auto_sync_manager.stop()
+                LOGGER.info("[Sync] Auto-sync paused during remote clear")
             try:
                 self._service.export_scans()
                 LOGGER.info("[Sync] Backup exported before remote clear")
@@ -1067,6 +1071,12 @@ class Api(QObject):
             self._service._db.clear_all_scans()
             self._service._db.set_meta("last_clear_epoch", cloud_epoch)
             LOGGER.info("[Sync] Local data cleared after remote clear")
+            # Refresh UI: reset counters and show alert modal
+            self._notify_remote_clear()
+            # Resume auto-sync
+            if self._auto_sync_manager:
+                self._auto_sync_manager.start()
+                LOGGER.info("[Sync] Auto-sync resumed after remote clear")
 
         # Send heartbeat (in background to avoid blocking main thread)
         station = self._service._db.get_station_name() or "Unknown"
@@ -1078,6 +1088,64 @@ class Api(QObject):
             sync_svc.send_heartbeat(station, current_epoch, scan_count)
 
         threading.Thread(target=_send, daemon=True, name="heartbeat").start()
+
+    def _notify_remote_clear(self) -> None:
+        """Show alert modal and refresh UI after remote clear detected."""
+        view = self._window.web_view if self._window else None
+        if not view:
+            return
+        script = """
+        (function() {
+            // Reset all counters to 0
+            var ids = ['total-count', 'matched-count', 'unmatched-count',
+                       'sync-pending', 'sync-synced', 'sync-failed'];
+            ids.forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) el.textContent = '0';
+            });
+            // Clear recent scan history
+            var historyEl = document.getElementById('scan-history');
+            if (historyEl) historyEl.innerHTML = '';
+            // Reset live feedback
+            var feedbackEl = document.getElementById('live-feedback');
+            if (feedbackEl) {
+                feedbackEl.textContent = 'Ready to scan...';
+                feedbackEl.style.color = 'var(--deloitte-green)';
+            }
+            // Show alert modal
+            var overlay = document.createElement('div');
+            overlay.id = 'remote-clear-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
+                'background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;';
+            var box = document.createElement('div');
+            box.style.cssText = 'background:#fff;border-radius:12px;padding:32px 40px;text-align:center;' +
+                'max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+            box.innerHTML = '<div style="font-size:2.5rem;margin-bottom:12px;">&#9888;</div>' +
+                '<h3 style="margin:0 0 12px;color:#333;font-size:1.3rem;">Data Cleared by Admin</h3>' +
+                '<p style="margin:0 0 20px;color:#666;font-size:0.95rem;">' +
+                'All station data has been cleared from another station.<br>' +
+                'Local backup has been exported to the exports folder.</p>' +
+                '<button onclick="document.getElementById(\\'remote-clear-overlay\\').remove()" ' +
+                'style="background:#86bc25;color:#fff;border:none;padding:10px 32px;border-radius:6px;' +
+                'font-size:1rem;font-weight:600;cursor:pointer;">OK</button>';
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+            console.log('[RemoteClear] UI reset and alert shown');
+        })();
+        """
+        view.page().runJavaScript(script)
+        LOGGER.info("[Sync] Remote clear alert shown to user")
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_rename_station(self, new_name: str) -> dict:
+        """Rename this station. Requires admin PIN already verified."""
+        new_name = new_name.strip()
+        if not new_name:
+            return {"ok": False, "message": "Station name cannot be empty"}
+        old_name = self._service._db.get_station_name() or "Unknown"
+        self._service._db.set_station_name(new_name)
+        LOGGER.info("[Admin] Station renamed: '%s' → '%s'", old_name, new_name)
+        return {"ok": True, "message": f"Station renamed to '{new_name}'", "old_name": old_name, "new_name": new_name}
 
     @pyqtSlot(result="QVariant")
     def get_voice_status(self) -> dict:
