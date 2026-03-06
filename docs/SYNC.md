@@ -66,7 +66,7 @@ AUTO_SYNC_MESSAGE_DURATION_MS=3000
 | Start offline | Scans save locally; auto-sync checks fail silently |
 | Go offline mid-session | Pending scans wait; auto-sync resumes when connection returns |
 | Intermittent connection | Idempotency keys prevent duplicates; no partial batches |
-| API error (5xx) | Batch marked `failed`; use `scripts/reset_failed_scans.py` to retry |
+| API error (5xx) | Batch marked `failed`; use `tests/reset_failed_scans.py` to retry |
 
 ## Sync-All (Admin)
 

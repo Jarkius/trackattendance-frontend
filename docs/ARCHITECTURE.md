@@ -14,6 +14,7 @@ Track Attendance ships as a PyQt6 desktop shell that hosts a single-page web int
   - Registers the `Api` object on a `QWebChannel` so JavaScript can call back-end slots (`submit_scan`, `export_scans`, `get_initial_data`, `close_window`, `finalize_export_close`).
   - Applies window chrome (frameless, fade-in animation) and handles close events, including auto-export logic.
   - Manages critical startup failures, such as prompting for a station name if unconfigured or displaying a fallback UI if web assets are missing.
+  - **Admin control center** — PIN-protected settings panel with runtime-tunable sliders (duplicate detection, voice, camera, connection check). Settings persist in SQLite `app_settings` table and reload on startup.
 
 ### 2.2 Web Interface (HTML/CSS/JavaScript)
 - **Location:** `web/index.html`, `web/css/style.css`, `web/script.js`
@@ -114,6 +115,7 @@ health check thread (background)
 - **Icon & Spec:** `assets/track_attendance.ico`, `TrackAttendance.spec` configure PyInstaller builds.
 - **Embedded assets:** `web/` and `assets/` are bundled so the executable can run without network access.
 - **Operational data:** `data/` and `exports/` stay outside the bundle; they are created/ignored at runtime to protect sensitive information.
+- **Voice override:** When frozen, the app checks for a `voices/` directory next to the exe. If found with MP3 files, those are used instead of the bundled `assets/voices/`. Same pattern applies to `greetings/` for camera greeting audio. This allows customising audio without recompiling.
 
 ## 7. External Dependencies
 The web interface relies on locally-hosted, open-source assets for its presentation layer. This ensures the application can run fully offline without fetching resources from external CDNs.

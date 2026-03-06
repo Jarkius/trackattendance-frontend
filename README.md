@@ -31,7 +31,7 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Auto-sync to cloud when idle; manual sync button available
 - One-click Excel export with unified columns (Scan Value, Legacy ID, Full Name, Email, Business Unit, Position, Station, Scanned At, Matched, Scan Source)
 - Fully offline — runs without network; syncs when connection returns
-- Admin panel (PIN-protected) to clear cloud + local database before events
+- **Admin control center** (PIN-protected) — sectioned panel with Status, Data Management, and Settings; runtime-tunable sliders for duplicate detection, voice, camera, and connection check
 - Welcome animation and configurable party/event background
 - **Email field support** — optional `Email` column in roster xlsx (stays local, never synced)
 - **Scan source tracking** — distinguishes badge scans, name lookups, and manual entries (`badge` / `lookup` / `manual`)
@@ -40,7 +40,8 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - **Roster summary sync** — hash-based deduplication prevents redundant uploads
 - **Station heartbeat & status** — stations report health via heartbeat; mobile dashboard shows online/offline status per station
 - **Clear This Station / Clear All** — separate admin actions; Clear All resets all stations + roster via `clear_epoch` coordination
-- **CI/CD pipeline** — automated `pytest` runs on every push and PR (268 tests)
+- **Voice file override** — drop custom MP3s in `voices/` next to exe to replace bundled voices without recompiling
+- **CI/CD pipeline** — automated `pytest` runs on every push and PR (307 tests)
 - **[Experimental]** Camera proximity greeting — detects when someone approaches an idle kiosk and plays a bilingual welcome audio (disabled by default, presence-aware: greets once per person, not on repeat)
 
 ## 💻 Requirements
@@ -111,6 +112,8 @@ TrackAttendance/
 ├── data/
 │   ├── employee.xlsx      # Employee roster (required)
 │   └── database.db        # Created automatically on first run
+├── voices/                # (Optional) Custom MP3s override bundled voices
+├── greetings/             # (Optional) Custom greeting MP3s override bundled greetings
 └── exports/               # Excel reports saved here
 ```
 
@@ -119,7 +122,7 @@ TrackAttendance/
 ## 🧪 Testing
 
 ```bash
-# Full unit test suite (268 tests)
+# Full unit test suite (307 tests)
 python -m pytest tests/ -v
 
 # Stress test (end-to-end with UI)
@@ -137,9 +140,9 @@ python tests/test_proximity_detector.py
 python tests/simulate_multi_station.py
 
 # Utilities
-python scripts/reset_failed_scans.py        # Reset failed scans to pending
-python scripts/debug_sync_performance.py     # Profile sync bottlenecks
-python scripts/create_test_scan.py           # Insert test scan record
+python tests/reset_failed_scans.py           # Reset failed scans to pending
+python tests/debug_sync_performance.py       # Profile sync bottlenecks
+python tests/create_test_scan.py             # Insert test scan record
 ```
 
 ## 🗂️ Project Structure
@@ -171,7 +174,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
-- **v1.8.0** — Scan source tracking refined (`badge`/`lookup`/`manual`), Scan Value + Legacy ID columns in export, station heartbeat & live status on mobile dashboard, clear this station / clear all with `clear_epoch` coordination, light/dark theme toggle on mobile dashboard, alphabetical BU/station sorting (Unmatched last), offline station red dot indicator, .env.example fully documented
+- **v1.8.0** — Admin control center redesign (sectioned panel with runtime settings sliders), voice file override (`voices/` next to exe), duplicate detection by `legacy_id`, detailed duplicate roster report, configurable Haar cascade sensitivity, scan source tracking refined (`badge`/`lookup`/`manual`), dashboard refresh interval setting, station heartbeat & live status, clear this station / clear all with `clear_epoch` coordination, slider UI (green/grey fill bar), settings persistence across restarts, 307 tests
 - **v1.7.0** — Voice toggle (mute/unmute from header), employee email/name lookup for forgot-badge users, scan source tracking (`badge` / `manual_lookup`), unified export columns, `scan_source` column in cloud DB, requirements.txt cleanup (268 tests)
 - **v1.6.0** — Email field, BU sync to cloud, public mobile dashboard, roster summary sync, CI/CD test pipeline, stress test with local vs cloud dashboard verification
 - **v1.5.1** — Animated camera icon: dot turns amber on detection, reverts to green when person leaves, with pulse animation on state transitions
@@ -204,7 +207,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `CAMERA_GREETING_COOLDOWN_SECONDS` | `60` | Minimum seconds between greetings — prevents re-greeting a standing person when detection flickers |
 | `CAMERA_SCAN_BUSY_SECONDS` | `30` | Seconds to suppress greetings after a badge scan |
 | `CAMERA_MIN_SIZE_PCT` | `0.20` | Minimum detection size as fraction of frame width — filters out distant people |
-| `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `3` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |
+| `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `5` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |
 | `CAMERA_CONFIRM_FRAMES` | `3` | Consecutive detected frames required before greeting (prevents false positives) |
 | `SCAN_FEEDBACK_DURATION_MS` | `5000` | Duration to show employee name after scan |
 | `DUPLICATE_BADGE_ALERT_DURATION_MS` | `3000` | Duplicate alert display duration |
