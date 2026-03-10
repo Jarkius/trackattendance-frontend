@@ -233,7 +233,15 @@ class ProximityGreetingManager:
             if overlay is not None and self._running and (now - last_overlay_time) >= overlay_interval:
                 last_overlay_time = now
                 try:
-                    overlay.update_frame(frame)
+                    display_frame = frame
+                    # Draw face rectangles in preview mode (debug overlay)
+                    if self._show_overlay and detector is not None:
+                        faces = detector.last_faces
+                        if faces:
+                            display_frame = frame.copy()
+                            for (x, y, w, h) in faces:
+                                cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                    overlay.update_frame(display_frame)
                 except (RuntimeError, Exception):
                     pass  # widget deleted or other error
 

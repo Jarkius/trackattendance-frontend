@@ -54,7 +54,7 @@ class TestProximityDetectorStateMachine(unittest.TestCase):
     """Test the presence state machine using a detector with mediapipe disabled."""
 
     def _make_detector(self, confirm_frames=3, absence_threshold=3.0, skip_frames=0):
-        """Create a detector with mediapipe disabled and configurable params."""
+        """Create a detector with all backends disabled (motion fallback only)."""
         det = ProximityDetector.__new__(ProximityDetector)
         det.sensitivity = 5000
         det.cooldown = 5.0
@@ -71,13 +71,12 @@ class TestProximityDetectorStateMachine(unittest.TestCase):
         det._background_frame = None
         det._detection_callbacks = []
         det._last_detection_method = None
+        det._last_faces = None
+        det._yunet = None
+        det._use_yunet = False
         det._haar_cascade = None
         det._presence_state = "empty"
         det._last_person_seen_time = 0.0
-        det._mp_face = None
-        det._mp_pose = None
-        det._use_mediapipe = False
-        det._mp = None
         return det
 
     def _feed_detection(self, det, person_in_frame: bool):
