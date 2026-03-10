@@ -1049,6 +1049,10 @@ ${destination}` : message;
         if (!badge) {
             return;
         }
+        if (badge.length > 50) {
+            setLiveFeedback('Badge ID too long', 'red');
+            return;
+        }
         // Badge IDs are numeric, optionally with a trailing letter suffix (e.g. 10117001T for reprints)
         const looksLikeBadge = /^\d+[A-Za-z]?$/.test(badge);
 
@@ -1215,8 +1219,15 @@ ${destination}` : message;
         document.body.classList.remove('dashboard-open');
         console.debug('[Dashboard] Dashboard closed');
 
-        // Resume connection polling
-        if (connectionStatusIntervalId === null && connectionCheckIntervalMs > 0) {
+        // Clear admin status polling if active
+        if (adminStatusPollId) { clearInterval(adminStatusPollId); adminStatusPollId = null; }
+
+        // Resume connection polling (clear first to avoid duplicates)
+        if (connectionStatusIntervalId !== null) {
+            window.clearInterval(connectionStatusIntervalId);
+            connectionStatusIntervalId = null;
+        }
+        if (connectionCheckIntervalMs > 0) {
             startConnectionStatusPolling();
         }
 
@@ -1687,6 +1698,7 @@ ${destination}` : message;
                         // Show live station status view
                         showAdminView('admin-status-view');
                         pollStationStatus();
+                        if (adminStatusPollId) { clearInterval(adminStatusPollId); adminStatusPollId = null; }
                         adminStatusPollId = setInterval(pollStationStatus, 5000);
                     } else {
                         // Station-only clear: show result and close
@@ -1716,15 +1728,15 @@ ${destination}` : message;
                 if (!listEl || !result?.stations) return;
 
                 listEl.innerHTML = result.stations.map(s => {
-                    const dotClass = 'admin-station-item__dot--' + s.status;
+                    const dotClass = 'admin-station-item__dot--' + escapeHtml(s.status);
                     const label = s.status === 'ready' ? 'Ready' : s.status === 'pending' ? 'Pending' : 'Offline';
                     const ago = s.seconds_ago < 60 ? `${s.seconds_ago}s ago` : `${Math.floor(s.seconds_ago / 60)}m ago`;
                     const scans = s.status === 'offline' ? '--' : s.local_scan_count;
                     return `<div class="admin-station-item">
-                        <span class="admin-station-item__name">${s.station_name}</span>
+                        <span class="admin-station-item__name">${escapeHtml(s.station_name)}</span>
                         <span class="admin-station-item__status">
                             <span class="admin-station-item__dot ${dotClass}"></span>
-                            ${label} &middot; ${scans} scans &middot; ${ago}
+                            ${escapeHtml(label)} &middot; ${escapeHtml(String(scans))} scans &middot; ${escapeHtml(ago)}
                         </span>
                     </div>`;
                 }).join('');
@@ -1841,7 +1853,8 @@ ${destination}` : message;
 
     // Helper: bind slider with value label update + save callback
     const bindSlider = (slider, valueEl, unit, saveFn) => {
-        if (!slider) return;
+        if (!slider || slider.dataset.bound) return;
+        slider.dataset.bound = 'true';
         slider.addEventListener('input', () => {
             const min = parseFloat(slider.min);
             const max = parseFloat(slider.max);
@@ -1968,6 +1981,8 @@ ${destination}` : message;
 
     // Dashboard refresh preset buttons
     document.querySelectorAll('.adm-refresh-opt').forEach(btn => {
+        if (btn.dataset.listenerBound) return;
+        btn.dataset.listenerBound = 'true';
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const val = parseInt(btn.dataset.val);
@@ -1988,6 +2003,8 @@ ${destination}` : message;
 
     // Duplicate window preset buttons
     document.querySelectorAll('.adm-dup-window-opt').forEach(btn => {
+        if (btn.dataset.listenerBound) return;
+        btn.dataset.listenerBound = 'true';
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const val = parseInt(btn.dataset.val);
@@ -2010,6 +2027,8 @@ ${destination}` : message;
 
     // Duplicate action preset buttons
     document.querySelectorAll('.adm-dup-action-opt').forEach(btn => {
+        if (btn.dataset.listenerBound) return;
+        btn.dataset.listenerBound = 'true';
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             const val = btn.dataset.val;
@@ -2047,7 +2066,8 @@ ${destination}` : message;
     }
 
     // Volume slider
-    if (adminVolumeSlider) {
+    if (adminVolumeSlider && !adminVolumeSlider.dataset.bound) {
+        adminVolumeSlider.dataset.bound = 'true';
         adminVolumeSlider.addEventListener('input', () => {
             const pct = parseInt(adminVolumeSlider.value);
             adminVolumeSlider.style.setProperty('--fill', pct + '%');
