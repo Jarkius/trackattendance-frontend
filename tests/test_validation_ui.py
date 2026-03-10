@@ -18,7 +18,13 @@ import time
 from pathlib import Path
 from typing import Any, Dict
 
+import pytest
 from PyQt6.QtCore import QEventLoop, QTimer
+
+# These tests require a running PyQt6 app with a QWebEngineView.
+# They are designed to run standalone via: python tests/test_validation_ui.py
+# Skip when running under pytest (no 'view' fixture available).
+pytestmark = pytest.mark.skip(reason="Requires running PyQt6 app — run standalone with: python tests/test_validation_ui.py")
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:

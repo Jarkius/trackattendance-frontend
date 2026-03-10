@@ -60,6 +60,8 @@ class TestProximityDetectorStateMachine(unittest.TestCase):
         det.cooldown = 5.0
         det.min_face_confidence = 0.5
         det.min_pose_confidence = 0.5
+        det.min_size_pct = 0.20
+        det.haar_min_neighbors = 5
         det.skip_frames = skip_frames
         det.absence_threshold = absence_threshold
         det.confirm_frames = confirm_frames
@@ -69,6 +71,7 @@ class TestProximityDetectorStateMachine(unittest.TestCase):
         det._background_frame = None
         det._detection_callbacks = []
         det._last_detection_method = None
+        det._haar_cascade = None
         det._presence_state = "empty"
         det._last_person_seen_time = 0.0
         det._mp_face = None
@@ -149,6 +152,7 @@ class TestProximityDetectorStateMachine(unittest.TestCase):
     def test_re_greet_after_reset_to_empty(self):
         """After resetting to empty, a new person should trigger greeting again."""
         det = self._make_detector(confirm_frames=1, absence_threshold=1.0)
+        det.cooldown = 0  # disable cooldown so re-greet isn't suppressed
         callback = MagicMock()
         det.add_detection_callback(callback)
 
