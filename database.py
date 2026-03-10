@@ -46,6 +46,7 @@ class DatabaseManager:
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
         self._connection = sqlite3.connect(self._database_path)
+        self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.row_factory = sqlite3.Row
         self._ensure_schema()
 

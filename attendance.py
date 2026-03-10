@@ -41,7 +41,13 @@ class AttendanceService:
         self._employee_cache: Dict[str, EmployeeRecord] = {}
         self._station_name: Optional[str] = self._db.get_station_name()
 
-        self._bootstrap_employee_directory()
+        try:
+            self._bootstrap_employee_directory()
+        except ValueError as e:
+            LOGGER.error("Roster bootstrap error: %s", e)
+            self._roster_error = str(e)
+        else:
+            self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
 
     def employees_loaded(self) -> bool:
@@ -59,9 +65,11 @@ class AttendanceService:
 
         try:
             workbook = load_workbook(workbook_path, read_only=True)
-            sheet = workbook.active
-            header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
-            workbook.close()
+            try:
+                sheet = workbook.active
+                header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
+            finally:
+                workbook.close()
 
             # Check for header row
             if not header_row or all(cell is None for cell in header_row):
@@ -195,14 +203,11 @@ class AttendanceService:
                     "Fix employee.xlsx and restart the application.",
                     len(duplicates),
                 )
-                self._export_duplicate_report(duplicates)
-                raise SystemExit(
-                    f"\n{'='*60}\n"
-                    f"  ROSTER ERROR: {len(duplicates)} duplicate Legacy ID(s) found\n"
-                    f"  in employee.xlsx. Import blocked.\n\n"
-                    f"  Duplicate report saved to exports/\n"
-                    f"  Fix the roster and restart the application.\n"
-                    f"{'='*60}"
+                report_path = self._export_duplicate_report(duplicates)
+                raise ValueError(
+                    f"Roster contains {len(duplicates)} duplicate Legacy ID(s). "
+                    f"See report: {report_path}. "
+                    f"Fix employee.xlsx and restart the application."
                 )
 
             if employees:
@@ -217,8 +222,12 @@ class AttendanceService:
         finally:
             workbook.close()
 
-    def _export_duplicate_report(self, duplicates: list[dict]) -> None:
-        """Export duplicate Legacy IDs to an Excel file in the exports directory."""
+    def _export_duplicate_report(self, duplicates: list[dict]) -> Optional[Path]:
+        """Export duplicate Legacy IDs to an Excel file in the exports directory.
+
+        Returns:
+            Path to the exported report, or None if export failed.
+        """
         try:
             export_dir = self._export_directory
             export_dir.mkdir(parents=True, exist_ok=True)
@@ -226,19 +235,24 @@ class AttendanceService:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             path = export_dir / f"Roster_Duplicates_{ts}.xlsx"
             wb = Workbook()
-            ws = wb.active
-            ws.title = "Duplicate Legacy IDs"
-            ws.append(["Legacy ID", "Name (Skipped)", "Business Unit", "Row in Excel", "First Seen Row"])
-            for d in duplicates:
-                ws.append([d["legacy_id"], d["full_name"], d["business_unit"], d["row"], d["first_row"]])
-            # Auto-width columns
-            for col in ws.columns:
-                max_len = max((len(str(cell.value or "")) for cell in col), default=10)
-                ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
-            wb.save(path)
+            try:
+                ws = wb.active
+                ws.title = "Duplicate Legacy IDs"
+                ws.append(["Legacy ID", "Name (Skipped)", "Business Unit", "Row in Excel", "First Seen Row"])
+                for d in duplicates:
+                    ws.append([d["legacy_id"], d["full_name"], d["business_unit"], d["row"], d["first_row"]])
+                # Auto-width columns
+                for col in ws.columns:
+                    max_len = max((len(str(cell.value or "")) for cell in col), default=10)
+                    ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+                wb.save(path)
+            finally:
+                wb.close()
             LOGGER.warning("Roster: duplicate report exported to %s", path)
+            return path
         except Exception as exc:
             LOGGER.error("Roster: failed to export duplicate report: %s", exc)
+            return None
 
     @staticmethod
     def _hash_file(path: Path) -> str:
@@ -257,19 +271,21 @@ class AttendanceService:
             return path
 
         workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "Employees"
-        sheet.append(REQUIRED_COLUMNS + ["Email"])
+        try:
+            sheet = workbook.active
+            sheet.title = "Employees"
+            sheet.append(REQUIRED_COLUMNS + ["Email"])
 
-        sample_rows = [
-            ("100001", "Ada Lovelace", "Consulting", "Analyst", "alovelace@example.com"),
-            ("100002", "Grace Hopper", "Technology", "Engineer", "ghopper@example.com"),
-        ]
-        for row in sample_rows:
-            sheet.append(row)
+            sample_rows = [
+                ("100001", "Ada Lovelace", "Consulting", "Analyst", "alovelace@example.com"),
+                ("100002", "Grace Hopper", "Technology", "Engineer", "ghopper@example.com"),
+            ]
+            for row in sample_rows:
+                sheet.append(row)
 
-        workbook.save(path)
-        workbook.close()
+            workbook.save(path)
+        finally:
+            workbook.close()
         return path
 
 
@@ -438,42 +454,44 @@ class AttendanceService:
             }
         export_path = self._build_export_path()
         workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "Scans"
+        try:
+            sheet = workbook.active
+            sheet.title = "Scans"
 
-        export_headers = [
-            "Scan Value", "Legacy ID", "Full Name",
-            "SL L1 Desc", "Position Desc", "Email",
-            "Station", "Scanned At", "Matched", "Scan Source",
-        ]
-        sheet.append(export_headers)
-
-        for record in scans:
-            matched = record.legacy_id is not None
-            row = [
-                record.badge_id or "",
-                record.legacy_id or "",
-                record.employee_full_name or "",
-                record.sl_l1_desc or "",
-                record.position_desc or "",
-                record.email or "",
-                record.station_name or "",
-                _format_timestamp(record.scanned_at),
-                "Yes" if matched else "No",
-                record.scan_source or "manual",
+            export_headers = [
+                "Scan Value", "Legacy ID", "Full Name",
+                "SL L1 Desc", "Position Desc", "Email",
+                "Station", "Scanned At", "Matched", "Scan Source",
             ]
-            sheet.append(row)
+            sheet.append(export_headers)
 
-        for col_idx, header in enumerate(export_headers, start=1):
-            max_length = len(header)
-            for column_cells in sheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, max_row=sheet.max_row, values_only=True):
-                for value in column_cells:
-                    if value is None:
-                        continue
-                    max_length = max(max_length, len(str(value)))
-            sheet.column_dimensions[get_column_letter(col_idx)].width = min(max_length + 2, 60)
-        workbook.save(export_path)
-        workbook.close()
+            for record in scans:
+                matched = record.legacy_id is not None
+                row = [
+                    record.badge_id or "",
+                    record.legacy_id or "",
+                    record.employee_full_name or "",
+                    record.sl_l1_desc or "",
+                    record.position_desc or "",
+                    record.email or "",
+                    record.station_name or "",
+                    _format_timestamp(record.scanned_at),
+                    "Yes" if matched else "No",
+                    record.scan_source or "manual",
+                ]
+                sheet.append(row)
+
+            for col_idx, header in enumerate(export_headers, start=1):
+                max_length = len(header)
+                for column_cells in sheet.iter_cols(min_col=col_idx, max_col=col_idx, min_row=2, max_row=sheet.max_row, values_only=True):
+                    for value in column_cells:
+                        if value is None:
+                            continue
+                        max_length = max(max_length, len(str(value)))
+                sheet.column_dimensions[get_column_letter(col_idx)].width = min(max_length + 2, 60)
+            workbook.save(export_path)
+        finally:
+            workbook.close()
         return {
             "ok": True,
             "fileName": export_path.name,

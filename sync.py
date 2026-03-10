@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import requests
 import time
@@ -115,7 +116,11 @@ class SyncService:
                 timeout=self.connection_timeout,
             )
             if response.status_code == 200:
-                return response.json()
+                try:
+                    return response.json()
+                except (json.JSONDecodeError, ValueError) as e:
+                    LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+                    return {"ok": False, "message": f"Invalid server response: {e}"}
             return {"ok": False, "message": f"API returned {response.status_code}"}
         except Exception as e:
             return {"ok": False, "message": str(e)}
@@ -146,7 +151,11 @@ class SyncService:
                 timeout=self.connection_timeout,
             )
             if response.status_code == 200:
-                return response.json()
+                try:
+                    return response.json()
+                except (json.JSONDecodeError, ValueError) as e:
+                    LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+                    return {"error": f"Invalid server response: {e}"}
             return {"error": f"API returned {response.status_code}"}
         except Exception as e:
             return {"error": str(e)}
@@ -307,7 +316,19 @@ class SyncService:
                 LOGGER.info(f"Cloud API response received in {response.elapsed.total_seconds():.2f}s")
 
                 if response.status_code == 200:
-                    result = response.json()
+                    try:
+                        result = response.json()
+                    except (json.JSONDecodeError, ValueError) as e:
+                        LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+                        error_msg = f"Invalid server response: {e}"
+                        scan_ids = [scan.id for scan in pending_scans]
+                        self.db.mark_scans_as_failed(scan_ids, error_msg)
+                        stats = self.db.get_sync_statistics()
+                        return {
+                            "synced": 0,
+                            "failed": len(pending_scans),
+                            "pending": stats["pending"],
+                        }
                     synced_count = result.get("saved", 0) + result.get("duplicates", 0)
                     scan_ids = [scan.id for scan in pending_scans]
 
@@ -439,7 +460,11 @@ class SyncService:
                 timeout=10,
             )
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except (json.JSONDecodeError, ValueError) as e:
+                    LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+                    return False, 0, f"Invalid server response: {e}"
                 return True, data.get("count", 0), "OK"
             else:
                 return False, 0, f"API error: {response.status_code}"
@@ -466,7 +491,11 @@ class SyncService:
                 timeout=30,
             )
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except (json.JSONDecodeError, ValueError) as e:
+                    LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+                    return {"ok": False, "deleted": 0, "message": f"Invalid server response: {e}"}
                 LOGGER.info(f"Cloud scans cleared: {data.get('deleted', 0)} records")
                 return {"ok": True, "deleted": data.get("deleted", 0), "clear_epoch": data.get("clear_epoch", ""), "message": data.get("message", "Scans cleared")}
             elif response.status_code == 401:
@@ -493,7 +522,11 @@ class SyncService:
                 timeout=10,
             )
             if response.status_code == 200:
-                data = response.json()
+                try:
+                    data = response.json()
+                except (json.JSONDecodeError, ValueError) as e:
+                    LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+                    return False, 60, f"Invalid server response: {e}"
                 return True, data.get("refresh_interval", 60), "OK"
             return False, 60, f"API error: {response.status_code}"
         except Exception as e:
@@ -518,7 +551,10 @@ class SyncService:
             if response.status_code == 200:
                 return True, f"Refresh set to {interval}s" if interval > 0 else "Auto-refresh disabled"
             elif response.status_code == 400:
-                data = response.json()
+                try:
+                    data = response.json()
+                except (json.JSONDecodeError, ValueError):
+                    return False, f"API error: {response.status_code}"
                 return False, data.get("error", "Invalid value")
             return False, f"API error: {response.status_code}"
         except Exception as e:
@@ -546,7 +582,11 @@ def sync_roster_summary(db: DatabaseManager, api_url: str, api_key: str) -> dict
             timeout=10,
         )
         response.raise_for_status()
-        result = response.json()
+        try:
+            result = response.json()
+        except (json.JSONDecodeError, ValueError) as e:
+            LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+            return {"ok": False, "error": f"Invalid server response: {e}"}
         LOGGER.info(f"RosterSync: pushed {len(bu_data)} BU counts to cloud")
         return {"ok": True, "saved": result.get("saved", 0)}
     except Exception as e:
@@ -595,7 +635,11 @@ def sync_roster_summary_from_data(bu_data: list, api_url: str, api_key: str) -> 
             timeout=10,
         )
         response.raise_for_status()
-        result = response.json()
+        try:
+            result = response.json()
+        except (json.JSONDecodeError, ValueError) as e:
+            LOGGER.error(f"Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+            return {"ok": False, "error": f"Invalid server response: {e}"}
         skipped = result.get("skipped", False)
         LOGGER.info(f"RosterSync: pushed {len(bu_data)} BU counts (hash={local_hash}, skipped={skipped})")
         return {"ok": True, "saved": result.get("saved", 0), "skipped": skipped}

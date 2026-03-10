@@ -1348,6 +1348,15 @@ def main() -> None:
         export_directory=EXPORT_DIRECTORY,
     )
 
+    # Show roster error to user if bootstrap detected issues (e.g. duplicate Legacy IDs)
+    if getattr(service, '_roster_error', None):
+        QMessageBox.warning(
+            None,
+            "Roster Error",
+            f"Employee roster has issues:\n\n{service._roster_error}\n\n"
+            "The application will continue but roster data may be incomplete.",
+        )
+
     # Initialize sync service for cloud integration
     sync_service = SyncService(
         db=service._db,
