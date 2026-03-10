@@ -326,7 +326,10 @@
                     </div>
                     <div class="adm-slider-row" style="margin-top:10px;">
                         <span class="adm-slider-row__label">Volume</span>
-                        <input type="range" class="adm-slider" id="admin-volume-slider" min="0" max="100" value="80" style="--fill:80%;">
+                        <div class="adm-slider-wrap" data-default="100" data-min="0" data-max="100" data-key="voice_volume" data-scale="100">
+                            <input type="range" class="adm-slider" id="admin-volume-slider" min="0" max="100" value="80" style="--fill:80%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:1.0;" title="Default: 100%"></div>
+                        </div>
                         <span class="adm-slider-row__value" id="admin-volume-value">80%</span>
                     </div>
                 </div>
@@ -342,17 +345,26 @@
                     </div>
                     <div class="adm-slider-row" style="margin-top:10px;">
                         <span class="adm-slider-row__label">Cooldown</span>
-                        <input type="range" class="adm-slider" id="admin-cooldown-slider" min="5" max="300" value="60" step="5" style="--fill:18%;">
+                        <div class="adm-slider-wrap" data-default="60" data-min="5" data-max="120" data-key="greeting_cooldown">
+                            <input type="range" class="adm-slider" id="admin-cooldown-slider" min="5" max="120" value="60" step="5" style="--fill:47.8%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.478;" title="Default: 60s"></div>
+                        </div>
                         <span class="adm-slider-row__value" id="admin-cooldown-value">60 sec</span>
                     </div>
                     <div class="adm-slider-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Min Face</span>
-                        <input type="range" class="adm-slider" id="admin-minsize-slider" min="5" max="80" value="20" step="1" style="--fill:20%;">
+                        <div class="adm-slider-wrap" data-default="20" data-min="5" data-max="40" data-key="min_size_pct" data-scale="100">
+                            <input type="range" class="adm-slider" id="admin-minsize-slider" min="5" max="40" value="20" step="1" style="--fill:42.9%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.429;" title="Default: 20%"></div>
+                        </div>
                         <span class="adm-slider-row__value" id="admin-minsize-value">20%</span>
                     </div>
                     <div class="adm-slider-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Absence</span>
-                        <input type="range" class="adm-slider" id="admin-absence-slider" min="1" max="30" value="3" step="1" style="--fill:7%;">
+                        <div class="adm-slider-wrap" data-default="3" data-min="1" data-max="10" data-key="absence_threshold">
+                            <input type="range" class="adm-slider" id="admin-absence-slider" min="1" max="10" value="3" step="1" style="--fill:22.2%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.222;" title="Default: 3s"></div>
+                        </div>
                         <span class="adm-slider-row__value" id="admin-absence-value">3 sec</span>
                     </div>
                 </div>
@@ -360,12 +372,18 @@
                     <div class="adm-section__header adm-section__header--display"><i class="material-icons">tv</i> Display</div>
                     <div class="adm-slider-row">
                         <span class="adm-slider-row__label">Feedback</span>
-                        <input type="range" class="adm-slider" id="admin-feedback-slider" min="1" max="10" value="2" step="1" style="--fill:11%;">
+                        <div class="adm-slider-wrap" data-default="2" data-min="1" data-max="10" data-key="scan_feedback_ms" data-scale="0.001">
+                            <input type="range" class="adm-slider" id="admin-feedback-slider" min="1" max="10" value="2" step="1" style="--fill:11.1%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.111;" title="Default: 2s"></div>
+                        </div>
                         <span class="adm-slider-row__value" id="admin-feedback-value">2 sec</span>
                     </div>
                     <div class="adm-slider-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Health Chk</span>
-                        <input type="range" class="adm-slider" id="admin-conncheck-slider" min="0" max="600" value="120" step="10" style="--fill:20%;">
+                        <div class="adm-slider-wrap" data-default="10" data-min="0" data-max="300" data-key="connection_check_s">
+                            <input type="range" class="adm-slider" id="admin-conncheck-slider" min="0" max="300" value="120" step="10" style="--fill:40%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.033;" title="Default: 10s"></div>
+                        </div>
                         <span class="adm-slider-row__value" id="admin-conncheck-value">120 sec</span>
                     </div>
                 </div>

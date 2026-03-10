@@ -1813,12 +1813,28 @@ ${destination}` : message;
     const adminConncheckValue = document.getElementById('admin-conncheck-value');
     const adminDashboardUrl = document.getElementById('admin-dashboard-url');
 
+    // Helper: check if slider is at default and update thumb color
+    const updateSliderDefaultState = (slider) => {
+        if (!slider) return;
+        const wrap = slider.closest('.adm-slider-wrap');
+        if (!wrap) return;
+        const defaultVal = parseFloat(wrap.dataset.default);
+        const currentVal = parseFloat(slider.value);
+        const isDefault = currentVal === defaultVal;
+        // Green when at default, orange when altered
+        slider.style.setProperty('--thumb-color', isDefault ? '#86bc25' : '#f0960a');
+        // Also update track fill color
+        const fillColor = isDefault ? '#86bc25' : '#f0960a';
+        slider.style.setProperty('--fill-color', fillColor);
+    };
+
     // Helper: update slider fill and value label
     const syncSlider = (slider, valueEl, val, min, max, unit) => {
         if (slider) {
             slider.value = val;
             const pct = max > min ? ((val - min) / (max - min)) * 100 : 0;
             slider.style.setProperty('--fill', pct + '%');
+            updateSliderDefaultState(slider);
         }
         if (valueEl) valueEl.textContent = val + ' ' + unit;
     };
@@ -1833,6 +1849,7 @@ ${destination}` : message;
             const pct = max > min ? ((v - min) / (max - min)) * 100 : 0;
             slider.style.setProperty('--fill', pct + '%');
             if (valueEl) valueEl.textContent = v + ' ' + unit;
+            updateSliderDefaultState(slider);
             saveFn(v);
         });
     };
@@ -1881,6 +1898,7 @@ ${destination}` : message;
                     if (adminVolumeSlider) {
                         adminVolumeSlider.value = volume;
                         adminVolumeSlider.style.setProperty('--fill', volume + '%');
+                        updateSliderDefaultState(adminVolumeSlider);
                     }
                     if (adminVolumeValue) {
                         adminVolumeValue.textContent = volume + '%';
@@ -1898,20 +1916,41 @@ ${destination}` : message;
                             adminCameraOverlayToggle.disabled = !result.camera_running;
                         }
                         const cooldown = result.greeting_cooldown || 60;
-                        syncSlider(adminCooldownSlider, adminCooldownValue, cooldown, 5, 300, 'sec');
+                        syncSlider(adminCooldownSlider, adminCooldownValue, cooldown, 5, 120, 'sec');
                         const minPct = Math.round((result.min_size_pct || 0.20) * 100);
-                        syncSlider(adminMinsizeSlider, adminMinsizeValue, minPct, 5, 80, '%');
+                        syncSlider(adminMinsizeSlider, adminMinsizeValue, minPct, 5, 40, '%');
                         const absence = result.absence_threshold || 3;
-                        syncSlider(adminAbsenceSlider, adminAbsenceValue, absence, 1, 30, 'sec');
+                        syncSlider(adminAbsenceSlider, adminAbsenceValue, absence, 1, 10, 'sec');
                     }
                     // Display section
-                    const feedbackSec = Math.round((result.scan_feedback_ms || 2000) / 1000);
+                    const feedbackSec = Math.round((result.scan_feedback_ms || 5000) / 1000);
                     syncSlider(adminFeedbackSlider, adminFeedbackValue, feedbackSec, 1, 10, 'sec');
                     const connCheck = result.connection_check_s ?? 120;
-                    syncSlider(adminConncheckSlider, adminConncheckValue, connCheck, 0, 600, 'sec');
+                    syncSlider(adminConncheckSlider, adminConncheckValue, connCheck, 0, 300, 'sec');
                     // Dashboard URL
                     if (adminDashboardUrl) {
                         adminDashboardUrl.textContent = result.dashboard_url || 'Not configured';
+                    }
+                    // Update default markers from config defaults
+                    const defs = result.defaults;
+                    if (defs) {
+                        document.querySelectorAll('.adm-slider-wrap[data-key]').forEach(wrap => {
+                            const key = wrap.dataset.key;
+                            if (!(key in defs)) return;
+                            let defVal = defs[key];
+                            const scale = parseFloat(wrap.dataset.scale || '1');
+                            defVal = Math.round(defVal * scale);
+                            const min = parseFloat(wrap.querySelector('.adm-slider').min);
+                            const max = parseFloat(wrap.querySelector('.adm-slider').max);
+                            wrap.dataset.default = defVal;
+                            const pct = max > min ? (defVal - min) / (max - min) : 0;
+                            const mark = wrap.querySelector('.adm-slider-default-mark');
+                            if (mark) {
+                                mark.style.setProperty('--default-pct', pct);
+                                mark.title = `Default: ${defVal}`;
+                            }
+                            updateSliderDefaultState(wrap.querySelector('.adm-slider'));
+                        });
                     }
                 });
             }
@@ -2013,6 +2052,7 @@ ${destination}` : message;
             const pct = parseInt(adminVolumeSlider.value);
             adminVolumeSlider.style.setProperty('--fill', pct + '%');
             if (adminVolumeValue) adminVolumeValue.textContent = pct + '%';
+            updateSliderDefaultState(adminVolumeSlider);
             queueOrRun((bridge) => {
                 if (bridge.admin_set_voice_volume) {
                     bridge.admin_set_voice_volume(pct / 100.0, () => {});
