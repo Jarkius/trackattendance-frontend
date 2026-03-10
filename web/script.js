@@ -1940,9 +1940,15 @@ ${destination}` : message;
                     syncSlider(adminFeedbackSlider, adminFeedbackValue, feedbackSec, 1, 10, 'sec');
                     const connCheck = result.connection_check_s ?? 120;
                     syncSlider(adminConncheckSlider, adminConncheckValue, connCheck, 0, 300, 'sec');
-                    // Dashboard URL
+                    // Dashboard URL (clickable link)
                     if (adminDashboardUrl) {
-                        adminDashboardUrl.textContent = result.dashboard_url || 'Not configured';
+                        const dashUrl = result.dashboard_url || '';
+                        adminDashboardUrl.textContent = dashUrl || 'Not configured';
+                        if (dashUrl) {
+                            adminDashboardUrl.href = dashUrl;
+                        } else {
+                            adminDashboardUrl.removeAttribute('href');
+                        }
                     }
                     // Update default markers from config defaults
                     const defs = result.defaults;
