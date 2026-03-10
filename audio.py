@@ -5,7 +5,7 @@ import random
 from pathlib import Path
 from typing import Optional
 
-from PyQt6.QtCore import QTimer, QUrl
+from PyQt6.QtCore import QUrl
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 LOGGER = logging.getLogger(__name__)
@@ -28,8 +28,6 @@ class VoicePlayer:
         self._player.errorOccurred.connect(self._on_error)
 
         self._load_voice_files()
-        # Defer pre-warm to avoid blocking startup (~300ms saved)
-        QTimer.singleShot(500, self._prewarm)
 
         LOGGER.info(
             "VoicePlayer initialized: enabled=%s, volume=%.2f, files=%d",
@@ -43,19 +41,6 @@ class VoicePlayer:
         self.voice_files = sorted(self.voices_dir.glob("*.mp3"))
         if not self.voice_files:
             LOGGER.warning("No MP3 files found in: %s", self.voices_dir)
-
-    def _prewarm(self) -> None:
-        """Pre-warm the audio pipeline so the first real play has no cold-start delay."""
-        if not self.voice_files:
-            return
-        # Temporarily mute, load first file, start+stop to init codec and audio device
-        self._audio_output.setVolume(0.0)
-        self._player.setSource(QUrl.fromLocalFile(str(self.voice_files[0].resolve())))
-        self._player.play()
-        self._player.stop()
-        # Restore volume
-        self._audio_output.setVolume(self._volume)
-        LOGGER.debug("Audio pipeline pre-warmed")
 
     def _pick_random(self) -> Path:
         """Pick a random voice file, avoiding consecutive repeats when possible."""

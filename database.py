@@ -120,6 +120,15 @@ class DatabaseManager:
                 (name.strip(),),
             )
 
+    def rename_station_scans(self, old_name: str, new_name: str) -> int:
+        """Update station_name on all historical scans from old_name to new_name."""
+        with self._connection:
+            cursor = self._connection.execute(
+                "UPDATE scans SET station_name = ? WHERE station_name = ? COLLATE NOCASE",
+                (new_name.strip(), old_name),
+            )
+            return cursor.rowcount
+
     def employees_loaded(self) -> bool:
         cursor = self._connection.execute("SELECT COUNT(1) FROM employees")
         return cursor.fetchone()[0] > 0

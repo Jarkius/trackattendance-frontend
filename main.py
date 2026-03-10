@@ -401,6 +401,15 @@ class Api(QObject):
             "ok": False,
             "message": "Connection not checked yet",
         }
+        # Snapshot config defaults before saved settings override them
+        self._config_defaults = {
+            "voice_volume": config.VOICE_VOLUME,
+            "greeting_cooldown": config.CAMERA_GREETING_COOLDOWN_SECONDS,
+            "min_size_pct": config.CAMERA_MIN_SIZE_PCT,
+            "absence_threshold": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
+            "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
+            "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
+        }
         # Emit initial state so the UI can bind immediately
         QTimer.singleShot(0, lambda: self.connection_status_changed.emit(self._last_connection_result))
 
@@ -835,6 +844,7 @@ class Api(QObject):
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
+            "defaults": self._config_defaults,
         }
 
     # ------------------------------------------------------------------
@@ -1144,7 +1154,27 @@ class Api(QObject):
             return {"ok": False, "message": "Station name cannot be empty"}
         old_name = self._service._db.get_station_name() or "Unknown"
         self._service._db.set_station_name(new_name)
-        LOGGER.info("[Admin] Station renamed: '%s' → '%s'", old_name, new_name)
+        updated = self._service._db.rename_station_scans(old_name, new_name)
+        LOGGER.info("[Admin] Station renamed: '%s' → '%s' (%d local scans updated)", old_name, new_name, updated)
+        # Sync rename to cloud in background
+        import threading
+        def _cloud_rename():
+            try:
+                import requests
+                resp = requests.put(
+                    f"{config.CLOUD_API_URL}/v1/stations/rename",
+                    json={"old_name": old_name, "new_name": new_name},
+                    headers={"x-api-key": config.CLOUD_API_KEY},
+                    timeout=10,
+                )
+                data = resp.json()
+                if data.get("ok"):
+                    LOGGER.info("[Admin] Cloud station rename: %d scans updated", data.get("scans_updated", 0))
+                else:
+                    LOGGER.warning("[Admin] Cloud station rename failed: %s", data.get("error", "unknown"))
+            except Exception as e:
+                LOGGER.warning("[Admin] Cloud station rename error: %s", e)
+        threading.Thread(target=_cloud_rename, daemon=True).start()
         return {"ok": True, "message": f"Station renamed to '{new_name}'", "old_name": old_name, "new_name": new_name}
 
     @pyqtSlot(result="QVariant")

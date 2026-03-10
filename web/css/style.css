@@ -1608,26 +1608,43 @@ body.dashboard-open {
 .adm-slider::-webkit-slider-runnable-track {
     -webkit-appearance: none !important; appearance: none !important;
     height: 8px; border-radius: 4px;
-    background: linear-gradient(to right, #86bc25 var(--fill, 80%), #ddd var(--fill, 80%)) !important;
+    background: linear-gradient(to right, var(--fill-color, #86bc25) var(--fill, 80%), #ddd var(--fill, 80%)) !important;
     border: none !important; box-shadow: none !important;
 }
 .adm-slider::-webkit-slider-thumb {
     -webkit-appearance: none !important; appearance: none !important;
-    width: 18px; height: 18px; border-radius: 50%;
-    background: #86bc25 !important; cursor: pointer;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--thumb-color, #86bc25) !important; cursor: pointer;
     border: 2px solid #fff !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
-    margin-top: -5px;
+    margin-top: -4px;
 }
 .adm-slider::-moz-range-track {
     height: 8px; border-radius: 4px;
-    background: linear-gradient(to right, #86bc25 var(--fill, 80%), #ddd var(--fill, 80%));
+    background: linear-gradient(to right, var(--fill-color, #86bc25) var(--fill, 80%), #ddd var(--fill, 80%));
     border: none;
 }
 .adm-slider::-moz-range-thumb {
-    width: 18px; height: 18px; border-radius: 50%;
-    background: #86bc25; cursor: pointer;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--thumb-color, #86bc25); cursor: pointer;
     border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.adm-slider-wrap {
+    flex: 1; position: relative; display: flex; align-items: center;
+}
+.adm-slider-wrap .adm-slider { flex: 1; }
+.adm-slider-default-mark {
+    position: absolute;
+    /* Account for 16px thumb: track starts at 8px, ends at calc(100% - 8px) */
+    left: calc(8px + (100% - 16px) * var(--default-pct, 0.5));
+    top: 50%;
+    width: 14px; height: 14px;
+    background: rgba(0,0,0,0.12);
+    border: 2px solid rgba(255,255,255,0.85);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 0;
 }
 .adm-slider-row__value {
     font-size: 0.9rem; font-weight: 600; color: #333;
