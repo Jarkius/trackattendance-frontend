@@ -74,6 +74,7 @@ class TestProximityDetectorStateMachine(unittest.TestCase):
         det._last_faces = None
         det._yunet = None
         det._use_yunet = False
+        det._haar_upperbody = None
         det._haar_cascade = None
         det._presence_state = "empty"
         det._last_person_seen_time = 0.0

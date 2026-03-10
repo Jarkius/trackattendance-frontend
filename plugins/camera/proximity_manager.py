@@ -234,13 +234,16 @@ class ProximityGreetingManager:
                 last_overlay_time = now
                 try:
                     display_frame = frame
-                    # Draw face rectangles in preview mode (debug overlay)
+                    # Draw detection rectangles in preview mode (debug overlay)
+                    # Green = face (yunet/haar), Cyan = upper body
                     if self._show_overlay and detector is not None:
                         faces = detector.last_faces
                         if faces:
                             display_frame = frame.copy()
+                            method = detector.detection_method
+                            color = (255, 255, 0) if method == "upperbody" else (0, 255, 0)
                             for (x, y, w, h) in faces:
-                                cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                                cv2.rectangle(display_frame, (x, y), (x + w, y + h), color, 2)
                     overlay.update_frame(display_frame)
                 except (RuntimeError, Exception):
                     pass  # widget deleted or other error
