@@ -1805,8 +1805,11 @@ ${destination}` : message;
     const adminSettingsBack = document.getElementById('admin-settings-back');
     const adminSettingsBackBottom = document.getElementById('admin-settings-back-bottom');
     const adminRefreshStatus = document.getElementById('admin-refresh-status');
+    const adminDupDetectionToggle = document.getElementById('admin-dup-detection-toggle');
     const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
+    const adminDupAlertSlider = document.getElementById('admin-dup-alert-slider');
+    const adminDupAlertValue = document.getElementById('admin-dup-alert-value');
     const adminVoiceToggle = document.getElementById('admin-voice-toggle');
     const adminVolumeSlider = document.getElementById('admin-volume-slider');
     const adminVolumeValue = document.getElementById('admin-volume-value');
@@ -1890,6 +1893,14 @@ ${destination}` : message;
             if (bridge.admin_get_local_settings) {
                 bridge.admin_get_local_settings((result) => {
                     if (!result) return;
+                    // Duplicate detection toggle
+                    const dupEnabled = result.duplicate_detection_enabled !== false;
+                    if (adminDupDetectionToggle) {
+                        adminDupDetectionToggle.classList.toggle('active', dupEnabled);
+                    }
+                    // Duplicate alert duration
+                    const dupAlertSec = Math.round((result.duplicate_alert_ms || 4000) / 1000);
+                    syncSlider(adminDupAlertSlider, adminDupAlertValue, dupAlertSec, 1, 10, 'sec');
                     // Duplicate window
                     const dupWindow = result.duplicate_window || 60;
                     document.querySelectorAll('.adm-dup-window-opt').forEach(b => {
@@ -2061,6 +2072,29 @@ ${destination}` : message;
                     });
                 }
             });
+        });
+    });
+
+    // Duplicate detection toggle
+    if (adminDupDetectionToggle) {
+        adminDupDetectionToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminDupDetectionToggle.classList.contains('active');
+            adminDupDetectionToggle.classList.toggle('active', newState);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_duplicate_detection_enabled) {
+                    bridge.admin_set_duplicate_detection_enabled(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Duplicate alert duration slider
+    bindSlider(adminDupAlertSlider, adminDupAlertValue, 'sec', (v) => {
+        const ms = Math.round(v * 1000);
+        duplicateBadgeAlertDurationMs = ms;
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_duplicate_alert_duration) bridge.admin_set_duplicate_alert_duration(ms, () => {});
         });
     });
 

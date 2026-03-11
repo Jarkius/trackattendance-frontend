@@ -403,6 +403,7 @@ class Api(QObject):
         }
         # Snapshot config defaults before saved settings override them
         self._config_defaults = {
+            "dup_alert_ms": config.DUPLICATE_BADGE_ALERT_DURATION_MS,
             "voice_volume": config.VOICE_VOLUME,
             "greeting_cooldown": config.CAMERA_GREETING_COOLDOWN_SECONDS,
             "min_size_pct": config.CAMERA_MIN_SIZE_PCT,
@@ -837,8 +838,10 @@ class Api(QObject):
         if config.CLOUD_API_URL:
             dashboard_url = config.CLOUD_API_URL.rstrip("/") + "/dashboard/"
         return {
+            "duplicate_detection_enabled": config.DUPLICATE_BADGE_DETECTION_ENABLED,
             "duplicate_window": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
             "duplicate_action": config.DUPLICATE_BADGE_ACTION,
+            "duplicate_alert_ms": config.DUPLICATE_BADGE_ALERT_DURATION_MS,
             "voice_enabled": self._voice_player.enabled if self._voice_player else False,
             "voice_volume": self._voice_player._volume if self._voice_player else 1.0,
             "camera_enabled": self._proximity_manager is not None,
@@ -878,6 +881,23 @@ class Api(QObject):
         self._save_setting("duplicate_action", action)
         LOGGER.info("[Admin] Duplicate action set to '%s'", action)
         return {"ok": True, "value": action}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_duplicate_detection_enabled(self, enabled: bool) -> dict:
+        """Enable/disable duplicate badge detection. Persisted across restarts."""
+        config.DUPLICATE_BADGE_DETECTION_ENABLED = enabled
+        self._save_setting("duplicate_detection_enabled", str(enabled))
+        LOGGER.info("[Admin] Duplicate detection %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_duplicate_alert_duration(self, ms: int) -> dict:
+        """Set duplicate alert display duration in ms. Persisted across restarts."""
+        ms = max(500, min(30000, ms))
+        config.DUPLICATE_BADGE_ALERT_DURATION_MS = ms
+        self._save_setting("duplicate_alert_ms", str(ms))
+        LOGGER.info("[Admin] Duplicate alert duration set to %dms", ms)
+        return {"ok": True, "value": ms}
 
     @pyqtSlot(bool, result="QVariant")
     def admin_set_voice_enabled(self, enabled: bool) -> dict:
@@ -920,6 +940,10 @@ class Api(QObject):
         db = self._service._db
         count = 0
         # Scanning settings
+        v = db.get_meta("setting:duplicate_detection_enabled")
+        if v is not None:
+            config.DUPLICATE_BADGE_DETECTION_ENABLED = v.lower() in ("true", "1")
+            count += 1
         v = db.get_meta("setting:duplicate_window")
         if v is not None:
             try:
@@ -931,6 +955,13 @@ class Api(QObject):
         if v is not None and v in ("block", "warn", "silent"):
             config.DUPLICATE_BADGE_ACTION = v
             count += 1
+        v = db.get_meta("setting:duplicate_alert_ms")
+        if v is not None:
+            try:
+                config.DUPLICATE_BADGE_ALERT_DURATION_MS = max(500, min(30000, int(v)))
+                count += 1
+            except ValueError:
+                pass
         # Audio settings — apply directly to VoicePlayer
         v = db.get_meta("setting:voice_enabled")
         if v is not None and self._voice_player:

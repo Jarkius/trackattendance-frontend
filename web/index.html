@@ -302,7 +302,11 @@
                 </div>
                 <div class="adm-section">
                     <div class="adm-section__header adm-section__header--scanning"><i class="material-icons">badge</i> Scanning</div>
-                    <p style="font-size:0.78rem;color:#666;margin:0 0 8px;">Duplicate Window</p>
+                    <div class="adm-toggle-row">
+                        <span class="adm-toggle-row__label">Duplicate Detection</span>
+                        <button class="adm-toggle" id="admin-dup-detection-toggle" type="button"></button>
+                    </div>
+                    <p style="font-size:0.78rem;color:#666;margin:8px 0 8px;">Duplicate Window</p>
                     <div class="adm-opt-group">
                         <button class="adm-opt adm-dup-window-opt" data-val="60">1m</button>
                         <button class="adm-opt adm-dup-window-opt" data-val="180">3m</button>
@@ -317,6 +321,14 @@
                         <button class="adm-opt adm-dup-action-opt" data-val="silent">Silent</button>
                     </div>
                     <p class="adm-status" id="admin-dup-action-status">--</p>
+                    <div class="adm-slider-row" style="margin-top:12px;">
+                        <span class="adm-slider-row__label">Alert</span>
+                        <div class="adm-slider-wrap" data-default="4" data-min="1" data-max="10" data-key="dup_alert_ms" data-scale="0.001">
+                            <input type="range" class="adm-slider" id="admin-dup-alert-slider" min="1" max="10" value="4" step="1" style="--fill:33.3%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.333;" title="Default: 4s"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-dup-alert-value">4 sec</span>
+                    </div>
                 </div>
                 <div class="adm-section">
                     <div class="adm-section__header adm-section__header--audio"><i class="material-icons">volume_up</i> Audio</div>
