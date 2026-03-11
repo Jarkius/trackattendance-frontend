@@ -125,23 +125,28 @@ class SyncService:
         except Exception as e:
             return {"ok": False, "message": str(e)}
 
-    def send_heartbeat(self, station_name: str, last_clear_epoch: str | None, local_scan_count: int) -> bool:
-        """Report station status to cloud. Returns True on success."""
-        try:
-            response = requests.post(
-                f"{self.api_url}/v1/stations/heartbeat",
-                json={
-                    "station_name": station_name,
-                    "last_clear_epoch": last_clear_epoch,
-                    "local_scan_count": local_scan_count,
-                },
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                timeout=self.connection_timeout,
-            )
-            return response.status_code == 200
-        except Exception as e:
-            LOGGER.debug("Heartbeat failed: %s", e)
-            return False
+    def send_heartbeat(self, station_name: str, last_clear_epoch: str | None, local_scan_count: int, retries: int = 1) -> bool:
+        """Report station status to cloud. Retries on failure. Returns True on success."""
+        for attempt in range(1 + retries):
+            try:
+                response = requests.post(
+                    f"{self.api_url}/v1/stations/heartbeat",
+                    json={
+                        "station_name": station_name,
+                        "last_clear_epoch": last_clear_epoch,
+                        "local_scan_count": local_scan_count,
+                    },
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    timeout=self.connection_timeout,
+                )
+                if response.status_code == 200:
+                    return True
+            except Exception as e:
+                LOGGER.debug("Heartbeat attempt %d failed: %s", attempt + 1, e)
+            if attempt < retries:
+                time.sleep(2)
+        LOGGER.warning("Heartbeat failed after %d attempt(s)", 1 + retries)
+        return False
 
     def get_station_status(self) -> Dict[str, object]:
         """Get all station statuses from cloud (public endpoint)."""

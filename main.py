@@ -728,6 +728,21 @@ class Api(QObject):
             if self._sync_service:
                 station = self._service._db.get_station_name() or "Unknown"
                 self._sync_service.send_heartbeat(station, clear_epoch, 0)
+                # Schedule follow-up heartbeats to prevent going offline
+                # (the clear truncates station_heartbeat; if periodic heartbeats
+                # fail silently, the station goes stale after 120s)
+                sync_svc = self._sync_service
+                def _schedule_followup_heartbeat(delay_s, svc, sta, epoch):
+                    def _fire():
+                        # Read scan count on main thread (SQLite safe), then send in bg
+                        count = self._service._db.count_scans_total()
+                        threading.Thread(
+                            target=lambda: svc.send_heartbeat(sta, epoch, count),
+                            daemon=True, name="heartbeat-followup",
+                        ).start()
+                    QTimer.singleShot(delay_s * 1000, _fire)
+                _schedule_followup_heartbeat(30, sync_svc, station, clear_epoch)
+                _schedule_followup_heartbeat(90, sync_svc, station, clear_epoch)
 
         msg = f"Cleared {cloud_deleted} cloud + {local_count} local records + roster"
         LOGGER.info(f"Admin clear-all: {msg}")

@@ -224,13 +224,14 @@ class ProximityDetector:
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame_w = frame.shape[1]
-        # Upper body is larger than face — use half the min_size_pct threshold
-        min_px = int(frame_w * self.min_size_pct * 0.5)
+        # Use same min_size_pct as face — upper body is larger so this
+        # naturally requires closer proximity than face detection
+        min_px = int(frame_w * self.min_size_pct)
 
         bodies = self._haar_upperbody.detectMultiScale(
             gray,
             scaleFactor=1.05,
-            minNeighbors=3,
+            minNeighbors=self.haar_min_neighbors,
             minSize=(min_px, min_px),
         )
 
@@ -320,17 +321,18 @@ class ProximityDetector:
                     person_in_frame = True
                     self._last_detection_method = "upperbody"
 
-        # Always update motion background frame to prevent stale-frame false positives
-        # when motion fallback is eventually called after a long face/body detection run
+        # Motion fallback — only used when no face/body detector is available.
+        # When real detectors exist, motion causes too many false greetings
+        # (walking past at 2m+ creates large motion blobs that pass size filter).
+        has_real_detector = self._use_yunet or self._haar_cascade is not None
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (21, 21), 0)
-        if not person_in_frame:
-            # Motion fallback — last resort if no face/body detector matched
+        if not person_in_frame and not has_real_detector:
             if self._detect_motion(frame, precomputed_gray=gray):
                 person_in_frame = True
                 self._last_detection_method = "motion"
         else:
-            # Person found by face/body — just keep background fresh
+            # Keep background fresh for motion detector
             self._background_frame = gray
 
         if person_in_frame:
