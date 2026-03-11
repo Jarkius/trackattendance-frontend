@@ -1222,7 +1222,7 @@ class Api(QObject):
 
     def _notify_remote_clear(self) -> None:
         """Show alert modal and refresh UI after remote clear detected."""
-        view = self._window.web_view if self._window else None
+        view = self._window.centralWidget() if self._window else None
         if not view:
             return
         script = """
