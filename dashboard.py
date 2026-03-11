@@ -195,6 +195,17 @@ class DashboardService:
         except Exception:
             return "--"
 
+    def _format_datetime(self, iso_timestamp: Optional[str]) -> str:
+        """Format ISO timestamp to local date+time string for Excel export."""
+        if not iso_timestamp:
+            return "--"
+        try:
+            dt = datetime.fromisoformat(iso_timestamp.replace("Z", "+00:00"))
+            local_dt = dt.astimezone()  # Convert UTC to local machine timezone
+            return local_dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return iso_timestamp  # Return raw value as fallback
+
     def export_to_excel(self, dashboard_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Export dashboard data to Excel file.
 
@@ -298,7 +309,7 @@ class DashboardService:
                     "Position Desc": position,
                     "Email": employee.email if employee else "",
                     "Station": station,
-                    "Scanned At": scanned_at,
+                    "Scanned At": self._format_datetime(scanned_at),
                     "Matched": "Yes" if matched else "No",
                     "Scan Source": scan_source,
                 })

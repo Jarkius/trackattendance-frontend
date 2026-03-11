@@ -166,10 +166,12 @@ class CameraOverlay(QLabel):
         self.raise_()
 
     def _reposition(self) -> None:
-        """Place overlay at top-left of parent window."""
-        parent_geo = self._parent_window.geometry()
-        x = parent_geo.x() + MARGIN_LEFT
-        y = parent_geo.y() + MARGIN_TOP
+        """Place overlay at top-left of parent window (below title bar)."""
+        frame_geo = self._parent_window.frameGeometry()
+        content_geo = self._parent_window.geometry()
+        title_bar_height = content_geo.y() - frame_geo.y()
+        x = frame_geo.x() + MARGIN_LEFT
+        y = frame_geo.y() + title_bar_height + MARGIN_TOP
         self.move(x, y)
 
     def eventFilter(self, obj, event) -> bool:
