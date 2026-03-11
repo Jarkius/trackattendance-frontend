@@ -454,10 +454,10 @@ class Api(QObject):
 
         # Play voice confirmation on successful match (skip duplicates)
         if self._voice_player and result.get("matched") and not result.get("is_duplicate"):
-            self._voice_player.play_random()
-            # Tell camera plugin that voice is playing (avoids audio overlap)
+            # Tell camera plugin BEFORE playing (closes race window with greeting)
             if self._proximity_manager:
                 self._proximity_manager.notify_voice_playing()
+            self._voice_player.play_random()
 
         # Notify auto-sync manager that a scan occurred
         if self._auto_sync_manager:
@@ -1337,9 +1337,9 @@ class Api(QObject):
 
         # Play voice confirmation on successful match
         if self._voice_player and result.get("matched") and not result.get("is_duplicate"):
-            self._voice_player.play_random()
             if self._proximity_manager:
                 self._proximity_manager.notify_voice_playing()
+            self._voice_player.play_random()
 
         if self._auto_sync_manager:
             self._auto_sync_manager.on_scan()
