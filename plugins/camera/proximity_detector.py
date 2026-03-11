@@ -1,8 +1,13 @@
 """
-Person proximity detection using MediaPipe (face + pose).
-Falls back to simple motion detection if MediaPipe is unavailable.
+Person proximity detection using YuNet DNN face detector + upper body Haar cascade.
+Falls back to frontal face Haar cascade, then motion detection if models unavailable.
 
-Extracted from poc/camera/camera_scanner.py for production use.
+Detection chain per frame:
+  1. YuNet face (primary — fast DNN, handles angles)
+  2. Upper body Haar cascade (catches torso when face not visible)
+  3. Frontal face Haar cascade (fallback if YuNet unavailable)
+  4. Motion detection (last resort — frame differencing)
+
 Camera does NOT scan barcodes — badge scanning remains USB-only.
 """
 
@@ -32,15 +37,16 @@ except ImportError:
 
 class ProximityDetector:
     """
-    Person proximity detection using MediaPipe (face + pose).
-    Falls back to simple motion detection if MediaPipe is unavailable.
+    Person proximity detection using YuNet DNN face detector.
+    Falls back to Haar cascade or motion detection if unavailable.
 
-    Detection strategy (handles varying heights and laptop positions):
-    1. Face detection — works when face is visible (any angle/distance)
-    2. Pose detection — works when body is visible (even without face)
-    3. Motion fallback — catches movement if MediaPipe fails
+    Detection chain (best → worst):
+    1. YuNet face — modern DNN face detector (2021), ~1-2ms on CPU, handles angles
+    2. Upper body Haar — detects torso when face not visible (too tall/short/turned away)
+    3. Frontal face Haar — classic face detector fallback (if YuNet unavailable)
+    4. Motion fallback — frame differencing, catches movement only
 
-    A person is "detected" when either a face OR a body pose is found.
+    A person is "detected" when a face/body is found or motion exceeds threshold.
     """
 
     def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0,
@@ -63,18 +69,18 @@ class ProximityDetector:
         self._background_frame: Optional[np.ndarray] = None
         self._detection_callbacks: List[Callable[[], None]] = []
         self._last_detection_method: Optional[str] = None
-        self._haar_cascade = None  # OpenCV Haar cascade (fallback)
+        self._last_faces: Optional[list] = None  # face rectangles for overlay
+
+        # Detection backends
+        self._yunet = None
+        self._use_yunet = False
+        self._haar_upperbody = None  # upper body cascade (secondary when face not visible)
+        self._haar_cascade = None    # frontal face cascade (fallback if YuNet unavailable)
 
         # Presence state: "empty" or "present"
         # Greeting only fires on transition from empty → present
         self._presence_state: str = "empty"
         self._last_person_seen_time: float = 0.0
-
-        # Try to initialize MediaPipe (tasks API — v0.10.x+)
-        self._mp_face = None
-        self._mp_pose = None
-        self._use_mediapipe = False
-        self._mp = None  # mediapipe module reference
 
         # Model files directory — bundled inside exe or alongside this script
         if getattr(sys, 'frozen', False):
@@ -82,69 +88,42 @@ class ProximityDetector:
         else:
             models_dir = os.path.join(os.path.dirname(__file__), 'models')
 
-        try:
-            import mediapipe as mp
-            self._mp = mp
-
-            face_model = os.path.join(models_dir, 'blaze_face_short_range.tflite')
-            pose_model = os.path.join(models_dir, 'pose_landmarker_lite.task')
-
-            if not os.path.exists(face_model) or not os.path.exists(pose_model):
-                raise FileNotFoundError(
-                    f"Model files missing in {models_dir}. "
-                    "Download blaze_face_short_range.tflite and pose_landmarker_lite.task"
+        # Try YuNet DNN face detector (primary — modern, fast, accurate)
+        yunet_model = os.path.join(models_dir, 'face_detection_yunet_2023mar.onnx')
+        if cv2 is not None and os.path.exists(yunet_model):
+            try:
+                self._yunet = cv2.FaceDetectorYN.create(
+                    model=yunet_model,
+                    config="",
+                    input_size=(320, 320),  # will be set per-frame
+                    score_threshold=self.min_face_confidence,
+                    nms_threshold=0.3,
+                    top_k=5000,
                 )
+                self._use_yunet = True
+                LOGGER.info("[Proximity] YuNet DNN face detector active (min_size_pct=%.2f)", self.min_size_pct)
+            except Exception as e:
+                LOGGER.warning("[Proximity] YuNet init failed (%s), trying Haar cascade", e)
 
-            base_opts_face = mp.tasks.BaseOptions(model_asset_path=face_model)
-            face_opts = mp.tasks.vision.FaceDetectorOptions(
-                base_options=base_opts_face,
-                running_mode=mp.tasks.vision.RunningMode.IMAGE,
-                min_detection_confidence=self.min_face_confidence,
-            )
-            self._mp_face = mp.tasks.vision.FaceDetector.create_from_options(face_opts)
-
-            base_opts_pose = mp.tasks.BaseOptions(model_asset_path=pose_model)
-            pose_opts = mp.tasks.vision.PoseLandmarkerOptions(
-                base_options=base_opts_pose,
-                running_mode=mp.tasks.vision.RunningMode.IMAGE,
-                min_pose_detection_confidence=self.min_pose_confidence,
-            )
-            self._mp_pose = mp.tasks.vision.PoseLandmarker.create_from_options(pose_opts)
-
-            self._use_mediapipe = True
-            LOGGER.info("[Proximity] MediaPipe face+pose detection active (min_size_pct=%.2f)", self.min_size_pct)
-        except ImportError:
-            LOGGER.warning("[Proximity] MediaPipe not available, trying OpenCV Haar cascade")
-        except Exception as e:
-            LOGGER.warning("[Proximity] MediaPipe init failed (%s), trying OpenCV Haar cascade", e)
+        # Upper body Haar cascade — secondary detector for when face isn't visible
+        # (person too tall/short for camera, turned away, looking down at badge)
+        # Loaded alongside YuNet as a complement, not a replacement
+        if cv2 is not None:
+            try:
+                upperbody_path = self._find_haar_cascade('haarcascade_upperbody.xml')
+                if upperbody_path:
+                    self._haar_upperbody = cv2.CascadeClassifier(upperbody_path)
+                    if self._haar_upperbody.empty():
+                        self._haar_upperbody = None
+                    else:
+                        LOGGER.info("[Proximity] Upper body Haar cascade loaded (secondary detector)")
+            except Exception as e:
+                LOGGER.warning("[Proximity] Upper body cascade init failed (%s)", e)
 
         # Fallback: OpenCV Haar cascade face detection (ships with cv2, no extra files)
-        if not self._use_mediapipe:
+        if not self._use_yunet:
             try:
-                # cv2.data.haarcascades may not resolve inside PyInstaller .exe
-                cascade_candidates = []
-                if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
-                    cascade_candidates.append(
-                        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-                    )
-                # Also try relative to cv2 package location
-                cv2_dir = os.path.dirname(cv2.__file__)
-                cascade_candidates.append(
-                    os.path.join(cv2_dir, 'data', 'haarcascade_frontalface_default.xml')
-                )
-                # PyInstaller _MEIPASS path
-                if getattr(sys, 'frozen', False):
-                    meipass = getattr(sys, '_MEIPASS', '')
-                    cascade_candidates.append(
-                        os.path.join(meipass, 'cv2', 'data', 'haarcascade_frontalface_default.xml')
-                    )
-
-                cascade_path = None
-                for candidate in cascade_candidates:
-                    if os.path.exists(candidate):
-                        cascade_path = candidate
-                        break
-
+                cascade_path = self._find_haar_cascade('haarcascade_frontalface_default.xml')
                 if cascade_path:
                     self._haar_cascade = cv2.CascadeClassifier(cascade_path)
                     if self._haar_cascade.empty():
@@ -153,7 +132,7 @@ class ProximityDetector:
                     else:
                         LOGGER.info("[Proximity] OpenCV Haar cascade active (min_size_pct=%.2f, path=%s)", self.min_size_pct, cascade_path)
                 else:
-                    LOGGER.warning("[Proximity] Haar cascade XML not found, tried: %s", cascade_candidates)
+                    LOGGER.warning("[Proximity] Haar cascade XML not found")
             except Exception as e:
                 LOGGER.warning("[Proximity] Haar cascade init failed (%s)", e)
 
@@ -162,45 +141,61 @@ class ProximityDetector:
         """Return which detection method was used last."""
         return self._last_detection_method or "none"
 
+    @property
+    def last_faces(self) -> Optional[list]:
+        """Last detected face rectangles [[x, y, w, h], ...] for overlay drawing."""
+        return self._last_faces
+
     def add_detection_callback(self, callback: Callable[[], None]):
         """Add callback for proximity detection."""
         self._detection_callbacks.append(callback)
 
-    def _detect_person_mediapipe(self, frame: np.ndarray) -> Optional[str]:
-        """Detect person using MediaPipe face and pose detection (tasks API).
-        Returns detection method string or None."""
-        mp = self._mp
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-
-        frame_w = frame.shape[1]
-
-        # Try face detection first (faster)
-        if self._mp_face:
-            face_results = self._mp_face.detect(mp_image)
-            for det in (face_results.detections or []):
-                # Filter by bounding box width relative to frame
-                bbox_w = det.bounding_box.width
-                if bbox_w / frame_w >= self.min_size_pct:
-                    return "face"
-
-        # Try pose detection (catches body even without visible face)
-        if self._mp_pose:
-            pose_results = self._mp_pose.detect(mp_image)
-            for landmarks in (pose_results.pose_landmarks or []):
-                # Use horizontal spread of landmarks as size proxy
-                xs = [lm.x for lm in landmarks]
-                spread = max(xs) - min(xs)
-                if spread >= self.min_size_pct:
-                    return "pose"
-
+    @staticmethod
+    def _find_haar_cascade(filename: str) -> Optional[str]:
+        """Find a Haar cascade XML file from OpenCV's bundled data directories."""
+        candidates = []
+        if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
+            candidates.append(cv2.data.haarcascades + filename)
+        cv2_dir = os.path.dirname(cv2.__file__)
+        candidates.append(os.path.join(cv2_dir, 'data', filename))
+        if getattr(sys, 'frozen', False):
+            meipass = getattr(sys, '_MEIPASS', '')
+            candidates.append(os.path.join(meipass, 'cv2', 'data', filename))
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
         return None
 
-    def _detect_haar_face(self, frame: np.ndarray) -> bool:
-        """Detect face using OpenCV Haar cascade. Returns True if a close face is found.
+    def _detect_yunet_face(self, frame: np.ndarray) -> bool:
+        """Detect face using OpenCV YuNet DNN detector.
 
-        More reliable than motion detection — works for stationary people and
-        returns bounding boxes for size filtering. Ships with cv2, no extra files.
+        Stores face rectangles in self._last_faces for overlay rendering.
+        YuNet returns Nx15 array: [x, y, w, h, ...landmarks..., score].
+        """
+        h, w = frame.shape[:2]
+        self._yunet.setInputSize((w, h))
+        _, faces = self._yunet.detect(frame)
+        self._last_faces = None
+
+        if faces is None:
+            return False
+
+        min_px = int(w * self.min_size_pct)
+        valid = []
+        for face in faces:
+            fw = int(face[2])
+            if fw >= min_px:
+                valid.append([int(face[0]), int(face[1]), int(face[2]), int(face[3])])
+
+        if valid:
+            self._last_faces = valid
+            return True
+        return False
+
+    def _detect_haar_face(self, frame: np.ndarray) -> bool:
+        """Detect face using OpenCV Haar cascade.
+
+        Stores face rectangles in self._last_faces for overlay rendering.
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame_w = frame.shape[1]
@@ -213,16 +208,50 @@ class ProximityDetector:
             minSize=(min_px, min_px),
         )
 
-        return len(faces) > 0
+        self._last_faces = None
+        if len(faces) > 0:
+            self._last_faces = [[int(x), int(y), int(w), int(h)] for (x, y, w, h) in faces]
+            return True
+        return False
 
-    def _detect_motion(self, frame: np.ndarray) -> bool:
+    def _detect_upperbody(self, frame: np.ndarray) -> bool:
+        """Detect upper body/torso using Haar cascade.
+
+        Used as secondary check when YuNet finds no face — catches people
+        whose face isn't visible (too tall/short, turned away, looking down).
+        Uses relaxed min_neighbors (3) since upper body is a broader pattern.
+        Stores body rectangles in self._last_faces for overlay rendering.
+        """
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame_w = frame.shape[1]
+        # Upper body is larger than face — use half the min_size_pct threshold
+        min_px = int(frame_w * self.min_size_pct * 0.5)
+
+        bodies = self._haar_upperbody.detectMultiScale(
+            gray,
+            scaleFactor=1.05,
+            minNeighbors=3,
+            minSize=(min_px, min_px),
+        )
+
+        self._last_faces = None
+        if len(bodies) > 0:
+            self._last_faces = [[int(x), int(y), int(w), int(h)] for (x, y, w, h) in bodies]
+            return True
+        return False
+
+    def _detect_motion(self, frame: np.ndarray, precomputed_gray=None) -> bool:
         """Fallback: simple motion detection via frame differencing.
 
         Also applies min_size_pct filter — the largest motion contour's
         bounding-box width must fill at least min_size_pct of the frame.
+        Accepts optional precomputed_gray to avoid redundant grayscale conversion.
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+        if precomputed_gray is not None:
+            gray = precomputed_gray
+        else:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
         if self._background_frame is None:
             self._background_frame = gray
@@ -235,11 +264,11 @@ class ProximityDetector:
                                         cv2.CHAIN_APPROX_SIMPLE)
 
         self._background_frame = gray
+        self._last_faces = None
 
         frame_w = frame.shape[1]
         for contour in contours:
             if cv2.contourArea(contour) > self.sensitivity:
-                # Apply size filter — motion region must be close enough
                 _, _, w, _ = cv2.boundingRect(contour)
                 if w / frame_w >= self.min_size_pct:
                     return True
@@ -259,8 +288,7 @@ class ProximityDetector:
           present + no person for absence_threshold seconds → empty
           empty   + no person    → empty   (no change)
 
-        Uses MediaPipe face+pose when available, falls back to OpenCV Haar
-        cascade, then to motion detection as last resort.
+        Detection chain: YuNet face → Upper body Haar → Frontal face Haar → Motion.
         """
         current_time = time.time()
 
@@ -270,20 +298,40 @@ class ProximityDetector:
             return False
 
         # Detect person in this frame
+        # Chain: YuNet face → upper body → frontal face Haar → motion
         person_in_frame = False
-        if self._use_mediapipe:
-            method = self._detect_person_mediapipe(frame)
-            if method:
+        self._last_faces = None
+
+        if self._use_yunet:
+            if self._detect_yunet_face(frame):
                 person_in_frame = True
-                self._last_detection_method = method
+                self._last_detection_method = "yunet"
+            elif self._haar_upperbody is not None:
+                # Face not visible — try upper body (tall/short person, turned away)
+                if self._detect_upperbody(frame):
+                    person_in_frame = True
+                    self._last_detection_method = "upperbody"
         elif self._haar_cascade is not None:
             if self._detect_haar_face(frame):
                 person_in_frame = True
                 self._last_detection_method = "haar"
-        else:
-            if self._detect_motion(frame):
+            elif self._haar_upperbody is not None:
+                if self._detect_upperbody(frame):
+                    person_in_frame = True
+                    self._last_detection_method = "upperbody"
+
+        # Always update motion background frame to prevent stale-frame false positives
+        # when motion fallback is eventually called after a long face/body detection run
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+        if not person_in_frame:
+            # Motion fallback — last resort if no face/body detector matched
+            if self._detect_motion(frame, precomputed_gray=gray):
                 person_in_frame = True
                 self._last_detection_method = "motion"
+        else:
+            # Person found by face/body — just keep background fresh
+            self._background_frame = gray
 
         if person_in_frame:
             self._last_person_seen_time = current_time
@@ -336,10 +384,8 @@ class ProximityDetector:
         self._last_detection_time = 0
         self._frame_count = 0
         self._last_detection_method = None
+        self._last_faces = None
 
     def close(self):
-        """Release MediaPipe resources."""
-        if self._mp_face:
-            self._mp_face.close()
-        if self._mp_pose:
-            self._mp_pose.close()
+        """Release resources."""
+        pass

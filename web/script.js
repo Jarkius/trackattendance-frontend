@@ -1805,8 +1805,11 @@ ${destination}` : message;
     const adminSettingsBack = document.getElementById('admin-settings-back');
     const adminSettingsBackBottom = document.getElementById('admin-settings-back-bottom');
     const adminRefreshStatus = document.getElementById('admin-refresh-status');
+    const adminDupDetectionToggle = document.getElementById('admin-dup-detection-toggle');
     const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
+    const adminDupAlertSlider = document.getElementById('admin-dup-alert-slider');
+    const adminDupAlertValue = document.getElementById('admin-dup-alert-value');
     const adminVoiceToggle = document.getElementById('admin-voice-toggle');
     const adminVolumeSlider = document.getElementById('admin-volume-slider');
     const adminVolumeValue = document.getElementById('admin-volume-value');
@@ -1819,6 +1822,11 @@ ${destination}` : message;
     const adminMinsizeValue = document.getElementById('admin-minsize-value');
     const adminAbsenceSlider = document.getElementById('admin-absence-slider');
     const adminAbsenceValue = document.getElementById('admin-absence-value');
+    const adminConfirmSlider = document.getElementById('admin-confirm-slider');
+    const adminConfirmValue = document.getElementById('admin-confirm-value');
+    const adminHaarSlider = document.getElementById('admin-haar-slider');
+    const adminHaarValue = document.getElementById('admin-haar-value');
+    const adminCameraResetBtn = document.getElementById('admin-camera-reset-btn');
     const adminFeedbackSlider = document.getElementById('admin-feedback-slider');
     const adminFeedbackValue = document.getElementById('admin-feedback-value');
     const adminConncheckSlider = document.getElementById('admin-conncheck-slider');
@@ -1885,6 +1893,14 @@ ${destination}` : message;
             if (bridge.admin_get_local_settings) {
                 bridge.admin_get_local_settings((result) => {
                     if (!result) return;
+                    // Duplicate detection toggle
+                    const dupEnabled = result.duplicate_detection_enabled !== false;
+                    if (adminDupDetectionToggle) {
+                        adminDupDetectionToggle.classList.toggle('active', dupEnabled);
+                    }
+                    // Duplicate alert duration
+                    const dupAlertSec = Math.round((result.duplicate_alert_ms || 4000) / 1000);
+                    syncSlider(adminDupAlertSlider, adminDupAlertValue, dupAlertSec, 1, 10, 'sec');
                     // Duplicate window
                     const dupWindow = result.duplicate_window || 60;
                     document.querySelectorAll('.adm-dup-window-opt').forEach(b => {
@@ -1934,6 +1950,10 @@ ${destination}` : message;
                         syncSlider(adminMinsizeSlider, adminMinsizeValue, minPct, 5, 40, '%');
                         const absence = result.absence_threshold || 3;
                         syncSlider(adminAbsenceSlider, adminAbsenceValue, absence, 1, 10, 'sec');
+                        const confirmF = result.confirm_frames || 3;
+                        syncSlider(adminConfirmSlider, adminConfirmValue, confirmF, 1, 10, 'frm');
+                        const haarN = result.haar_min_neighbors || 5;
+                        syncSlider(adminHaarSlider, adminHaarValue, haarN, 2, 10, '');
                     }
                     // Display section
                     const feedbackSec = Math.round((result.scan_feedback_ms || 5000) / 1000);
@@ -2055,6 +2075,29 @@ ${destination}` : message;
         });
     });
 
+    // Duplicate detection toggle
+    if (adminDupDetectionToggle) {
+        adminDupDetectionToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminDupDetectionToggle.classList.contains('active');
+            adminDupDetectionToggle.classList.toggle('active', newState);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_duplicate_detection_enabled) {
+                    bridge.admin_set_duplicate_detection_enabled(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Duplicate alert duration slider
+    bindSlider(adminDupAlertSlider, adminDupAlertValue, 'sec', (v) => {
+        const ms = Math.round(v * 1000);
+        duplicateBadgeAlertDurationMs = ms;
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_duplicate_alert_duration) bridge.admin_set_duplicate_alert_duration(ms, () => {});
+        });
+    });
+
     // Voice toggle
     if (adminVoiceToggle) {
         adminVoiceToggle.addEventListener('click', (e) => {
@@ -2142,6 +2185,42 @@ ${destination}` : message;
             if (bridge.admin_set_absence_threshold) bridge.admin_set_absence_threshold(v, () => {});
         });
     });
+    bindSlider(adminConfirmSlider, adminConfirmValue, 'frm', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_confirm_frames) bridge.admin_set_confirm_frames(v, () => {});
+        });
+    });
+    bindSlider(adminHaarSlider, adminHaarValue, '', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_haar_min_neighbors) bridge.admin_set_haar_min_neighbors(v, () => {});
+        });
+    });
+
+    // Reset camera settings to .env defaults
+    if (adminCameraResetBtn) {
+        adminCameraResetBtn.addEventListener('click', () => {
+            queueOrRun((bridge) => {
+                if (bridge.admin_reset_camera_settings) {
+                    bridge.admin_reset_camera_settings((result) => {
+                        if (result && result.ok) {
+                            // Refresh UI with defaults
+                            if (bridge.admin_get_local_settings) {
+                                bridge.admin_get_local_settings((r) => {
+                                    if (r) {
+                                        syncSlider(adminCooldownSlider, adminCooldownValue, r.greeting_cooldown || 60, 5, 120, 'sec');
+                                        syncSlider(adminMinsizeSlider, adminMinsizeValue, Math.round((r.min_size_pct || 0.20) * 100), 5, 40, '%');
+                                        syncSlider(adminAbsenceSlider, adminAbsenceValue, r.absence_threshold || 3, 1, 10, 'sec');
+                                        syncSlider(adminConfirmSlider, adminConfirmValue, r.confirm_frames || 3, 1, 10, 'frm');
+                                        syncSlider(adminHaarSlider, adminHaarValue, r.haar_min_neighbors || 5, 2, 10, '');
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    }
 
     // Display sliders: scan feedback (seconds → ms), connection check
     bindSlider(adminFeedbackSlider, adminFeedbackValue, 'sec', (v) => {

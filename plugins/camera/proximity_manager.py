@@ -54,6 +54,7 @@ class ProximityGreetingManager:
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._busy_until: float = 0.0  # suppress greetings while queue is active
+        self._voice_playing_until: float = 0.0  # time-based voice overlap guard
 
     def start(self) -> bool:
         """Late-import deps, open camera, start daemon thread. Returns False on failure."""
@@ -171,12 +172,13 @@ class ProximityGreetingManager:
             return
 
         # Don't overlap with scan "thank you" voice
-        # Prefer real-time check via is_playing(); fall back to time-based estimate
-        voice_busy = False
-        if self._voice_player is not None and hasattr(self._voice_player, 'is_playing'):
-            voice_busy = self._voice_player.is_playing()
-        else:
-            voice_busy = time.time() < getattr(self, '_voice_playing_until', 0)
+        # Use time-based guard as primary (thread-safe), is_playing() as secondary
+        voice_busy = time.time() < self._voice_playing_until
+        if not voice_busy and self._voice_player is not None and hasattr(self._voice_player, 'is_playing'):
+            try:
+                voice_busy = self._voice_player.is_playing()
+            except RuntimeError:
+                pass  # Qt object deleted or cross-thread access
         if voice_busy:
             LOGGER.info("[Proximity] Person detected but scan voice is playing, skipping")
             return
@@ -233,7 +235,18 @@ class ProximityGreetingManager:
             if overlay is not None and self._running and (now - last_overlay_time) >= overlay_interval:
                 last_overlay_time = now
                 try:
-                    overlay.update_frame(frame)
+                    display_frame = frame
+                    # Draw detection rectangles in preview mode (debug overlay)
+                    # Green = face (yunet/haar), Cyan = upper body
+                    if self._show_overlay and detector is not None:
+                        faces = detector.last_faces
+                        if faces:
+                            display_frame = frame.copy()
+                            method = detector.detection_method
+                            color = (255, 255, 0) if method == "upperbody" else (0, 255, 0)
+                            for (x, y, w, h) in faces:
+                                cv2.rectangle(display_frame, (x, y), (x + w, y + h), color, 2)
+                    overlay.update_frame(display_frame)
                 except (RuntimeError, Exception):
                     pass  # widget deleted or other error
 
