@@ -1229,13 +1229,14 @@ class Api(QObject):
         (function() {
             // Reset all counters to 0
             var ids = ['total-count', 'matched-count', 'unmatched-count',
-                       'sync-pending', 'sync-synced', 'sync-failed'];
+                       'sync-pending', 'sync-synced', 'sync-failed',
+                       'total-scanned'];
             ids.forEach(function(id) {
                 var el = document.getElementById(id);
                 if (el) el.textContent = '0';
             });
-            // Clear recent scan history
-            var historyEl = document.getElementById('scan-history');
+            // Clear recent scan history list
+            var historyEl = document.getElementById('scan-history-list');
             if (historyEl) historyEl.innerHTML = '';
             // Reset live feedback
             var feedbackEl = document.getElementById('live-feedback');
@@ -1256,9 +1257,16 @@ class Api(QObject):
                 '<p style="margin:0 0 20px;color:#666;font-size:0.95rem;">' +
                 'All station data has been cleared from another station.<br>' +
                 'Local backup has been exported to the exports folder.</p>' +
+                '<div style="display:flex;gap:12px;justify-content:center;">' +
                 '<button onclick="document.getElementById(\\'remote-clear-overlay\\').remove()" ' +
                 'style="background:#86bc25;color:#fff;border:none;padding:10px 32px;border-radius:6px;' +
-                'font-size:1rem;font-weight:600;cursor:pointer;">OK</button>';
+                'font-size:1rem;font-weight:600;cursor:pointer;">OK</button>' +
+                '<button onclick="document.getElementById(\\'remote-clear-overlay\\').remove();' +
+                'if(window.qt&&window.qt.webChannelTransport){new QWebChannel(qt.webChannelTransport,' +
+                'function(ch){ch.objects.api.close_window()})}" ' +
+                'style="background:#e8443a;color:#fff;border:none;padding:10px 32px;border-radius:6px;' +
+                'font-size:1rem;font-weight:600;cursor:pointer;">Close App</button>' +
+                '</div>';
             overlay.appendChild(box);
             document.body.appendChild(overlay);
             console.log('[RemoteClear] UI reset and alert shown');
