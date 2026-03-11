@@ -31,7 +31,7 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Auto-sync to cloud when idle; manual sync button available
 - One-click Excel export with unified columns (Scan Value, Legacy ID, Full Name, Email, Business Unit, Position, Station, Scanned At, Matched, Scan Source)
 - Fully offline — runs without network; syncs when connection returns
-- **Admin control center** (PIN-protected) — sectioned panel with Status, Data Management, and Settings; runtime-tunable sliders for duplicate detection, voice, camera, and connection check
+- **Admin control center** (PIN-protected) — sectioned panel with Status, Data Management, and Settings; runtime-tunable sliders for duplicate detection (toggle + alert duration), voice, camera (confirm frames, strictness, reset to defaults), and connection check
 - Welcome animation and configurable party/event background
 - **Email field support** — optional `Email` column in roster xlsx (stays local, never synced)
 - **Scan source tracking** — distinguishes badge scans, name lookups, and manual entries (`badge` / `lookup` / `manual`)
@@ -41,15 +41,15 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - **Station heartbeat & status** — stations report health via heartbeat; mobile dashboard shows online/offline status per station
 - **Clear This Station / Clear All** — separate admin actions; Clear All resets all stations + roster via `clear_epoch` coordination
 - **Voice file override** — drop custom MP3s in `voices/` next to exe to replace bundled voices without recompiling
-- **CI/CD pipeline** — automated `pytest` runs on every push and PR (307 tests)
-- **[Experimental]** Camera proximity greeting — detects when someone approaches an idle kiosk and plays a bilingual welcome audio (disabled by default, presence-aware: greets once per person, not on repeat)
+- **CI/CD pipeline** — automated `pytest` runs on every push and PR (338 tests)
+- **Camera proximity greeting** — YuNet DNN face detection with upper body Haar cascade fallback; detects approaching people even when face isn't visible (turned away, too tall/short); ElevenLabs voice greetings; presence-aware state machine with voice overlap prevention (disabled by default)
 
 ## 💻 Requirements
 
 - Windows 10/11 or macOS (packaged build target; both supported)
 - Python 3.11+ (PyQt6 + WebEngine)
 - Keyboard-emulating barcode scanner (manual typing + Enter works for testing)
-- **Camera plugin (optional)**: USB/built-in webcam, `opencv-python`, `mediapipe`, `edge-tts`
+- **Camera plugin (optional)**: USB/built-in webcam, `opencv-python` (YuNet DNN model bundled)
 
 ## 🚀 Setup
 
@@ -122,7 +122,7 @@ TrackAttendance/
 ## 🧪 Testing
 
 ```bash
-# Full unit test suite (307 tests)
+# Full unit test suite (338 tests)
 python -m pytest tests/ -v
 
 # Stress test (end-to-end with UI)
@@ -174,6 +174,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v1.9.0** — YuNet DNN face detection with upper body Haar cascade fallback (4-layer detection chain: YuNet → upper body → Haar face → motion), ElevenLabs voice greetings, voice overlap race condition fix, admin controls for confirm frames/strictness/duplicate detection toggle/alert duration with reset-to-defaults, camera icon repositioned below title bar, Excel export timezone conversion (UTC → local), PostgreSQL composite indexes and connection pool scaling (50 connections), BU aggregation query optimized with CTE, 338 tests
 - **v1.8.0** — Admin control center redesign (sectioned panel with runtime settings sliders), voice file override (`voices/` next to exe), duplicate detection by `legacy_id`, detailed duplicate roster report, configurable Haar cascade sensitivity, scan source tracking refined (`badge`/`lookup`/`manual`), dashboard refresh interval setting, station heartbeat & live status, clear this station / clear all with `clear_epoch` coordination, slider UI (green/grey fill bar), settings persistence across restarts, 307 tests
 - **v1.7.0** — Voice toggle (mute/unmute from header), employee email/name lookup for forgot-badge users, scan source tracking (`badge` / `manual_lookup`), unified export columns, `scan_source` column in cloud DB, requirements.txt cleanup (268 tests)
 - **v1.6.0** — Email field, BU sync to cloud, public mobile dashboard, roster summary sync, CI/CD test pipeline, stress test with local vs cloud dashboard verification
@@ -209,6 +210,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `CAMERA_MIN_SIZE_PCT` | `0.20` | Minimum detection size as fraction of frame width — filters out distant people |
 | `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `5` | Seconds with no person before kiosk resets to "empty" (ready to greet next person) |
 | `CAMERA_CONFIRM_FRAMES` | `3` | Consecutive detected frames required before greeting (prevents false positives) |
+| `CAMERA_HAAR_MIN_NEIGHBORS` | `5` | Haar cascade strictness — higher = fewer false positives but may miss detections |
 | `SCAN_FEEDBACK_DURATION_MS` | `5000` | Duration to show employee name after scan |
 | `DUPLICATE_BADGE_ALERT_DURATION_MS` | `3000` | Duplicate alert display duration |
 
@@ -230,5 +232,6 @@ See `.env.example` for the full list.
 
 Employee names and rosters stay local. Never commit `data/`, `exports/`, or `.env` files.
 
-- **Email addresses** — stored in the local database only; never synced to the cloud
+- **Employee names, email, position** — stored in the local database only; never synced to the cloud
 - **Business unit names** — synced to cloud for the mobile dashboard; these are organisational labels, not personally identifiable information
+- **Cloud receives only**: badge ID, station name, scan timestamp, business unit label, scan source

@@ -84,7 +84,23 @@ Required Excel columns: `Legacy ID`, `Full Name`, `SL L1 Desc`, `Position Desc`.
 |----------|---------|-------------|
 | `ADMIN_PIN` | *(empty)* | 4-6 digit PIN to enable admin panel. Leave empty to disable. |
 
-Admin panel is accessible from the dashboard header (gear icon). Features: view cloud scan count, clear cloud + local database (resets station name, auto-closes app).
+Admin panel is accessible from the dashboard header (gear icon). Features: view cloud scan count, clear cloud + local database, runtime camera/voice/duplicate settings, reset camera to defaults.
+
+## Camera Detection
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_CAMERA_DETECTION` | `False` | Enable camera proximity greeting plugin |
+| `CAMERA_DEVICE_ID` | `0` | Camera index (`0` = default webcam) |
+| `CAMERA_SHOW_OVERLAY` | `True` | Show floating camera preview (`False` = icon-only mode for production) |
+| `CAMERA_GREETING_COOLDOWN_SECONDS` | `60` | Minimum seconds between greetings per person |
+| `CAMERA_SCAN_BUSY_SECONDS` | `30` | Suppress greetings after a badge scan |
+| `CAMERA_MIN_SIZE_PCT` | `0.20` | Minimum detection size as fraction of frame width |
+| `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `5` | Seconds with no person before kiosk resets to "empty" |
+| `CAMERA_CONFIRM_FRAMES` | `3` | Consecutive detected frames required before greeting |
+| `CAMERA_HAAR_MIN_NEIGHBORS` | `5` | Haar cascade strictness (2-10, higher = fewer false positives) |
+
+Detection chain: YuNet DNN face → Upper body Haar → Frontal face Haar → Motion (frame differencing).
 
 ## Logging
 

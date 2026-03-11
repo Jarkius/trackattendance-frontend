@@ -14,7 +14,7 @@ Track Attendance ships as a PyQt6 desktop shell that hosts a single-page web int
   - Registers the `Api` object on a `QWebChannel` so JavaScript can call back-end slots (`submit_scan`, `export_scans`, `get_initial_data`, `close_window`, `finalize_export_close`).
   - Applies window chrome (frameless, fade-in animation) and handles close events, including auto-export logic.
   - Manages critical startup failures, such as prompting for a station name if unconfigured or displaying a fallback UI if web assets are missing.
-  - **Admin control center** — PIN-protected settings panel with runtime-tunable sliders (duplicate detection, voice, camera, connection check). Settings persist in SQLite `app_settings` table and reload on startup.
+  - **Admin control center** — PIN-protected settings panel with runtime-tunable sliders (duplicate detection toggle + alert duration, voice, camera confirm frames + strictness + reset to defaults, connection check). Settings persist in SQLite `roster_meta` table and reload on startup.
 
 ### 2.2 Web Interface (HTML/CSS/JavaScript)
 - **Location:** `web/index.html`, `web/css/style.css`, `web/script.js`
@@ -104,26 +104,42 @@ health check thread (background)
             └─ if changed → POST /v1/roster/summary → cache new hash
 ```
 
-## 5. Error Handling & Resilience
+## 5. Camera Detection Architecture
+
+The proximity detection plugin uses a 4-layer detection chain, evaluated in order until one succeeds:
+
+```
+1. YuNet DNN face detection (primary — OpenCV built-in, GPU-accelerated)
+2. Upper body Haar cascade (fallback — detects torso when face not visible)
+3. Frontal face Haar cascade (legacy fallback if YuNet unavailable)
+4. Motion detection via frame differencing (last resort)
+```
+
+**Key design decisions:**
+- **Stale frame prevention**: The motion detector's background frame is always updated, even when face/body detectors handle detection. This prevents false positives when motion fallback eventually fires after a long period of face-only detection.
+- **Voice overlap prevention**: The proximity manager sets a time-based guard *before* playing greeting audio, and checks both the time guard and `VoicePlayer.is_playing()` to prevent greeting/scan voice overlap.
+- **Thread safety**: Camera runs on a daemon thread; all Qt UI updates (overlay, greeting audio) are dispatched to the main thread via `QMetaObject.invokeMethod` with `QueuedConnection`.
+
+## 6. Error Handling & Resilience
 
 - **UI Load Failure:** If `web/index.html` cannot be loaded, the `QWebEngineView` will render a static `FALLBACK_ERROR_HTML` page to notify the user of the misconfiguration.
 - **Missing Employee Roster:** On startup, if `data/employee.xlsx` is not found and the employee table is empty, the application presents a `QMessageBox` warning before proceeding. Scans will be recorded as "unmatched" in this state.
 - **Export Failures:** Both manual and on-close export operations are wrapped in `try...except` blocks. If an error occurs, the `export-overlay` in the UI is invoked with a failure state, providing feedback to the user instead of crashing.
 
-## 6. Packaging & Runtime Assets
+## 7. Packaging & Runtime Assets
 
 - **Icon & Spec:** `assets/track_attendance.ico`, `TrackAttendance.spec` configure PyInstaller builds.
 - **Embedded assets:** `web/` and `assets/` are bundled so the executable can run without network access.
 - **Operational data:** `data/` and `exports/` stay outside the bundle; they are created/ignored at runtime to protect sensitive information.
 - **Voice override:** When frozen, the app checks for a `voices/` directory next to the exe. If found with MP3 files, those are used instead of the bundled `assets/voices/`. Same pattern applies to `greetings/` for camera greeting audio. This allows customising audio without recompiling.
 
-## 7. External Dependencies
+## 8. External Dependencies
 The web interface relies on locally-hosted, open-source assets for its presentation layer. This ensures the application can run fully offline without fetching resources from external CDNs.
 
 - **Typography:** The primary font is Inter, served from `web/fonts/`. It is chosen for its high legibility on screens.
 - **Icons:** UI icons are provided by the Material Icons set, served from `web/fonts/` and defined in `web/css/material-icons.css`. This provides a consistent and modern visual language for interactive elements.
 
-## 8. Backend Dependencies
+## 9. Backend Dependencies
 
 - **PyQt6 / PyQt6-WebEngine:** windowing, web engine, and Qt channels.
 - **openpyxl:** workbook import/export support.
