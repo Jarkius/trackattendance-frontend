@@ -240,14 +240,18 @@ class ProximityDetector:
             return True
         return False
 
-    def _detect_motion(self, frame: np.ndarray) -> bool:
+    def _detect_motion(self, frame: np.ndarray, precomputed_gray=None) -> bool:
         """Fallback: simple motion detection via frame differencing.
 
         Also applies min_size_pct filter — the largest motion contour's
         bounding-box width must fill at least min_size_pct of the frame.
+        Accepts optional precomputed_gray to avoid redundant grayscale conversion.
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+        if precomputed_gray is not None:
+            gray = precomputed_gray
+        else:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.GaussianBlur(gray, (21, 21), 0)
 
         if self._background_frame is None:
             self._background_frame = gray
@@ -316,11 +320,18 @@ class ProximityDetector:
                     person_in_frame = True
                     self._last_detection_method = "upperbody"
 
-        # Motion fallback — last resort if no face/body detector matched
-        if not person_in_frame and not self._use_yunet and self._haar_cascade is None:
-            if self._detect_motion(frame):
+        # Always update motion background frame to prevent stale-frame false positives
+        # when motion fallback is eventually called after a long face/body detection run
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (21, 21), 0)
+        if not person_in_frame:
+            # Motion fallback — last resort if no face/body detector matched
+            if self._detect_motion(frame, precomputed_gray=gray):
                 person_in_frame = True
                 self._last_detection_method = "motion"
+        else:
+            # Person found by face/body — just keep background fresh
+            self._background_frame = gray
 
         if person_in_frame:
             self._last_person_seen_time = current_time

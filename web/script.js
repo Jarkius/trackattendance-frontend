@@ -1819,6 +1819,11 @@ ${destination}` : message;
     const adminMinsizeValue = document.getElementById('admin-minsize-value');
     const adminAbsenceSlider = document.getElementById('admin-absence-slider');
     const adminAbsenceValue = document.getElementById('admin-absence-value');
+    const adminConfirmSlider = document.getElementById('admin-confirm-slider');
+    const adminConfirmValue = document.getElementById('admin-confirm-value');
+    const adminHaarSlider = document.getElementById('admin-haar-slider');
+    const adminHaarValue = document.getElementById('admin-haar-value');
+    const adminCameraResetBtn = document.getElementById('admin-camera-reset-btn');
     const adminFeedbackSlider = document.getElementById('admin-feedback-slider');
     const adminFeedbackValue = document.getElementById('admin-feedback-value');
     const adminConncheckSlider = document.getElementById('admin-conncheck-slider');
@@ -1934,6 +1939,10 @@ ${destination}` : message;
                         syncSlider(adminMinsizeSlider, adminMinsizeValue, minPct, 5, 40, '%');
                         const absence = result.absence_threshold || 3;
                         syncSlider(adminAbsenceSlider, adminAbsenceValue, absence, 1, 10, 'sec');
+                        const confirmF = result.confirm_frames || 3;
+                        syncSlider(adminConfirmSlider, adminConfirmValue, confirmF, 1, 10, 'frm');
+                        const haarN = result.haar_min_neighbors || 5;
+                        syncSlider(adminHaarSlider, adminHaarValue, haarN, 2, 10, '');
                     }
                     // Display section
                     const feedbackSec = Math.round((result.scan_feedback_ms || 5000) / 1000);
@@ -2142,6 +2151,42 @@ ${destination}` : message;
             if (bridge.admin_set_absence_threshold) bridge.admin_set_absence_threshold(v, () => {});
         });
     });
+    bindSlider(adminConfirmSlider, adminConfirmValue, 'frm', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_confirm_frames) bridge.admin_set_confirm_frames(v, () => {});
+        });
+    });
+    bindSlider(adminHaarSlider, adminHaarValue, '', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_haar_min_neighbors) bridge.admin_set_haar_min_neighbors(v, () => {});
+        });
+    });
+
+    // Reset camera settings to .env defaults
+    if (adminCameraResetBtn) {
+        adminCameraResetBtn.addEventListener('click', () => {
+            queueOrRun((bridge) => {
+                if (bridge.admin_reset_camera_settings) {
+                    bridge.admin_reset_camera_settings((result) => {
+                        if (result && result.ok) {
+                            // Refresh UI with defaults
+                            if (bridge.admin_get_local_settings) {
+                                bridge.admin_get_local_settings((r) => {
+                                    if (r) {
+                                        syncSlider(adminCooldownSlider, adminCooldownValue, r.greeting_cooldown || 60, 5, 120, 'sec');
+                                        syncSlider(adminMinsizeSlider, adminMinsizeValue, Math.round((r.min_size_pct || 0.20) * 100), 5, 40, '%');
+                                        syncSlider(adminAbsenceSlider, adminAbsenceValue, r.absence_threshold || 3, 1, 10, 'sec');
+                                        syncSlider(adminConfirmSlider, adminConfirmValue, r.confirm_frames || 3, 1, 10, 'frm');
+                                        syncSlider(adminHaarSlider, adminHaarValue, r.haar_min_neighbors || 5, 2, 10, '');
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    }
 
     // Display sliders: scan feedback (seconds → ms), connection check
     bindSlider(adminFeedbackSlider, adminFeedbackValue, 'sec', (v) => {

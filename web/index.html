@@ -367,6 +367,27 @@
                         </div>
                         <span class="adm-slider-row__value" id="admin-absence-value">3 sec</span>
                     </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Confirm</span>
+                        <div class="adm-slider-wrap" data-default="3" data-min="1" data-max="10" data-key="confirm_frames">
+                            <input type="range" class="adm-slider" id="admin-confirm-slider" min="1" max="10" value="3" step="1" style="--fill:22.2%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.222;" title="Default: 3 frames"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-confirm-value">3 frm</span>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Strictness</span>
+                        <div class="adm-slider-wrap" data-default="5" data-min="2" data-max="10" data-key="haar_min_neighbors">
+                            <input type="range" class="adm-slider" id="admin-haar-slider" min="2" max="10" value="5" step="1" style="--fill:37.5%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.375;" title="Default: 5"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-haar-value">5</span>
+                    </div>
+                    <div style="margin-top:12px; text-align:center;">
+                        <button class="adm-btn adm-btn--secondary" id="admin-camera-reset-btn" type="button" style="font-size:12px; padding:6px 16px;">
+                            Reset Camera to Defaults
+                        </button>
+                    </div>
                 </div>
                 <div class="adm-section">
                     <div class="adm-section__header adm-section__header--display"><i class="material-icons">tv</i> Display</div>

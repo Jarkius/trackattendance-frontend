@@ -407,6 +407,8 @@ class Api(QObject):
             "greeting_cooldown": config.CAMERA_GREETING_COOLDOWN_SECONDS,
             "min_size_pct": config.CAMERA_MIN_SIZE_PCT,
             "absence_threshold": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
+            "confirm_frames": config.CAMERA_CONFIRM_FRAMES,
+            "haar_min_neighbors": config.CAMERA_HAAR_MIN_NEIGHBORS,
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
         }
@@ -820,12 +822,16 @@ class Api(QObject):
         greeting_cooldown = config.CAMERA_GREETING_COOLDOWN_SECONDS
         min_size_pct = config.CAMERA_MIN_SIZE_PCT
         absence_threshold = config.CAMERA_ABSENCE_THRESHOLD_SECONDS
+        confirm_frames = config.CAMERA_CONFIRM_FRAMES
+        haar_min_neighbors = config.CAMERA_HAAR_MIN_NEIGHBORS
         if self._proximity_manager:
             camera_running = bool(self._proximity_manager._running)
             camera_overlay = bool(self._proximity_manager._show_overlay)
             greeting_cooldown = self._proximity_manager._cooldown
             min_size_pct = self._proximity_manager._min_size_pct
             absence_threshold = self._proximity_manager._absence_threshold
+            confirm_frames = self._proximity_manager._confirm_frames
+            haar_min_neighbors = self._proximity_manager._haar_min_neighbors
         # Build dashboard URL from cloud API base
         dashboard_url = ""
         if config.CLOUD_API_URL:
@@ -841,6 +847,8 @@ class Api(QObject):
             "greeting_cooldown": greeting_cooldown,
             "min_size_pct": min_size_pct,
             "absence_threshold": absence_threshold,
+            "confirm_frames": confirm_frames,
+            "haar_min_neighbors": haar_min_neighbors,
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
@@ -977,6 +985,20 @@ class Api(QObject):
                 count += 1
             except ValueError:
                 pass
+        v = db.get_meta("setting:confirm_frames")
+        if v is not None:
+            try:
+                config.CAMERA_CONFIRM_FRAMES = max(1, min(15, int(v)))
+                count += 1
+            except ValueError:
+                pass
+        v = db.get_meta("setting:haar_min_neighbors")
+        if v is not None:
+            try:
+                config.CAMERA_HAAR_MIN_NEIGHBORS = max(2, min(10, int(v)))
+                count += 1
+            except ValueError:
+                pass
         if count:
             LOGGER.info("[Admin] Loaded %d saved setting(s) from database", count)
 
@@ -1031,7 +1053,7 @@ class Api(QObject):
         self._proximity_manager._min_size_pct = pct
         # Also update detector if running
         if self._proximity_manager._detector:
-            self._proximity_manager._detector._min_size_pct = pct
+            self._proximity_manager._detector.min_size_pct = pct
         config.CAMERA_MIN_SIZE_PCT = pct
         self._save_setting("min_size_pct", str(round(pct, 2)))
         LOGGER.info("[Admin] Min face size set to %.0f%%", pct * 100)
@@ -1046,11 +1068,79 @@ class Api(QObject):
         self._proximity_manager._absence_threshold = seconds
         # Also update detector if running
         if self._proximity_manager._detector:
-            self._proximity_manager._detector._absence_threshold = seconds
+            self._proximity_manager._detector.absence_threshold = seconds
         config.CAMERA_ABSENCE_THRESHOLD_SECONDS = seconds
         self._save_setting("absence_threshold", str(round(seconds, 1)))
         LOGGER.info("[Admin] Absence threshold set to %.1fs", seconds)
         return {"ok": True, "value": seconds}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_confirm_frames(self, frames: int) -> dict:
+        """Set confirm frames required before greeting. Persisted across restarts."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        frames = max(1, min(15, frames))
+        self._proximity_manager._confirm_frames = frames
+        if self._proximity_manager._detector:
+            self._proximity_manager._detector.confirm_frames = frames
+        config.CAMERA_CONFIRM_FRAMES = frames
+        self._save_setting("confirm_frames", str(frames))
+        LOGGER.info("[Admin] Confirm frames set to %d", frames)
+        return {"ok": True, "value": frames}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_haar_min_neighbors(self, neighbors: int) -> dict:
+        """Set Haar cascade strictness (minNeighbors). Persisted across restarts."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        neighbors = max(2, min(10, neighbors))
+        self._proximity_manager._haar_min_neighbors = neighbors
+        if self._proximity_manager._detector:
+            self._proximity_manager._detector.haar_min_neighbors = neighbors
+        config.CAMERA_HAAR_MIN_NEIGHBORS = neighbors
+        self._save_setting("haar_min_neighbors", str(neighbors))
+        LOGGER.info("[Admin] Haar min neighbors set to %d", neighbors)
+        return {"ok": True, "value": neighbors}
+
+    @pyqtSlot(result="QVariant")
+    def admin_reset_camera_settings(self) -> dict:
+        """Reset all camera settings to .env defaults. Clears DB overrides."""
+        db = self._service._db
+        camera_keys = [
+            "camera_overlay", "greeting_cooldown", "min_size_pct",
+            "absence_threshold", "confirm_frames", "haar_min_neighbors",
+        ]
+        for key in camera_keys:
+            db._connection.execute("DELETE FROM roster_meta WHERE key = ?", (f"setting:{key}",))
+        db._connection.commit()
+
+        # Restore from defaults snapshot
+        d = self._config_defaults
+        config.CAMERA_GREETING_COOLDOWN_SECONDS = d["greeting_cooldown"]
+        config.CAMERA_MIN_SIZE_PCT = d["min_size_pct"]
+        config.CAMERA_ABSENCE_THRESHOLD_SECONDS = d["absence_threshold"]
+        config.CAMERA_CONFIRM_FRAMES = d["confirm_frames"]
+        config.CAMERA_HAAR_MIN_NEIGHBORS = d["haar_min_neighbors"]
+        config.CAMERA_SHOW_OVERLAY = False  # production default
+
+        # Push to live manager/detector
+        if self._proximity_manager:
+            self._proximity_manager._cooldown = d["greeting_cooldown"]
+            self._proximity_manager._min_size_pct = d["min_size_pct"]
+            self._proximity_manager._absence_threshold = d["absence_threshold"]
+            self._proximity_manager._confirm_frames = d["confirm_frames"]
+            self._proximity_manager._haar_min_neighbors = d["haar_min_neighbors"]
+            self._proximity_manager.set_overlay_mode(False)
+            det = self._proximity_manager._detector
+            if det:
+                det.cooldown = d["greeting_cooldown"]
+                det.min_size_pct = d["min_size_pct"]
+                det.absence_threshold = d["absence_threshold"]
+                det.confirm_frames = d["confirm_frames"]
+                det.haar_min_neighbors = d["haar_min_neighbors"]
+
+        LOGGER.info("[Admin] Camera settings reset to defaults")
+        return {"ok": True}
 
     @pyqtSlot()
     def _handle_clear_epoch_and_heartbeat_slot(self) -> None:
