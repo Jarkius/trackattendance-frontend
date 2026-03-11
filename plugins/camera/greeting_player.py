@@ -6,6 +6,8 @@ Fully self-contained — does not depend on the main app's VoicePlayer.
 
 Thread-safe: play_random() can be called from any thread — actual
 QMediaPlayer operations are marshalled to the Qt main thread.
+
+Pre-loads the next greeting after each play to eliminate load delay.
 """
 
 import logging
@@ -41,6 +43,7 @@ class GreetingPlayer(QObject):
     """Generates and plays proximity greeting audio via edge-tts + QMediaPlayer.
 
     Thread-safe: play_random() schedules playback on the Qt main thread.
+    Pre-loads the next greeting so playback is instant on detection.
     """
 
     def __init__(self, volume: float = 1.0):
@@ -51,6 +54,7 @@ class GreetingPlayer(QObject):
         self._greeting_files: list[Path] = []
         self._last_played: Optional[Path] = None
         self._pending_file: Optional[Path] = None
+        self._preloaded: bool = False  # True when next greeting is already loaded
 
     def start(self) -> bool:
         """Generate greetings if needed, init QMediaPlayer. Returns True on success."""
@@ -93,6 +97,9 @@ class GreetingPlayer(QObject):
         dev = self._audio_output.device()
         LOGGER.info("[Greeting] Audio output: %s (volume=%.0f%%)", dev.description(), self._volume * 100)
         LOGGER.info("[Greeting] Ready with %d greeting(s)", len(self._greeting_files))
+
+        # Pre-load first greeting so first detection plays instantly
+        self._preload_next()
         return True
 
     def _generate_greetings(self, missing: list) -> None:
@@ -127,23 +134,31 @@ class GreetingPlayer(QObject):
             except Exception as exc:
                 LOGGER.warning("[Greeting] Generation failed for %s: %s", filename, exc)
 
+    def _pick_next(self) -> Path:
+        """Pick a random greeting, avoiding consecutive repeats."""
+        if len(self._greeting_files) > 1:
+            candidates = [f for f in self._greeting_files if f != self._last_played]
+            return random.choice(candidates)
+        return self._greeting_files[0]
+
+    def _preload_next(self) -> None:
+        """Pre-load the next random greeting into QMediaPlayer so play() is instant."""
+        if not self._player or not self._greeting_files:
+            return
+        choice = self._pick_next()
+        self._last_played = choice
+        self._pending_file = choice
+        self._player.setSource(self._QUrl.fromLocalFile(str(choice.resolve())))
+        self._preloaded = True
+        LOGGER.debug("[Greeting] Pre-loaded: %s", choice.name)
+
     def play_random(self) -> None:
-        """Pick a random greeting and schedule playback on the main thread.
+        """Play the pre-loaded greeting instantly. Schedules on main thread.
 
         Safe to call from any thread (camera thread, worker thread, etc.).
         """
         if not self._player or not self._greeting_files:
             return
-
-        # Pick random, avoid consecutive repeat
-        if len(self._greeting_files) > 1:
-            candidates = [f for f in self._greeting_files if f != self._last_played]
-            choice = random.choice(candidates)
-        else:
-            choice = self._greeting_files[0]
-
-        self._last_played = choice
-        self._pending_file = choice
 
         # Marshal to main thread — QMediaPlayer must only be touched there
         QMetaObject.invokeMethod(
@@ -152,8 +167,8 @@ class GreetingPlayer(QObject):
 
     @pyqtSlot()
     def _play_on_main_thread(self) -> None:
-        """Actual QMediaPlayer operations — guaranteed to run on Qt main thread."""
-        if self._pending_file is None or not self._player:
+        """Play pre-loaded greeting, then pre-load the next one."""
+        if not self._player:
             return
 
         from PyQt6.QtMultimedia import QMediaPlayer
@@ -161,9 +176,17 @@ class GreetingPlayer(QObject):
         if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.stop()
 
-        self._player.setSource(self._QUrl.fromLocalFile(str(self._pending_file.resolve())))
+        if not self._preloaded:
+            # Fallback: load now if nothing pre-loaded
+            choice = self._pick_next()
+            self._last_played = choice
+            self._player.setSource(self._QUrl.fromLocalFile(str(choice.resolve())))
+            LOGGER.info("[Greeting] Playing (loaded on-demand): %s", choice.name)
+        else:
+            LOGGER.info("[Greeting] Playing (pre-loaded): %s", self._pending_file.name if self._pending_file else "?")
+
         self._player.play()
-        LOGGER.info("[Greeting] Playing: %s", self._pending_file.name)
+        self._preloaded = False
         self._pending_file = None
 
     @pyqtSlot("QMediaPlayer::Error", str)
@@ -184,6 +207,9 @@ class GreetingPlayer(QObject):
         name = status_names.get(status, str(status))
         if status == QMediaPlayer.MediaStatus.InvalidMedia:
             LOGGER.error("[Greeting] InvalidMedia — file may be corrupt or format unsupported")
+        elif status == QMediaPlayer.MediaStatus.EndOfMedia:
+            # Greeting finished — pre-load the next one for instant playback
+            self._preload_next()
         else:
             LOGGER.debug("[Greeting] Media status: %s", name)
 
@@ -194,5 +220,6 @@ class GreetingPlayer(QObject):
         Clears _pending_file so any queued _play_on_main_thread calls become no-ops.
         """
         self._pending_file = None
+        self._preloaded = False
         if self._player:
             self._player.stop()
