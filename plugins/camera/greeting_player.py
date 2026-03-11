@@ -59,10 +59,14 @@ class GreetingPlayer(QObject):
             from PyQt6.QtCore import QUrl
 
             self._QUrl = QUrl
+            self._QMediaPlayer = QMediaPlayer
             self._player = QMediaPlayer()
             self._audio_output = QAudioOutput()
             self._audio_output.setVolume(self._volume)
             self._player.setAudioOutput(self._audio_output)
+            # Log playback errors and state changes
+            self._player.errorOccurred.connect(self._on_error)
+            self._player.mediaStatusChanged.connect(self._on_media_status)
         except ImportError:
             LOGGER.warning("[Greeting] PyQt6.QtMultimedia not available")
             return False
@@ -85,6 +89,9 @@ class GreetingPlayer(QObject):
             LOGGER.warning("[Greeting] No greeting MP3s available")
             return False
 
+        # Log audio output device for debugging
+        dev = self._audio_output.device()
+        LOGGER.info("[Greeting] Audio output: %s (volume=%.0f%%)", dev.description(), self._volume * 100)
         LOGGER.info("[Greeting] Ready with %d greeting(s)", len(self._greeting_files))
         return True
 
@@ -158,6 +165,27 @@ class GreetingPlayer(QObject):
         self._player.play()
         LOGGER.info("[Greeting] Playing: %s", self._pending_file.name)
         self._pending_file = None
+
+    @pyqtSlot("QMediaPlayer::Error", str)
+    def _on_error(self, error, message):
+        LOGGER.error("[Greeting] Playback error: %s — %s", error, message)
+
+    @pyqtSlot("QMediaPlayer::MediaStatus")
+    def _on_media_status(self, status):
+        from PyQt6.QtMultimedia import QMediaPlayer
+        status_names = {
+            QMediaPlayer.MediaStatus.NoMedia: "NoMedia",
+            QMediaPlayer.MediaStatus.LoadingMedia: "Loading",
+            QMediaPlayer.MediaStatus.LoadedMedia: "Loaded",
+            QMediaPlayer.MediaStatus.BufferedMedia: "Buffered",
+            QMediaPlayer.MediaStatus.EndOfMedia: "EndOfMedia",
+            QMediaPlayer.MediaStatus.InvalidMedia: "InvalidMedia",
+        }
+        name = status_names.get(status, str(status))
+        if status == QMediaPlayer.MediaStatus.InvalidMedia:
+            LOGGER.error("[Greeting] InvalidMedia — file may be corrupt or format unsupported")
+        else:
+            LOGGER.debug("[Greeting] Media status: %s", name)
 
     def stop(self) -> None:
         """Stop playback and disarm pending invocations.
