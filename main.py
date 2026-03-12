@@ -870,6 +870,7 @@ class Api(QObject):
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
+            "monitoring_mode": config.CLOUD_READ_ONLY,
             "defaults": self._config_defaults,
         }
 
@@ -1045,6 +1046,11 @@ class Api(QObject):
                 count += 1
             except ValueError:
                 pass
+        # Cloud sync settings
+        v = db.get_meta("setting:cloud_read_only")
+        if v is not None:
+            config.CLOUD_READ_ONLY = v.lower() in ("true", "1")
+            count += 1
         if count:
             LOGGER.info("[Admin] Loaded %d saved setting(s) from database", count)
 
@@ -1089,6 +1095,14 @@ class Api(QObject):
         self._save_setting("connection_check_s", str(seconds))
         LOGGER.info("[Admin] Connection check interval set to %.0fs", seconds)
         return {"ok": True, "value": seconds}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_monitoring_mode(self, enabled: bool) -> dict:
+        """Toggle monitoring (read-only) mode. Persisted across restarts."""
+        config.CLOUD_READ_ONLY = enabled
+        self._save_setting("cloud_read_only", str(enabled))
+        LOGGER.info("[Admin] Monitoring mode %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
 
     @pyqtSlot(float, result="QVariant")
     def admin_set_min_size_pct(self, pct: float) -> dict:

@@ -1805,6 +1805,8 @@ ${destination}` : message;
     const adminSettingsBack = document.getElementById('admin-settings-back');
     const adminSettingsBackBottom = document.getElementById('admin-settings-back-bottom');
     const adminRefreshStatus = document.getElementById('admin-refresh-status');
+    const adminMonitoringToggle = document.getElementById('admin-monitoring-toggle');
+    const adminMonitoringStatus = document.getElementById('admin-monitoring-status');
     const adminDupDetectionToggle = document.getElementById('admin-dup-detection-toggle');
     const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
@@ -1893,6 +1895,17 @@ ${destination}` : message;
             if (bridge.admin_get_local_settings) {
                 bridge.admin_get_local_settings((result) => {
                     if (!result) return;
+                    // Monitoring mode toggle
+                    const monitoringEnabled = !!result.monitoring_mode;
+                    if (adminMonitoringToggle) {
+                        adminMonitoringToggle.classList.toggle('active', monitoringEnabled);
+                    }
+                    if (adminMonitoringStatus) {
+                        adminMonitoringStatus.textContent = monitoringEnabled
+                            ? 'ON: No data sent to cloud (read-only)'
+                            : 'OFF: Normal sync active';
+                        adminMonitoringStatus.style.color = monitoringEnabled ? '#ff9800' : '#999';
+                    }
                     // Duplicate detection toggle
                     const dupEnabled = result.duplicate_detection_enabled !== false;
                     if (adminDupDetectionToggle) {
@@ -2074,6 +2087,26 @@ ${destination}` : message;
             });
         });
     });
+
+    // Monitoring mode toggle
+    if (adminMonitoringToggle) {
+        adminMonitoringToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminMonitoringToggle.classList.contains('active');
+            adminMonitoringToggle.classList.toggle('active', newState);
+            if (adminMonitoringStatus) {
+                adminMonitoringStatus.textContent = newState
+                    ? 'ON: No data sent to cloud (read-only)'
+                    : 'OFF: Normal sync active';
+                adminMonitoringStatus.style.color = newState ? '#ff9800' : '#999';
+            }
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_monitoring_mode) {
+                    bridge.admin_set_monitoring_mode(newState, () => {});
+                }
+            });
+        });
+    }
 
     // Duplicate detection toggle
     if (adminDupDetectionToggle) {
