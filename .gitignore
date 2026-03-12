@@ -50,8 +50,8 @@ secrets/
 # Tooling
 tools/
 
-# Camera plugin (runtime-generated greeting audio)
-plugins/camera/greetings/
+# Camera plugin (keep greeting MP3s, ignore generated cache)
+plugins/camera/greetings/__pycache__/
 
 # macOS
 .DS_Store
