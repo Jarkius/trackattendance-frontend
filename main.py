@@ -1193,6 +1193,10 @@ class Api(QObject):
         """Check clear_epoch and send heartbeat. Runs on MAIN thread (SQLite safe)."""
         if not self._sync_service:
             return
+        # Read-only mode: skip all outgoing operations and epoch sync
+        import config
+        if config.CLOUD_READ_ONLY:
+            return
 
         cloud_epoch = self._sync_service.last_clear_epoch
         local_epoch = self._service._db.get_meta("last_clear_epoch")
