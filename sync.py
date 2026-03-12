@@ -127,6 +127,10 @@ class SyncService:
 
     def send_heartbeat(self, station_name: str, last_clear_epoch: str | None, local_scan_count: int, retries: int = 1) -> bool:
         """Report station status to cloud. Retries on failure. Returns True on success."""
+        from config import CLOUD_READ_ONLY
+        if CLOUD_READ_ONLY:
+            LOGGER.debug("Heartbeat skipped (read-only mode)")
+            return True
         for attempt in range(1 + retries):
             try:
                 response = requests.post(
@@ -213,10 +217,16 @@ class SyncService:
             max_batches: Maximum number of batches to sync when sync_all=True.
                          Prevents infinite loops. Default None (no limit).
 
+        Read-only mode: returns zeros without uploading.
+
         Returns:
             Dictionary with counts: {"synced": int, "failed": int, "pending": int}
             If sync_all=True, also includes {"batches": int}
         """
+        from config import CLOUD_READ_ONLY
+        if CLOUD_READ_ONLY:
+            LOGGER.debug("Scan sync skipped (read-only mode)")
+            return {"synced": 0, "failed": 0, "pending": 0}
         if not sync_all:
             # Original behavior: sync one batch only
             return self._sync_one_batch()
@@ -568,6 +578,10 @@ class SyncService:
 
 def sync_roster_summary(db: DatabaseManager, api_url: str, api_key: str) -> dict:
     """Push BU roster counts to cloud for dashboard progress display."""
+    from config import CLOUD_READ_ONLY
+    if CLOUD_READ_ONLY:
+        LOGGER.debug("Roster sync skipped (read-only mode)")
+        return {"ok": True, "skipped": True}
     bu_data = db.get_employees_by_bu()
     if not bu_data:
         return {"ok": False, "reason": "no_employees"}
@@ -604,7 +618,12 @@ def sync_roster_summary_from_data(bu_data: list, api_url: str, api_key: str) -> 
 
     Called from health check thread after first successful API connection.
     Checks cloud hash first — skips POST if roster already up to date.
+    Skipped entirely in CLOUD_READ_ONLY mode.
     """
+    from config import CLOUD_READ_ONLY
+    if CLOUD_READ_ONLY:
+        LOGGER.debug("Roster sync from data skipped (read-only mode)")
+        return {"ok": True, "skipped": True}
     import hashlib
 
     # Compute local hash (same algorithm as API)

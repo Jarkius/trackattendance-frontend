@@ -94,6 +94,12 @@ if not CLOUD_API_KEY:
     print("="*70 + "\n")
     sys.exit(1)
 
+# Read-only mode: view dashboard data from cloud but don't send anything
+# (no heartbeats, no scan sync, no station registration)
+CLOUD_READ_ONLY = os.getenv("CLOUD_READ_ONLY", "False").lower() in ("true", "1", "yes")
+if CLOUD_READ_ONLY:
+    print("[Config] CLOUD_READ_ONLY=true — no heartbeats, syncs, or roster uploads will be sent")
+
 # Number of scans to sync in each batch
 CLOUD_SYNC_BATCH_SIZE = _safe_int("CLOUD_SYNC_BATCH_SIZE", 100, min_val=1, max_val=1000)
 
