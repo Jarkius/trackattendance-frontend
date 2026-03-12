@@ -102,6 +102,7 @@ class DashboardService:
             result["error"] = f"Failed to get employee count: {e}"
 
         # Get cloud scan data from API
+        cloud_bus = []  # BU data from cloud (all stations combined)
         try:
             response = requests.get(
                 f"{self._api_url}/v1/dashboard/stats",
@@ -113,6 +114,7 @@ class DashboardService:
                 data = response.json()
                 result["total_scans"] = data.get("total_scans", 0)
                 result["scanned"] = data.get("unique_badges", 0)
+                cloud_bus = data.get("business_units", [])
                 result["stations"] = sorted([
                     {
                         "name": s.get("name", "--"),
@@ -152,35 +154,53 @@ class DashboardService:
                 (result["scanned"] / result["registered"]) * 100, 1
             )
 
-        # Get BU breakdown from LOCAL SQLite (no API call needed)
-        try:
-            bu_data = self._db_manager.get_scans_by_bu()
+        # Get BU breakdown from cloud API (aggregates all stations)
+        # Falls back to local SQLite if cloud data unavailable
+        if cloud_bus:
             bu_list = []
-            for bu in bu_data:
-                registered = bu["registered"]
-                scanned = bu["scanned"]
+            for bu in cloud_bus:
+                registered = bu.get("registered", 0)
+                scanned = bu.get("unique", 0)
+                name = bu.get("name", "--")
                 rate = round((scanned / registered) * 100, 1) if registered > 0 else 0.0
                 bu_list.append({
-                    "bu_name": bu["bu_name"],
+                    "bu_name": name,
                     "registered": registered,
                     "scanned": scanned,
                     "attendance_rate": rate,
                 })
-
-            unmatched_count = self._db_manager.count_unmatched_scanned_badges()
-            if unmatched_count > 0:
-                bu_list.append({
-                    "bu_name": "(Unmatched)",
-                    "registered": 0,
-                    "scanned": unmatched_count,
-                    "attendance_rate": 0.0,
-                })
-
             result["business_units"] = bu_list
-            logger.info(f"Dashboard: BU breakdown from local DB for {len(bu_list)} BUs")
-        except Exception as e:
-            logger.error(f"Dashboard: Failed to calculate BU breakdown: {e}")
-            result["business_units"] = []
+            logger.info(f"Dashboard: BU breakdown from cloud API for {len(bu_list)} BUs")
+        else:
+            # Fallback: local SQLite (only this station's scans)
+            try:
+                bu_data = self._db_manager.get_scans_by_bu()
+                bu_list = []
+                for bu in bu_data:
+                    registered = bu["registered"]
+                    scanned = bu["scanned"]
+                    rate = round((scanned / registered) * 100, 1) if registered > 0 else 0.0
+                    bu_list.append({
+                        "bu_name": bu["bu_name"],
+                        "registered": registered,
+                        "scanned": scanned,
+                        "attendance_rate": rate,
+                    })
+
+                unmatched_count = self._db_manager.count_unmatched_scanned_badges()
+                if unmatched_count > 0:
+                    bu_list.append({
+                        "bu_name": "(Unmatched)",
+                        "registered": 0,
+                        "scanned": unmatched_count,
+                        "attendance_rate": 0.0,
+                    })
+
+                result["business_units"] = bu_list
+                logger.info(f"Dashboard: BU breakdown from local DB for {len(bu_list)} BUs (cloud unavailable)")
+            except Exception as e:
+                logger.error(f"Dashboard: Failed to calculate BU breakdown: {e}")
+                result["business_units"] = []
 
         return result
 
