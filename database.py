@@ -427,6 +427,38 @@ class DatabaseManager:
             for row in cursor.fetchall()
         ]
 
+    def fetch_last_pending_scan(self) -> "Optional[ScanRecord]":
+        """Fetch the most recently recorded pending scan (for Live Sync immediate upload)."""
+        cursor = self._connection.execute(
+            """
+            SELECT id, badge_id, scanned_at, station_name,
+                   employee_full_name, legacy_id, sl_l1_desc, position_desc,
+                   email, scan_source, sync_status, synced_at, sync_error
+            FROM scans
+            WHERE sync_status = 'pending'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        return ScanRecord(
+            id=row["id"],
+            badge_id=row["badge_id"],
+            scanned_at=row["scanned_at"],
+            station_name=row["station_name"],
+            employee_full_name=row["employee_full_name"],
+            legacy_id=row["legacy_id"],
+            sl_l1_desc=row["sl_l1_desc"],
+            position_desc=row["position_desc"],
+            email=row["email"],
+            scan_source=row["scan_source"],
+            sync_status=row["sync_status"],
+            synced_at=row["synced_at"],
+            sync_error=row["sync_error"],
+        )
+
     def mark_scans_as_synced(self, scan_ids: List[int]) -> int:
         """Mark scans as successfully synced to cloud."""
         if not scan_ids:

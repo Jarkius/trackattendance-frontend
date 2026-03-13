@@ -871,6 +871,7 @@ class Api(QObject):
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
             "monitoring_mode": config.CLOUD_READ_ONLY,
+            "live_sync_enabled": config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY,
             "defaults": self._config_defaults,
         }
 
@@ -1051,6 +1052,10 @@ class Api(QObject):
         if v is not None:
             config.CLOUD_READ_ONLY = v.lower() in ("true", "1")
             count += 1
+        v = db.get_meta("setting:live_sync_enabled")
+        if v is not None:
+            config.LIVE_SYNC_ENABLED = v.lower() in ("true", "1")
+            count += 1
         if count:
             LOGGER.info("[Admin] Loaded %d saved setting(s) from database", count)
 
@@ -1101,7 +1106,22 @@ class Api(QObject):
         """Toggle monitoring (read-only) mode. Persisted across restarts."""
         config.CLOUD_READ_ONLY = enabled
         self._save_setting("cloud_read_only", str(enabled))
+        # Auto-disable Live Sync when monitoring mode is on
+        if enabled and config.LIVE_SYNC_ENABLED:
+            config.LIVE_SYNC_ENABLED = False
+            self._save_setting("live_sync_enabled", "False")
+            LOGGER.info("[Admin] Live Sync auto-disabled (monitoring mode on)")
         LOGGER.info("[Admin] Monitoring mode %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_live_sync(self, enabled: bool) -> dict:
+        """Toggle Live Sync mode. Persisted across restarts."""
+        if enabled and config.CLOUD_READ_ONLY:
+            return {"ok": False, "message": "Cannot enable Live Sync in monitoring mode"}
+        config.LIVE_SYNC_ENABLED = enabled
+        self._save_setting("live_sync_enabled", str(enabled))
+        LOGGER.info("[Admin] Live Sync %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
 
     @pyqtSlot(float, result="QVariant")
@@ -1527,6 +1547,8 @@ def main() -> None:
         batch_size=config.CLOUD_SYNC_BATCH_SIZE,
         connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
     )
+    # Wire SyncService into AttendanceService for Live Sync (#54)
+    service.set_sync_service(sync_service)
     LOGGER.info(
         "Connection status checks: interval=%sms, timeout=%.2fs",
         config.CONNECTION_CHECK_INTERVAL_MS,

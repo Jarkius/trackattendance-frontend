@@ -1002,10 +1002,13 @@ ${destination}` : message;
 
             // Show duplicate badge alert if this is a duplicate rejection (block mode)
             if (response?.is_duplicate) {
+                const dupMsg = response.is_cross_station
+                    ? `Already scanned at ${response.other_station || 'another station'}`
+                    : message;
                 window.__handleDuplicateBadge({
                     badgeId: response.badgeId || 'Unknown',
                     fullName: response.fullName || 'Badge blocked',
-                    message: message,  // Pass the error message
+                    message: dupMsg,
                     isError: true,  // Red error styling for block mode
                     alertDurationMs: duplicateBadgeAlertDurationMs,
                 });
@@ -1034,10 +1037,13 @@ ${destination}` : message;
 
         // Show duplicate badge alert if this is a duplicate scan (warn mode - accepted but flagged)
         if (response?.is_duplicate) {
+            const dupMsg = response.is_cross_station
+                ? `Already scanned at ${response.cross_station_info?.station_name || 'another station'}`
+                : 'Scanned within 5 minutes';
             window.__handleDuplicateBadge({
                 badgeId: response.badgeId || 'Unknown',
                 fullName: response.fullName || 'Unknown',
-                message: 'Scanned within 5 minutes',  // Inform user about time window
+                message: dupMsg,
                 isError: false,  // Yellow warning styling for warn mode
                 alertDurationMs: duplicateBadgeAlertDurationMs,
             });
@@ -1807,6 +1813,9 @@ ${destination}` : message;
     const adminRefreshStatus = document.getElementById('admin-refresh-status');
     const adminMonitoringToggle = document.getElementById('admin-monitoring-toggle');
     const adminMonitoringStatus = document.getElementById('admin-monitoring-status');
+    const adminLiveSyncToggle = document.getElementById('admin-live-sync-toggle');
+    const adminLiveSyncStatus = document.getElementById('admin-live-sync-status');
+    const adminLiveSyncRow = document.getElementById('admin-live-sync-row');
     const adminDupDetectionToggle = document.getElementById('admin-dup-detection-toggle');
     const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
@@ -1905,6 +1914,21 @@ ${destination}` : message;
                             ? 'ON: No data sent to cloud (read-only)'
                             : 'OFF: Normal sync active';
                         adminMonitoringStatus.style.color = monitoringEnabled ? '#ff9800' : '#999';
+                    }
+                    // Live Sync toggle
+                    const liveSyncEnabled = !!result.live_sync_enabled;
+                    if (adminLiveSyncToggle) {
+                        adminLiveSyncToggle.classList.toggle('active', liveSyncEnabled);
+                    }
+                    if (adminLiveSyncStatus) {
+                        adminLiveSyncStatus.textContent = liveSyncEnabled
+                            ? 'Enabled: syncing each scan immediately'
+                            : 'Instant cloud sync + cross-station duplicate check';
+                        adminLiveSyncStatus.style.color = liveSyncEnabled ? '#86bc25' : '#999';
+                    }
+                    // Hide Live Sync row when monitoring mode is on
+                    if (adminLiveSyncRow) {
+                        adminLiveSyncRow.style.display = monitoringEnabled ? 'none' : '';
                     }
                     // Duplicate detection toggle
                     const dupEnabled = result.duplicate_detection_enabled !== false;
@@ -2100,9 +2124,40 @@ ${destination}` : message;
                     : 'OFF: Normal sync active';
                 adminMonitoringStatus.style.color = newState ? '#ff9800' : '#999';
             }
+            // Auto-hide Live Sync when monitoring is enabled
+            if (adminLiveSyncRow) {
+                adminLiveSyncRow.style.display = newState ? 'none' : '';
+            }
+            if (newState && adminLiveSyncToggle) {
+                adminLiveSyncToggle.classList.remove('active');
+                if (adminLiveSyncStatus) {
+                    adminLiveSyncStatus.textContent = 'Instant cloud sync + cross-station duplicate check';
+                    adminLiveSyncStatus.style.color = '#999';
+                }
+            }
             queueOrRun((bridge) => {
                 if (bridge.admin_set_monitoring_mode) {
                     bridge.admin_set_monitoring_mode(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Live Sync toggle
+    if (adminLiveSyncToggle) {
+        adminLiveSyncToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminLiveSyncToggle.classList.contains('active');
+            adminLiveSyncToggle.classList.toggle('active', newState);
+            if (adminLiveSyncStatus) {
+                adminLiveSyncStatus.textContent = newState
+                    ? 'Enabled: syncing each scan immediately'
+                    : 'Instant cloud sync + cross-station duplicate check';
+                adminLiveSyncStatus.style.color = newState ? '#86bc25' : '#999';
+            }
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_live_sync) {
+                    bridge.admin_set_live_sync(newState, () => {});
                 }
             });
         });
