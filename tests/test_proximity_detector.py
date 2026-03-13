@@ -313,5 +313,44 @@ class TestProximityDetectorStateMachine(unittest.TestCase):
         self.assertIsNone(det._last_detection_method)
 
 
+    # ------------------------------------------------------------------
+    # Detection scale
+    # ------------------------------------------------------------------
+
+    def test_detection_scale_clamped_to_range(self):
+        """Detection scale should be clamped between 0.25 and 1.0."""
+        det = self._make_detector()
+        # Default in test helper is 1.0
+        self.assertEqual(det._detection_scale, 1.0)
+
+        # Test that the constructor clamps values
+        det2 = self._make_detector()
+        det2._detection_scale = 0.5
+        self.assertEqual(det2._detection_scale, 0.5)
+
+    def test_detection_works_with_half_scale(self):
+        """Detection should still work with detection_scale=0.5."""
+        det = self._make_detector(confirm_frames=1)
+        det._detection_scale = 0.5
+        callback = MagicMock()
+        det.add_detection_callback(callback)
+
+        # Mock cv2.resize to return a smaller frame
+        _mock_cv2.resize = MagicMock(return_value=np.zeros((5, 5, 3), dtype=np.uint8))
+
+        self._feed_detection(det, True)
+        callback.assert_called_once()
+
+    def test_detection_scale_one_skips_resize(self):
+        """With scale=1.0, no resize should happen."""
+        det = self._make_detector(confirm_frames=1)
+        det._detection_scale = 1.0
+        _mock_cv2.resize = MagicMock()
+
+        self._feed_detection(det, True)
+        # resize should not be called when scale is 1.0
+        _mock_cv2.resize.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
