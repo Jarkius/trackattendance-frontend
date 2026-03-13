@@ -49,6 +49,11 @@ class AttendanceService:
         else:
             self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
+        self._sync_service = None  # Set via set_sync_service() for Live Sync
+
+    def set_sync_service(self, sync_service) -> None:
+        """Attach SyncService for Live Sync cloud dup check + immediate sync."""
+        self._sync_service = sync_service
 
     def employees_loaded(self) -> bool:
         return self._db.employees_loaded()
@@ -423,12 +428,53 @@ class AttendanceService:
                     "badgeId": sanitized,
                     "fullName": employee.full_name if employee else "Unknown",
                 }
+        # Cross-station duplicate check via cloud (Live Sync, #54)
+        cross_station_dup = False
+        cross_station_info = None
+        if (config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
+                and not is_duplicate and self._sync_service):
+            cloud_result = self._sync_service.check_duplicate_cloud(
+                badge_id=sanitized,
+                station_name=self.station_name,
+                window_minutes=config.LIVE_SYNC_DUP_WINDOW_MINUTES,
+                timeout=config.LIVE_SYNC_TIMEOUT_SECONDS,
+            )
+            if cloud_result.get("duplicate"):
+                cross_station_dup = True
+                cross_station_info = cloud_result
+                if config.DUPLICATE_BADGE_ACTION == 'block':
+                    other_station = cloud_result.get("station_name", "another station")
+                    return {
+                        "ok": False,
+                        "status": "cross_station_duplicate_rejected",
+                        "message": f"Already scanned at {other_station}",
+                        "is_duplicate": True,
+                        "is_cross_station": True,
+                        "other_station": other_station,
+                        "badgeId": sanitized,
+                        "fullName": employee.full_name if employee else "Unknown",
+                    }
+
         timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         self._db.record_scan(sanitized, self.station_name, employee, timestamp, scan_source=scan_source)
+
+        # Immediate sync to cloud (Live Sync) — fire-and-forget
+        if (config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
+                and self._sync_service):
+            import threading
+            scan_to_sync = self._db.fetch_last_pending_scan()
+            if scan_to_sync:
+                threading.Thread(
+                    target=self._sync_service.sync_single_scan,
+                    args=(scan_to_sync,),
+                    daemon=True,
+                    name="live-sync-immediate",
+                ).start()
+
         history = self._db.get_recent_scans()
         # Only flag as duplicate for UI alert if action is 'warn' (not 'silent')
         # 'silent' mode accepts duplicates without any UI alert
-        show_duplicate_alert = is_duplicate and config.DUPLICATE_BADGE_ACTION == 'warn'
+        show_duplicate_alert = (is_duplicate or cross_station_dup) and config.DUPLICATE_BADGE_ACTION == 'warn'
 
         payload = {
             "ok": True,
@@ -440,6 +486,8 @@ class AttendanceService:
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
             "is_duplicate": show_duplicate_alert,  # Only true for 'warn' mode
+            "is_cross_station": cross_station_dup and config.DUPLICATE_BADGE_ACTION == 'warn',
+            "cross_station_info": cross_station_info if cross_station_dup else None,
         }
         return payload
 

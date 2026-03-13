@@ -462,6 +462,69 @@ class SyncService:
         return f"{safe_station}-{scan.badge_id}-{scan.id}"
 
 
+    def check_duplicate_cloud(
+        self,
+        badge_id: str,
+        station_name: str,
+        window_minutes: int = 5,
+        timeout: float = 2.0,
+    ) -> dict:
+        """Check cloud for cross-station duplicate scan. Fail-open on any error."""
+        from config import CLOUD_READ_ONLY
+        if CLOUD_READ_ONLY:
+            return {"duplicate": False, "skipped": True}
+        try:
+            response = requests.get(
+                f"{self.api_url}/v1/scans/check-duplicate",
+                params={
+                    "badge_id": badge_id,
+                    "window_minutes": str(window_minutes),
+                    "exclude_station": station_name,
+                },
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=timeout,
+            )
+            if response.status_code == 200:
+                return response.json()
+            LOGGER.warning("Cloud dup check returned %d", response.status_code)
+            return {"duplicate": False, "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            LOGGER.warning("Cloud dup check failed (fail-open): %s", e)
+            return {"duplicate": False, "error": str(e)}
+
+    def sync_single_scan(self, scan: ScanRecord) -> dict:
+        """Immediately sync a single scan to cloud. Fire-and-forget safe."""
+        from config import CLOUD_READ_ONLY
+        if CLOUD_READ_ONLY:
+            return {"ok": False, "skipped": True}
+        try:
+            key = self._generate_idempotency_key(scan)
+            payload = {
+                "events": [{
+                    "idempotency_key": key,
+                    "badge_id": scan.badge_id,
+                    "station_name": scan.station_name,
+                    "scanned_at": scan.scanned_at,
+                    "business_unit": scan.sl_l1_desc or None,
+                    "scan_source": scan.scan_source,
+                }]
+            }
+            response = requests.post(
+                f"{self.api_url}/v1/scans/batch",
+                json=payload,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=3.0,
+            )
+            if response.status_code == 200:
+                self.db.mark_scans_as_synced([scan.id])
+                LOGGER.info("[LiveSync] Immediate sync OK: badge=%s", scan.badge_id)
+                return {"ok": True}
+            LOGGER.warning("[LiveSync] Immediate sync HTTP %d", response.status_code)
+            return {"ok": False, "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            LOGGER.warning("[LiveSync] Immediate sync failed: %s", e)
+            return {"ok": False, "error": str(e)}
+
     def get_cloud_scan_count(self) -> Tuple[bool, int, str]:
         """Get count of scans in cloud database.
 

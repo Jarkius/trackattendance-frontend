@@ -100,6 +100,12 @@ CLOUD_READ_ONLY = os.getenv("CLOUD_READ_ONLY", "False").lower() in ("true", "1",
 if CLOUD_READ_ONLY:
     print("[Config] CLOUD_READ_ONLY=true — no heartbeats, syncs, or roster uploads will be sent")
 
+# Live Sync: immediate cloud sync + cross-station duplicate check after each scan
+# Disabled automatically when CLOUD_READ_ONLY=true
+LIVE_SYNC_ENABLED = os.getenv("LIVE_SYNC_ENABLED", "False").lower() in ("true", "1", "yes")
+LIVE_SYNC_TIMEOUT_SECONDS = _safe_float("LIVE_SYNC_TIMEOUT_SECONDS", 2.0, min_val=0.5, max_val=10.0)
+LIVE_SYNC_DUP_WINDOW_MINUTES = _safe_int("LIVE_SYNC_DUP_WINDOW_MINUTES", 5, min_val=1, max_val=60)
+
 # Number of scans to sync in each batch
 CLOUD_SYNC_BATCH_SIZE = _safe_int("CLOUD_SYNC_BATCH_SIZE", 100, min_val=1, max_val=1000)
 
