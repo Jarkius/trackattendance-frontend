@@ -360,6 +360,17 @@
                 </div>
                 <div class="adm-section" id="admin-camera-section">
                     <div class="adm-section__header adm-section__header--camera"><i class="material-icons">videocam</i> Camera</div>
+                    <div class="adm-toggle-row" style="margin-bottom:8px;">
+                        <span class="adm-toggle-row__label">Device</span>
+                        <div style="display:flex;gap:6px;flex:1;align-items:center;">
+                            <select id="admin-camera-select" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem;background:#fff;color:#333;">
+                                <option value="-1">Click refresh to scan</option>
+                            </select>
+                            <button class="adm-btn adm-btn--secondary" id="admin-camera-refresh-btn" type="button" style="font-size:12px;padding:5px 8px;white-space:nowrap;" title="Scan for cameras">
+                                <i class="material-icons" style="font-size:16px;vertical-align:middle;">refresh</i>
+                            </button>
+                        </div>
+                    </div>
                     <div class="adm-toggle-row">
                         <span class="adm-toggle-row__label">Detection</span>
                         <button class="adm-toggle" id="admin-camera-detection-toggle" type="button"></button>

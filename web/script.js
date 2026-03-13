@@ -1825,6 +1825,8 @@ ${destination}` : message;
     const adminVolumeSlider = document.getElementById('admin-volume-slider');
     const adminVolumeValue = document.getElementById('admin-volume-value');
     const adminCameraSection = document.getElementById('admin-camera-section');
+    const adminCameraSelect = document.getElementById('admin-camera-select');
+    const adminCameraRefreshBtn = document.getElementById('admin-camera-refresh-btn');
     const adminCameraDetectionToggle = document.getElementById('admin-camera-detection-toggle');
     const adminCameraOverlayToggle = document.getElementById('admin-camera-overlay-toggle');
     const adminCooldownSlider = document.getElementById('admin-cooldown-slider');
@@ -1974,6 +1976,8 @@ ${destination}` : message;
                         adminCameraSection.classList.toggle('adm-section--hidden', !result.camera_enabled);
                     }
                     if (result.camera_enabled) {
+                        // Populate camera device dropdown
+                        refreshCameraList(bridge, result.camera_device_id);
                         if (adminCameraDetectionToggle) {
                             adminCameraDetectionToggle.classList.toggle('active', !!result.camera_running);
                         }
@@ -2252,6 +2256,61 @@ ${destination}` : message;
             queueOrRun((bridge) => {
                 if (bridge.admin_set_camera_overlay) {
                     bridge.admin_set_camera_overlay(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Camera device selection
+    function refreshCameraList(bridge, selectedIndex) {
+        if (!bridge.enumerate_cameras || !adminCameraSelect) return;
+        adminCameraSelect.disabled = true;
+        adminCameraSelect.innerHTML = '<option value="-1">Scanning...</option>';
+        bridge.enumerate_cameras((result) => {
+            adminCameraSelect.innerHTML = '';
+            if (result && result.ok && result.cameras && result.cameras.length > 0) {
+                result.cameras.forEach((cam) => {
+                    const opt = document.createElement('option');
+                    opt.value = cam.index;
+                    opt.textContent = cam.name;
+                    if (cam.index === (selectedIndex !== undefined ? selectedIndex : result.selected)) {
+                        opt.selected = true;
+                    }
+                    adminCameraSelect.appendChild(opt);
+                });
+            } else {
+                adminCameraSelect.innerHTML = '<option value="-1">No cameras found</option>';
+            }
+            adminCameraSelect.disabled = false;
+        });
+    }
+
+    if (adminCameraRefreshBtn) {
+        adminCameraRefreshBtn.addEventListener('click', () => {
+            queueOrRun((bridge) => refreshCameraList(bridge));
+        });
+    }
+
+    if (adminCameraSelect) {
+        adminCameraSelect.addEventListener('change', () => {
+            const idx = parseInt(adminCameraSelect.value, 10);
+            if (idx < 0) return;
+            queueOrRun((bridge) => {
+                if (bridge.admin_select_camera) {
+                    bridge.admin_select_camera(idx, (result) => {
+                        if (result && result.ok) {
+                            // Camera may restart — update detection toggle after delay
+                            setTimeout(() => {
+                                if (bridge.get_camera_status) {
+                                    bridge.get_camera_status((s) => {
+                                        if (adminCameraDetectionToggle) {
+                                            adminCameraDetectionToggle.classList.toggle('active', !!s.running);
+                                        }
+                                    });
+                                }
+                            }, 1500);
+                        }
+                    });
                 }
             });
         });
