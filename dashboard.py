@@ -416,8 +416,34 @@ class DashboardService:
                     max_length = max(len(str(cell.value or "")) for cell in col)
                     ws_stations.column_dimensions[col[0].column_letter].width = max_length + 2
 
-            # Add BU breakdown sheet (Issue #28)
-            if dashboard_data["business_units"]:
+            # Add BU breakdown sheet — computed from enriched scan data
+            # for consistency with "All Scans" sheet (fixes #52: stale cloud BU data)
+            from collections import defaultdict
+            bu_scanned = defaultdict(set)  # BU name → set of unique badge_ids
+            for row in enriched_scans:
+                badge_id = row["Scan Value"]
+                bu = row["SL L1 Desc"]
+                bu_key = bu if bu and bu != "--" else "(Unmatched)"
+                bu_scanned[bu_key].add(badge_id)
+
+            bu_registered = defaultdict(int)
+            for emp in employee_cache.values():
+                bu_registered[emp.sl_l1_desc or "(Unmatched)"] += 1
+
+            all_bus = sorted(set(bu_scanned.keys()) | set(bu_registered.keys()))
+            bu_export = []
+            for bu_name in all_bus:
+                if bu_name == "(Unmatched)":
+                    continue  # append last
+                registered = bu_registered.get(bu_name, 0)
+                scanned = len(bu_scanned.get(bu_name, set()))
+                rate = round((scanned / registered) * 100, 1) if registered > 0 else 0.0
+                bu_export.append({"bu_name": bu_name, "registered": registered, "scanned": scanned, "attendance_rate": rate})
+            if "(Unmatched)" in bu_scanned:
+                bu_export.append({"bu_name": "(Unmatched)", "registered": 0,
+                                  "scanned": len(bu_scanned["(Unmatched)"]), "attendance_rate": 0.0})
+
+            if bu_export:
                 ws_bu = wb.create_sheet("By Business Unit")
                 bu_headers = ["Business Unit", "Registered", "Scanned", "Attendance %"]
 
@@ -426,7 +452,7 @@ class DashboardService:
                     cell.fill = header_fill
                     cell.font = header_font
 
-                for row_idx, bu in enumerate(dashboard_data["business_units"], start=2):
+                for row_idx, bu in enumerate(bu_export, start=2):
                     ws_bu.cell(row=row_idx, column=1, value=bu["bu_name"])
                     ws_bu.cell(row=row_idx, column=2, value=bu["registered"])
                     ws_bu.cell(row=row_idx, column=3, value=bu["scanned"])
