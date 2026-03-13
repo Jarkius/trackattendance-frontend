@@ -332,6 +332,9 @@ CAMERA_MIN_SIZE_PCT = _safe_float("CAMERA_MIN_SIZE_PCT", 0.20, min_val=0.05, max
 # Only applies when MediaPipe is unavailable. 3 = sensitive, 5-6 = balanced, 8+ = strict.
 CAMERA_HAAR_MIN_NEIGHBORS = _safe_int("CAMERA_HAAR_MIN_NEIGHBORS", 5, min_val=2, max_val=10)
 
+# Detection frame downscale factor (0.5 = half resolution for detection, saves CPU)
+CAMERA_DETECTION_SCALE = _safe_float("CAMERA_DETECTION_SCALE", 0.5, min_val=0.25, max_val=1.0)
+
 # Camera resolution
 CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320, max_val=4096)
 CAMERA_RESOLUTION_HEIGHT = _safe_int("CAMERA_RESOLUTION_HEIGHT", 720, min_val=240, max_val=2160)

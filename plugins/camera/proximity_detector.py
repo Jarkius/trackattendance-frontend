@@ -53,7 +53,7 @@ class ProximityDetector:
                  min_face_confidence: float = 0.5, min_pose_confidence: float = 0.5,
                  skip_frames: int = 2, absence_threshold: float = 3.0,
                  confirm_frames: int = 3, min_size_pct: float = 0.20,
-                 haar_min_neighbors: int = 5):
+                 haar_min_neighbors: int = 5, detection_scale: float = 1.0):
         self.sensitivity = sensitivity  # for motion fallback
         self.haar_min_neighbors = haar_min_neighbors  # Haar cascade strictness
         self.cooldown = cooldown  # minimum seconds between greetings
@@ -63,6 +63,7 @@ class ProximityDetector:
         self.skip_frames = skip_frames  # process every Nth frame to save CPU
         self.absence_threshold = absence_threshold  # seconds with no detection before state → empty
         self.confirm_frames = confirm_frames  # consecutive detections required before greeting
+        self._detection_scale = max(0.25, min(1.0, detection_scale))  # downscale factor for detection
         self._frame_count = 0
         self._last_detection_time = 0
         self._consecutive_detections = 0  # count of consecutive frames with person
@@ -298,42 +299,53 @@ class ProximityDetector:
         if self._frame_count % (self.skip_frames + 1) != 0:
             return False
 
+        # Downscale frame for detection to save CPU (display uses original)
+        if self._detection_scale < 1.0:
+            det_h = int(frame.shape[0] * self._detection_scale)
+            det_w = int(frame.shape[1] * self._detection_scale)
+            det_frame = cv2.resize(frame, (det_w, det_h))
+        else:
+            det_frame = frame
+
         # Detect person in this frame
         # Chain: YuNet face → upper body → frontal face Haar → motion
         person_in_frame = False
         self._last_faces = None
 
         if self._use_yunet:
-            if self._detect_yunet_face(frame):
+            if self._detect_yunet_face(det_frame):
                 person_in_frame = True
                 self._last_detection_method = "yunet"
             elif self._haar_upperbody is not None:
                 # Face not visible — try upper body (tall/short person, turned away)
-                if self._detect_upperbody(frame):
+                if self._detect_upperbody(det_frame):
                     person_in_frame = True
                     self._last_detection_method = "upperbody"
         elif self._haar_cascade is not None:
-            if self._detect_haar_face(frame):
+            if self._detect_haar_face(det_frame):
                 person_in_frame = True
                 self._last_detection_method = "haar"
             elif self._haar_upperbody is not None:
-                if self._detect_upperbody(frame):
+                if self._detect_upperbody(det_frame):
                     person_in_frame = True
                     self._last_detection_method = "upperbody"
+
+        # Scale face rectangles back to original resolution for overlay
+        if self._last_faces and self._detection_scale < 1.0:
+            inv = 1.0 / self._detection_scale
+            self._last_faces = [
+                [int(x * inv), int(y * inv), int(w * inv), int(h * inv)]
+                for (x, y, w, h) in self._last_faces
+            ]
 
         # Motion fallback — only used when no face/body detector is available.
         # When real detectors exist, motion causes too many false greetings
         # (walking past at 2m+ creates large motion blobs that pass size filter).
         has_real_detector = self._use_yunet or self._haar_cascade is not None
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (21, 21), 0)
         if not person_in_frame and not has_real_detector:
-            if self._detect_motion(frame, precomputed_gray=gray):
+            if self._detect_motion(det_frame):
                 person_in_frame = True
                 self._last_detection_method = "motion"
-        else:
-            # Keep background fresh for motion detector
-            self._background_frame = gray
 
         if person_in_frame:
             self._last_person_seen_time = current_time
