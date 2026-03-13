@@ -516,7 +516,10 @@ class SyncService:
                 timeout=3.0,
             )
             if response.status_code == 200:
-                self.db.mark_scans_as_synced([scan.id])
+                # Don't call mark_scans_as_synced here — this runs in a
+                # background thread and the SQLite connection belongs to the
+                # main thread.  Batch sync will mark it later; the idempotency
+                # key prevents double-counting on the cloud side.
                 LOGGER.info("[LiveSync] Immediate sync OK: badge=%s", scan.badge_id)
                 return {"ok": True}
             LOGGER.warning("[LiveSync] Immediate sync HTTP %d", response.status_code)
