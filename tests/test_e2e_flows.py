@@ -18,6 +18,7 @@ from datetime import datetime
 # Set required environment variables BEFORE importing config
 os.environ.setdefault("CLOUD_API_KEY", "test-api-key-for-testing")
 os.environ.setdefault("CLOUD_API_URL", "http://test.example.com")
+os.environ["CLOUD_READ_ONLY"] = "False"
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
