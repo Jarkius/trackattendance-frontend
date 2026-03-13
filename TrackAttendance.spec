@@ -27,18 +27,39 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # Unused PyQt6 modules — reduces bundle by ~30-50MB
+        'PyQt6.QtDesigner',
+        'PyQt6.QtHelp',
+        'PyQt6.QtNetwork',       # requests handles HTTP
+        'PyQt6.QtSql',
+        'PyQt6.QtSvg',
+        'PyQt6.QtSvgWidgets',
+        'PyQt6.QtTest',
+        'PyQt6.QtXml',
+        'PyQt6.QtDBus',
+        'PyQt6.QtBluetooth',
+        'PyQt6.QtNfc',
+        'PyQt6.QtPositioning',
+        'PyQt6.QtRemoteObjects',
+        'PyQt6.QtSensors',
+        'PyQt6.QtSerialPort',
+        'PyQt6.QtTextToSpeech',
+        'PyQt6.Qt3DCore',
+        'PyQt6.Qt3DRender',
+        'PyQt6.Qt3DInput',
+        'PyQt6.Qt3DExtras',
+    ],
     noarchive=False,
     optimize=0,
 )
 pyz = PYZ(a.pure)
 
+# --onedir mode: no _MEIPASS extraction delay on startup
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
-    [],
+    [],          # binaries/datas go to COLLECT, not EXE
     name='TrackAttendance',
     debug=False,
     bootloader_ignore_signals=False,
@@ -53,4 +74,13 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['C:\\Workspace\\Dev\\Python\\greendot.ico'],
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name='TrackAttendance',
 )
