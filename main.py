@@ -762,6 +762,76 @@ class Api(QObject):
                         "ok" if started else "failed")
 
     @pyqtSlot(result="QVariant")
+    def enumerate_cameras(self) -> dict:
+        """Probe camera indices 0-10, return list of available cameras."""
+        cameras = []
+        try:
+            import cv2
+        except ImportError:
+            return {"ok": False, "cameras": [], "message": "OpenCV not available"}
+
+        active_id = config.CAMERA_DEVICE_ID
+        active_running = (self._proximity_manager
+                          and self._proximity_manager._running)
+
+        for i in range(11):
+            # Skip probing the active camera if it's running (exclusive access on Windows)
+            if i == active_id and active_running:
+                cameras.append({"index": i, "name": f"Camera {i} (active)"})
+                continue
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                if ret:
+                    backend = cap.getBackendName() if hasattr(cap, 'getBackendName') else ""
+                    label = f"Camera {i}"
+                    if backend:
+                        label += f" ({backend})"
+                    cameras.append({"index": i, "name": label})
+                cap.release()
+
+        return {"ok": True, "cameras": cameras, "selected": active_id}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_select_camera(self, index: int) -> dict:
+        """Select camera by device index. Restarts camera if running. Persisted."""
+        index = max(0, min(10, index))
+        config.CAMERA_DEVICE_ID = index
+        self._save_setting("camera_device_id", str(index))
+
+        if self._proximity_manager:
+            was_running = self._proximity_manager._running
+            self._proximity_manager._camera_id = index
+            if was_running:
+                self._proximity_manager.stop()
+                # Delay restart to let old camera fully release
+                import threading
+                threading.Thread(
+                    target=self._deferred_camera_restart,
+                    daemon=True, name="camera-restart",
+                ).start()
+
+        LOGGER.info("[Admin] Camera selected: index %d", index)
+        return {"ok": True, "index": index}
+
+    def _deferred_camera_restart(self):
+        """Wait briefly, then restart camera on main thread."""
+        time.sleep(0.5)
+        from PyQt6.QtCore import QMetaObject, Qt
+        QMetaObject.invokeMethod(
+            self, "_do_camera_restart",
+            Qt.ConnectionType.QueuedConnection,
+        )
+
+    @pyqtSlot()
+    def _do_camera_restart(self):
+        """Restart camera on main thread after device change."""
+        if self._proximity_manager and not self._proximity_manager._running:
+            started = self._proximity_manager.start()
+            LOGGER.info("[Admin] Camera restart after device change: %s",
+                        "ok" if started else "failed")
+
+    @pyqtSlot(result="QVariant")
     def toggle_camera(self) -> dict:
         """Toggle camera detection on/off at runtime (1s debounce)."""
         if not self._proximity_manager:

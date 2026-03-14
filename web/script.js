@@ -2048,15 +2048,8 @@ ${destination}` : message;
                         adminCameraSection.classList.toggle('adm-section--hidden', !result.camera_enabled);
                     }
                     if (result.camera_enabled) {
-                        // Show current camera without slow enumeration — user can click refresh to scan all
-                        try {
-                            const sel = document.getElementById('admin-camera-select');
-                            if (sel) {
-                                const devId = result.camera_device_id ?? 0;
-                                sel.innerHTML = '<option value="' + devId + '" selected>Camera ' + devId + (result.camera_running ? ' (active)' : '') + '</option>';
-                                sel.disabled = false;
-                            }
-                        } catch(e) { /* ignore */ }
+                        // Populate camera device dropdown
+                        refreshCameraList(bridge, result.camera_device_id);
                         if (adminCameraDetectionToggle) {
                             adminCameraDetectionToggle.classList.toggle('active', !!result.camera_running);
                         }
