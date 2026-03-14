@@ -599,6 +599,140 @@ Assumptions: 18% trial conversion, 5% monthly churn, avg $19/station, mix of sub
 
 ---
 
+## Phase 7: SEA Go-To-Market Strategy (from Gemini Deep Research)
+
+### 7.1 Geographic rollout
+
+| Phase | Markets | Rationale | Timeline |
+|-------|---------|-----------|----------|
+| **Phase 1** | Singapore, Malaysia | High digital literacy, high labor costs, English-speaking | Month 1-6 |
+| **Phase 2** | Thailand, Philippines | Large deskless workforce, rising compliance needs, local connections | Month 6-12 |
+| **Phase 3** | Indonesia, Vietnam | Massive workforce scale, compliance modernization wave | Month 12-18 |
+
+### 7.2 SEA-specific tactics
+
+| Tactic | Detail |
+|--------|--------|
+| **Localization** | Support local date formats and public holiday calendars for SG, MY, TH, ID, PH |
+| **Low-friction onboarding** | First QR scan within 3 minutes of signup — the "aha moment" |
+| **Payroll integration** | Partner with Talenox, HReasily, Swingvy — attendance is the "input" for their payroll "output" |
+| **POS reseller channel** | Partner with shops selling POS systems to F&B/retail — same buyer persona |
+| **PDPA/GDPR compliance** | Data hosted in AWS Singapore region via Neon — region-compliant |
+| **Public dashboard as trust** | Employees trust the system when they can see their own logs instantly |
+| **No credit card trial** | Essential for SEA where CC penetration is low — email-only signup |
+
+### 7.3 SEA competitive edge
+
+Our biggest competitor in SEA isn't Jibble or Clockify — it's **paper and punch cards**. The pitch: "Cheaper than an hour of lost productivity."
+
+| Competitor Tier | Examples | Our Edge |
+|-----------------|----------|----------|
+| **Global giants** | Jibble, Clockify, Deputy | Overbuilt for local workflows; we're simpler |
+| **Regional HRMS** | SalaryBox (India), Swingvy/BrioHR (SEA) | Strong suites but no multi-station scanning + offline |
+| **Manual/legacy** | Paper, punch cards | Our biggest opportunity; pitch affordability + instant reports |
+
+---
+
+## Phase 8: Multi-Tenant Scale-Out Architecture
+
+### 8.1 Database isolation strategy
+
+Use **Row-Level Security (RLS)** with `tenant_id` on every table — NOT separate databases per client.
+
+```sql
+-- Enable RLS on scans table
+ALTER TABLE scans ENABLE ROW LEVEL SECURITY;
+
+-- Policy: each tenant sees only their data
+CREATE POLICY tenant_isolation ON scans
+  USING (tenant_id = current_setting('app.tenant_id')::text);
+
+-- Set tenant context per request
+SET app.tenant_id = 'org_abc123';
+```
+
+**Why RLS over separate databases?**
+- One schema to maintain across all clients
+- Easier migrations and updates
+- Neon's connection pooling works better with shared databases
+- Can still shard later if needed (by region)
+
+### 8.2 Edge-first architecture
+
+```
+[Station SQLite] ←→ [Neon PostgreSQL (RLS)] ←→ [Public Dashboard]
+     (buffer)              (source of truth)         (read-only)
+```
+
+- **Local SQLite stays** — acts as edge buffer for offline resilience
+- **Sync conflict resolution**: Last-Write-Wins with station_name + scanned_at as natural key
+- **Idempotency keys** (already implemented) prevent duplicates on retry
+
+### 8.3 Scale considerations
+
+| Challenge | Solution |
+|-----------|----------|
+| **Sync storms** (500 stations at 9:01 AM) | Rate limiting per tenant + staggered sync windows |
+| **Neon cold starts** | Keep-alive heartbeat for active tenants during peak hours |
+| **Large Excel exports** | Move to background worker (BullMQ or Bun worker) |
+| **Connection pool exhaustion** | Already configured (50 connections); add per-tenant connection limits |
+| **Multi-region latency** | Phase 2: Neon read replicas in SG + US regions |
+
+### 8.4 Tenant onboarding flow
+
+```
+Stripe checkout → webhook → create tenant row → generate API key → email to customer
+                                                                         ↓
+Customer enters API key in .env → station connects → heartbeat validates → full access
+```
+
+---
+
+## Expanded Use Cases (Beyond Events)
+
+TrackAttendance is NOT just for events. The offline-first, multi-station architecture serves any organization tracking people movement through physical spaces.
+
+### Workforce & HR
+
+| Use Case | Description | Key Feature |
+|----------|-------------|-------------|
+| **Factory shift logging** | Clock-in/out at production lines without WiFi | Offline-first + multi-station |
+| **Construction site safety** | Badge everyone on-site for safety compliance | Audit trail + Excel export |
+| **Warehouse operations** | Track staff across loading docks and floors | Cross-station duplicate detection |
+| **Field service teams** | Mobile workforce check-in at job sites | Per-station pricing (not per-user) |
+| **Healthcare shift compliance** | Nurse/doctor shift verification with audit trail | Multi-floor sync + timestamps |
+
+### Education & Training
+
+| Use Case | Description | Key Feature |
+|----------|-------------|-------------|
+| **University lectures** | Students scan in per class/room | Multi-room sync + BU breakdown |
+| **Corporate training** | Track attendance across training sessions | Excel export for compliance |
+| **Certification programs** | Proof of attendance for professional development | Tamper-proof scan records |
+| **After-school programs** | Youth check-in/out for safety | Real-time parent dashboard |
+
+### Membership & Access
+
+| Use Case | Description | Key Feature |
+|----------|-------------|-------------|
+| **Coworking spaces** | Know who's in the building | Live mobile dashboard |
+| **Gym / fitness studios** | Member check-in without expensive hardware | $19/station vs $199+ kiosks |
+| **Libraries** | Patron visit tracking for funding reports | Auto-reports + Excel export |
+| **Religious organizations** | Congregation attendance for leadership | Simple setup, free tier |
+| **Associations / clubs** | Meeting attendance for quorum tracking | Per-event pricing option |
+
+### Compliance & Government
+
+| Use Case | Description | Key Feature |
+|----------|-------------|-------------|
+| **Government meetings** | Attendance verification for officials | Offline + audit trail |
+| **Military formations** | Troop accountability in areas with no signal | Full offline capability |
+| **Safety drills** | Fire drill / evacuation accounting | Instant headcount on mobile |
+| **Visitor management** | Building access logging (cheaper than Envoy) | 6-18x cheaper per location |
+
+---
+
 *Plan created: 2026-03-14*
 *Enhanced: 2026-03-14 (market research, pain points, pricing models, regional strategy)*
+*Updated: 2026-03-14 (SEA GTM strategy, multi-tenant RLS, expanded use cases — from Gemini Deep Research)*
 *Status: Ready for implementation*

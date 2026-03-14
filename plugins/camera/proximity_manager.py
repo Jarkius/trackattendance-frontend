@@ -76,8 +76,12 @@ class ProximityGreetingManager:
             self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._resolution[0])
             self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._resolution[1])
 
-            # Verify we can actually read a frame
-            ret, _ = self._cap.read()
+            # Verify we can actually read a frame (USB cameras may need warm-up)
+            ret = False
+            for _ in range(3):
+                ret, _ = self._cap.read()
+                if ret:
+                    break
             if not ret:
                 LOGGER.warning("[Proximity] Camera %d opened but cannot read frames", self._camera_id)
                 self._cap.release()
