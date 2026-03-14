@@ -1,88 +1,135 @@
-// Debug Console Setup (temporary debugging)
+// Debug Panel — streams Python + JS logs
 const debugConsole = {
     element: null,
     output: null,
-    messages: [],
+    _pollTimer: null,
+    _cursor: 0,
+    _maxLines: 200,
+    _visible: false,
 
     init() {
         this.element = document.getElementById('debug-console');
         this.output = document.getElementById('debug-output');
 
-        // Override console.log, console.info, console.warn, console.error
-        const originalLog = console.log;
-        const originalInfo = console.info;
-        const originalWarn = console.warn;
-        const originalError = console.error;
-        const originalDebug = console.debug;
-
+        // Override console methods to capture JS-side logs
+        const originals = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug };
         const self = this;
-        console.log = (...args) => {
-            originalLog(...args);
-            self.addMessage('LOG', args);
-        };
-        console.info = (...args) => {
-            originalInfo(...args);
-            self.addMessage('INFO', args);
-        };
-        console.warn = (...args) => {
-            originalWarn(...args);
-            self.addMessage('WARN', args);
-        };
-        console.error = (...args) => {
-            originalError(...args);
-            self.addMessage('ERROR', args);
-        };
-        console.debug = (...args) => {
-            originalDebug(...args);
-            self.addMessage('DEBUG', args);
-        };
+        ['log', 'info', 'warn', 'error', 'debug'].forEach(level => {
+            console[level] = (...args) => {
+                originals[level](...args);
+                self._addJsLine(level.toUpperCase(), args);
+            };
+        });
 
-        // Keyboard shortcut: Ctrl+Shift+D to toggle debug console
+        // Keyboard shortcut: Ctrl+Shift+D — also toggles focus lock
         document.addEventListener('keydown', (e) => {
             if (e.ctrlKey && e.shiftKey && e.key === 'D') {
                 e.preventDefault();
                 self.toggle();
+                // Sync debugMode global if it exists (disables barcode focus lock)
+                if (typeof debugMode !== 'undefined') debugMode = self._visible;
             }
         });
-    },
 
-    addMessage(level, args) {
-        const msg = args.map(arg => {
-            if (typeof arg === 'object') {
-                try {
-                    return JSON.stringify(arg);
-                } catch {
-                    return String(arg);
-                }
+        // Clipboard helper — falls back to execCommand for QWebEngineView file:// context
+        const copyText = (text, onSuccess) => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(onSuccess).catch(() => {
+                    self._fallbackCopy(text); onSuccess && onSuccess();
+                });
+            } else {
+                self._fallbackCopy(text); onSuccess && onSuccess();
             }
-            return String(arg);
-        }).join(' ');
+        };
+        self._copyText = copyText;
 
-        const timestamp = new Date().toLocaleTimeString();
-        const line = `[${timestamp}] ${level}: ${msg}`;
-        this.messages.push(line);
+        // Copy All / Clear / Close buttons
+        const copyAllBtn = document.getElementById('debug-copy-all-btn');
+        if (copyAllBtn) copyAllBtn.addEventListener('click', () => {
+            if (!self.output) return;
+            const text = Array.from(self.output.children).map(el => el.textContent).join('\n');
+            copyText(text, () => {
+                copyAllBtn.textContent = 'Copied!';
+                setTimeout(() => { copyAllBtn.textContent = 'Copy All'; }, 1500);
+            });
+        });
+        const clearBtn = document.getElementById('debug-clear-btn');
+        if (clearBtn) clearBtn.addEventListener('click', () => { if (self.output) self.output.innerHTML = ''; });
+        const closeBtn = document.getElementById('debug-close-btn');
+        if (closeBtn) closeBtn.addEventListener('click', () => self.toggle(false));
 
-        if (this.output) {
-            const p = document.createElement('div');
-            p.textContent = line;
-            p.style.color = level === 'ERROR' ? '#f00' : level === 'WARN' ? '#ff0' : '#0f0';
-            this.output.appendChild(p);
-            this.output.scrollTop = this.output.scrollHeight;
-
-            // Keep last 50 messages
-            while (this.messages.length > 50) {
-                this.messages.shift();
-                if (this.output.firstChild) {
-                    this.output.removeChild(this.output.firstChild);
-                }
-            }
+        // Click a single line to copy it
+        if (self.output) {
+            self.output.addEventListener('click', (e) => {
+                const line = e.target.closest('div');
+                if (!line || line === self.output) return;
+                if (window.getSelection().toString().length > 0) return;
+                copyText(line.textContent, () => {
+                    line.style.outline = '1px solid #0f0';
+                    setTimeout(() => { line.style.outline = ''; }, 300);
+                });
+            });
         }
     },
 
-    toggle() {
-        if (this.element) {
-            this.element.style.display = this.element.style.display === 'none' ? 'block' : 'none';
-        }
+    _addJsLine(level, args) {
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        const ts = new Date().toLocaleTimeString('en-GB', { hour12: false });
+        this._appendLine(`${ts} [JS-${level}] ${msg}`, level);
+    },
+
+    _appendLine(text, level) {
+        if (!this.output) return;
+        const div = document.createElement('div');
+        div.textContent = text;
+        div.style.cssText = 'padding:1px 4px;border-radius:2px;cursor:pointer;';
+        div.style.color = (level === 'ERROR' || text.includes('[ERROR')) ? '#f55'
+            : (level === 'WARN' || text.includes('[WARN')) ? '#ff0'
+            : (level === 'DEBUG' || text.includes('[DEBUG')) ? '#888' : '#0f0';
+        div.addEventListener('mouseenter', () => { div.style.background = 'rgba(255,255,255,0.06)'; });
+        div.addEventListener('mouseleave', () => { div.style.background = ''; });
+        this.output.appendChild(div);
+        // Trim excess
+        while (this.output.children.length > this._maxLines) this.output.removeChild(this.output.firstChild);
+        this.output.scrollTop = this.output.scrollHeight;
+    },
+
+    toggle(forceState) {
+        if (!this.element) return;
+        const show = forceState !== undefined ? forceState : !this._visible;
+        this._visible = show;
+        this.element.style.display = show ? 'flex' : 'none';
+        if (show) this._startPolling();
+        else this._stopPolling();
+    },
+
+    _fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch(e) { /* ignore */ }
+        document.body.removeChild(ta);
+    },
+
+    _startPolling() {
+        if (this._pollTimer) return;
+        const self = this;
+        this._pollTimer = setInterval(() => {
+            if (!self._visible) { self._stopPolling(); return; }
+            if (window._debugBridge && window._debugBridge.admin_get_debug_logs) {
+                window._debugBridge.admin_get_debug_logs(self._cursor, (result) => {
+                    if (!result || !result.lines) return;
+                    result.lines.forEach(line => self._appendLine(line, ''));
+                    self._cursor = result.cursor;
+                });
+            }
+        }, 500);
+    },
+
+    _stopPolling() {
+        if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
     }
 };
 
@@ -409,6 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.info('[QWebChannel] Connected, got api object');
             webChannelReady = true;
             api = channel.objects.api;
+            window._debugBridge = api;  // expose for debug panel polling
             console.info('[QWebChannel] API object assigned, attempting signal binding');
             console.debug('[QWebChannel] api properties:', {
                 hasConnectionStatusChanged: !!api.connection_status_changed,
@@ -545,8 +593,8 @@ ${destination}` : message;
     };
 
     const returnFocusToInput = () => {
-        // Skip auto-focus when in debug mode (allows copying debug console text)
-        if (debugMode) {
+        // Skip auto-focus when in debug mode (allows clicking/copying anywhere)
+        if (debugMode || debugConsole._visible) {
             return;
         }
         // Skip auto-focus while dashboard is open
@@ -832,6 +880,7 @@ ${destination}` : message;
                 debugMode = Boolean(payload?.debugMode);
                 if (debugMode) {
                     console.info('[DEBUG] Debug mode enabled - auto-focus disabled');
+                    debugConsole.toggle(true);
                 }
                 duplicateBadgeAlertDurationMs = Math.max(0, Number(payload?.duplicateBadgeAlertDurationMs) || 3000);
                 console.info('[Config] Duplicate badge alert duration:', duplicateBadgeAlertDurationMs, 'ms');
@@ -874,8 +923,9 @@ ${destination}` : message;
 
     const initCameraToggle = () => {
         queueOrRun((bridge) => {
-            if (!bridge.get_camera_status) return;
+            if (!bridge.get_camera_status) { console.warn('[Camera] bridge.get_camera_status not found'); return; }
             bridge.get_camera_status((status) => {
+                console.info('[Camera] initCameraToggle status:', JSON.stringify(status));
                 if (!status?.enabled) return;  // keep hidden if not configured
                 setCameraToggleState(status.running);
             });
@@ -891,6 +941,14 @@ ${destination}` : message;
                 cameraToggling = false;
                 if (result?.ok) {
                     setCameraToggleState(result.running);
+                    // Sync admin panel detection toggle
+                    if (adminCameraDetectionToggle) {
+                        adminCameraDetectionToggle.classList.toggle('active', result.running);
+                    }
+                    if (adminCameraOverlayToggle) {
+                        adminCameraOverlayToggle.disabled = !result.running;
+                        if (!result.running) adminCameraOverlayToggle.classList.remove('active');
+                    }
                 }
                 returnFocusToInput();
             });
@@ -1932,13 +1990,27 @@ ${destination}` : message;
                     if (adminLiveSyncRow) {
                         adminLiveSyncRow.style.display = monitoringEnabled ? 'none' : '';
                     }
+                    // Live Sync cross-station window
+                    const lsWindow = result.live_sync_window_minutes || 5;
+                    document.querySelectorAll('.adm-live-sync-window-opt').forEach(b => {
+                        b.classList.toggle('active', parseInt(b.dataset.val) === lsWindow);
+                    });
+                    const lsWindowGroup = document.getElementById('admin-live-sync-window-group');
+                    if (lsWindowGroup) {
+                        lsWindowGroup.style.display = liveSyncEnabled && !monitoringEnabled ? '' : 'none';
+                    }
+                    const lsWindowStatus = document.getElementById('admin-live-sync-window-status');
+                    if (lsWindowStatus) {
+                        lsWindowStatus.style.display = liveSyncEnabled && !monitoringEnabled ? '' : 'none';
+                        lsWindowStatus.textContent = lsWindow >= 1440 ? 'Current: Always (entire event)' : `Current: ${lsWindow >= 60 ? (lsWindow / 60) + 'h' : lsWindow + 'm'}`;
+                    }
                     // Duplicate detection toggle
                     const dupEnabled = result.duplicate_detection_enabled !== false;
                     if (adminDupDetectionToggle) {
                         adminDupDetectionToggle.classList.toggle('active', dupEnabled);
                     }
                     // Duplicate alert duration
-                    const dupAlertSec = Math.round((result.duplicate_alert_ms || 4000) / 1000);
+                    const dupAlertSec = Math.round((result.duplicate_alert_ms || 3000) / 1000);
                     syncSlider(adminDupAlertSlider, adminDupAlertValue, dupAlertSec, 1, 10, 'sec');
                     // Duplicate window
                     const dupWindow = result.duplicate_window || 60;
@@ -1946,7 +2018,7 @@ ${destination}` : message;
                         b.classList.toggle('active', parseInt(b.dataset.val) === dupWindow);
                     });
                     if (adminDupWindowStatus) {
-                        adminDupWindowStatus.textContent = `Current: ${dupWindow >= 60 ? (dupWindow / 60) + 'm' : dupWindow + 's'}`;
+                        adminDupWindowStatus.textContent = dupWindow >= 86400 ? 'Current: Always (entire event)' : `Current: ${dupWindow >= 60 ? (dupWindow / 60) + 'm' : dupWindow + 's'}`;
                     }
                     // Duplicate action
                     const dupAction = result.duplicate_action || 'warn';
@@ -1976,8 +2048,15 @@ ${destination}` : message;
                         adminCameraSection.classList.toggle('adm-section--hidden', !result.camera_enabled);
                     }
                     if (result.camera_enabled) {
-                        // Populate camera device dropdown
-                        refreshCameraList(bridge, result.camera_device_id);
+                        // Show current camera without slow enumeration — user can click refresh to scan all
+                        try {
+                            const sel = document.getElementById('admin-camera-select');
+                            if (sel) {
+                                const devId = result.camera_device_id ?? 0;
+                                sel.innerHTML = '<option value="' + devId + '" selected>Camera ' + devId + (result.camera_running ? ' (active)' : '') + '</option>';
+                                sel.disabled = false;
+                            }
+                        } catch(e) { /* ignore */ }
                         if (adminCameraDetectionToggle) {
                             adminCameraDetectionToggle.classList.toggle('active', !!result.camera_running);
                         }
@@ -1997,7 +2076,7 @@ ${destination}` : message;
                         syncSlider(adminHaarSlider, adminHaarValue, haarN, 2, 10, '');
                     }
                     // Display section
-                    const feedbackSec = Math.round((result.scan_feedback_ms || 5000) / 1000);
+                    const feedbackSec = Math.round((result.scan_feedback_ms || 2000) / 1000);
                     syncSlider(adminFeedbackSlider, adminFeedbackValue, feedbackSec, 1, 10, 'sec');
                     const connCheck = result.connection_check_s ?? 120;
                     syncSlider(adminConncheckSlider, adminConncheckValue, connCheck, 0, 300, 'sec');
@@ -2010,6 +2089,46 @@ ${destination}` : message;
                         } else {
                             adminDashboardUrl.removeAttribute('href');
                         }
+                    }
+                    // API key status
+                    const apiKeyStat = document.getElementById('admin-api-key-status');
+                    if (apiKeyStat) {
+                        if (result.api_key_configured) {
+                            apiKeyStat.textContent = `Active: ${result.api_key_masked}`;
+                            apiKeyStat.style.color = '#86bc25';
+                        } else {
+                            apiKeyStat.textContent = 'No API key — running in local-only mode';
+                            apiKeyStat.style.color = '#ff9800';
+                        }
+                    }
+                    // Debug section
+                    const logLevel = result.log_level || 'INFO';
+                    document.querySelectorAll('.adm-log-level-opt').forEach(b => {
+                        b.classList.toggle('active', b.dataset.val === logLevel);
+                    });
+                    const logLevelStatus = document.getElementById('admin-log-level-status');
+                    if (logLevelStatus) logLevelStatus.textContent = `Current: ${logLevel}`;
+                    const consoleToggle = document.getElementById('admin-console-log-toggle');
+                    const consoleStatus = document.getElementById('admin-console-log-status');
+                    if (consoleToggle) {
+                        consoleToggle.classList.toggle('active', result.console_logging !== false);
+                    }
+                    if (consoleStatus) {
+                        consoleStatus.textContent = result.console_logging !== false ? 'Logs shown in terminal' : 'Console output disabled';
+                        consoleStatus.style.color = result.console_logging !== false ? '#86bc25' : '#999';
+                    }
+                    // Debug panel toggle
+                    const debugPanelOn = !!result.debug_panel;
+                    const dbgToggle = document.getElementById('admin-debug-panel-toggle');
+                    const dbgStatus = document.getElementById('admin-debug-panel-status');
+                    if (dbgToggle) dbgToggle.classList.toggle('active', debugPanelOn);
+                    if (dbgStatus) {
+                        dbgStatus.textContent = debugPanelOn ? 'Debug panel active — streaming logs' : 'Live log overlay (Ctrl+Shift+D)';
+                        dbgStatus.style.color = debugPanelOn ? '#86bc25' : '#999';
+                    }
+                    if (debugPanelOn) {
+                        debugMode = true;
+                        debugConsole.toggle(true);
                     }
                     // Update default markers from config defaults
                     const defs = result.defaults;
@@ -2082,8 +2201,35 @@ ${destination}` : message;
                 if (bridge.admin_set_duplicate_window) {
                     bridge.admin_set_duplicate_window(val, (result) => {
                         if (adminDupWindowStatus) {
+                            const label = val >= 86400 ? 'Always (entire event)' : val >= 60 ? (val / 60) + 'm' : val + 's';
                             adminDupWindowStatus.textContent = result?.ok
-                                ? `Saved: ${val >= 60 ? (val / 60) + 'm' : val + 's'}`
+                                ? `Saved: ${label}`
+                                : `Error: ${result?.message || 'Failed'}`;
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // Live Sync window preset buttons
+    document.querySelectorAll('.adm-live-sync-window-opt').forEach(btn => {
+        if (btn.dataset.listenerBound) return;
+        btn.dataset.listenerBound = 'true';
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const val = parseInt(btn.dataset.val);
+            document.querySelectorAll('.adm-live-sync-window-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const lsWindowStatus = document.getElementById('admin-live-sync-window-status');
+            if (lsWindowStatus) lsWindowStatus.textContent = 'Saving...';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_live_sync_window) {
+                    bridge.admin_set_live_sync_window(val, (result) => {
+                        if (lsWindowStatus) {
+                            const label = val >= 1440 ? 'Always (entire event)' : val >= 60 ? (val / 60) + 'h' : val + 'm';
+                            lsWindowStatus.textContent = result?.ok
+                                ? `Saved: ${label}`
                                 : `Error: ${result?.message || 'Failed'}`;
                         }
                     });
@@ -2222,6 +2368,137 @@ ${destination}` : message;
         });
     }
 
+    // Log level preset buttons
+    document.querySelectorAll('.adm-log-level-opt').forEach(btn => {
+        if (btn.dataset.listenerBound) return;
+        btn.dataset.listenerBound = 'true';
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const val = btn.dataset.val;
+            document.querySelectorAll('.adm-log-level-opt').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const statusEl = document.getElementById('admin-log-level-status');
+            if (statusEl) statusEl.textContent = 'Saving...';
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_log_level) {
+                    bridge.admin_set_log_level(val, (result) => {
+                        if (statusEl) {
+                            statusEl.textContent = result?.ok
+                                ? `Current: ${val}`
+                                : `Error: ${result?.message || 'Failed'}`;
+                        }
+                    });
+                }
+            });
+        });
+    });
+
+    // Console logging toggle
+    const adminConsoleLogToggle = document.getElementById('admin-console-log-toggle');
+    const adminConsoleLogStatus = document.getElementById('admin-console-log-status');
+    if (adminConsoleLogToggle) {
+        adminConsoleLogToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminConsoleLogToggle.classList.contains('active');
+            adminConsoleLogToggle.classList.toggle('active', newState);
+            if (adminConsoleLogStatus) {
+                adminConsoleLogStatus.textContent = newState ? 'Logs shown in terminal' : 'Console output disabled';
+                adminConsoleLogStatus.style.color = newState ? '#86bc25' : '#999';
+            }
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_console_logging) {
+                    bridge.admin_set_console_logging(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Debug panel toggle — also disables focus lock so user can click/copy freely
+    const adminDebugPanelToggle = document.getElementById('admin-debug-panel-toggle');
+    const adminDebugPanelStatus = document.getElementById('admin-debug-panel-status');
+    if (adminDebugPanelToggle) {
+        adminDebugPanelToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminDebugPanelToggle.classList.contains('active');
+            adminDebugPanelToggle.classList.toggle('active', newState);
+            if (adminDebugPanelStatus) {
+                adminDebugPanelStatus.textContent = newState ? 'Debug panel active — focus lock off' : 'Live log overlay (Ctrl+Shift+D)';
+                adminDebugPanelStatus.style.color = newState ? '#86bc25' : '#999';
+            }
+            // Enable/disable debug mode (disables barcode input focus lock)
+            debugMode = newState;
+            // Show/hide the debug panel
+            debugConsole.toggle(newState);
+            // Persist to backend
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_debug_panel) {
+                    bridge.admin_set_debug_panel(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // API Key management (Option A: admin panel input)
+    const apiKeyInput = document.getElementById('admin-api-key-input');
+    const apiKeySaveBtn = document.getElementById('admin-api-key-save');
+    const apiKeyStatus = document.getElementById('admin-api-key-status');
+    const apiKeyToggleVis = document.getElementById('admin-api-key-toggle-vis');
+
+    if (apiKeySaveBtn && apiKeyInput) {
+        apiKeySaveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const key = apiKeyInput.value.trim();
+            if (!key) {
+                if (apiKeyStatus) {
+                    apiKeyStatus.textContent = 'Please enter an API key';
+                    apiKeyStatus.style.color = '#ff5252';
+                }
+                return;
+            }
+            apiKeySaveBtn.textContent = 'Saving...';
+            apiKeySaveBtn.disabled = true;
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_api_key) {
+                    bridge.admin_set_api_key(key, (result) => {
+                        apiKeySaveBtn.textContent = 'Save';
+                        apiKeySaveBtn.disabled = false;
+                        if (result?.ok) {
+                            apiKeyInput.value = '';
+                            if (apiKeyStatus) {
+                                apiKeyStatus.textContent = result.message;
+                                apiKeyStatus.style.color = '#86bc25';
+                            }
+                        } else {
+                            if (apiKeyStatus) {
+                                apiKeyStatus.textContent = result?.message || 'Failed to save key';
+                                apiKeyStatus.style.color = '#ff5252';
+                            }
+                        }
+                    });
+                }
+            });
+        });
+        // Allow Enter key to save
+        apiKeyInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                apiKeySaveBtn.click();
+            }
+        });
+    }
+    if (apiKeyToggleVis && apiKeyInput) {
+        apiKeyToggleVis.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                apiKeyToggleVis.textContent = 'Hide key';
+            } else {
+                apiKeyInput.type = 'password';
+                apiKeyToggleVis.textContent = 'Show key';
+            }
+        });
+    }
+
     // Camera detection toggle — also controls overlay visibility
     if (adminCameraDetectionToggle) {
         adminCameraDetectionToggle.addEventListener('click', (e) => {
@@ -2232,11 +2509,18 @@ ${destination}` : message;
                         if (result?.ok) {
                             adminCameraDetectionToggle.classList.toggle('active', result.running);
                             setCameraToggleState(result.running);
-                            // Disable overlay toggle when detection is off
+                            // Sync overlay toggle state with detection
                             if (adminCameraOverlayToggle) {
                                 adminCameraOverlayToggle.disabled = !result.running;
                                 if (!result.running) {
                                     adminCameraOverlayToggle.classList.remove('active');
+                                } else if (bridge.get_camera_status) {
+                                    // Restore overlay state from actual camera status
+                                    bridge.get_camera_status((s) => {
+                                        if (s?.enabled) {
+                                            adminCameraOverlayToggle.classList.toggle('active', !!s.overlay);
+                                        }
+                                    });
                                 }
                             }
                         }
@@ -2267,6 +2551,7 @@ ${destination}` : message;
         adminCameraSelect.disabled = true;
         adminCameraSelect.innerHTML = '<option value="-1">Scanning...</option>';
         bridge.enumerate_cameras((result) => {
+            console.info('[Camera] enumerate_cameras result:', JSON.stringify(result));
             adminCameraSelect.innerHTML = '';
             if (result && result.ok && result.cameras && result.cameras.length > 0) {
                 result.cameras.forEach((cam) => {
@@ -2387,10 +2672,12 @@ ${destination}` : message;
 
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
-            // Don't steal focus from admin overlay inputs (sliders, number fields)
+            // Don't steal focus from admin overlay, dashboard, or debug panel
             const inAdmin = adminOverlay && adminOverlay.contains(event.target);
             const inDashboard = dashboardOverlay && dashboardOverlay.contains(event.target);
-            if (!inAdmin && !inDashboard) {
+            const debugEl = document.getElementById('debug-console');
+            const inDebug = debugEl && debugEl.contains(event.target);
+            if (!inAdmin && !inDashboard && !inDebug) {
                 returnFocusToInput();
             }
         }

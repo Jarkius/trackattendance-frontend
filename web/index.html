@@ -46,12 +46,17 @@
     </header>
     <i id="close-btn" class="material-icons">close</i>
 
-    <!-- Debug Console (temporary) -->
-    <div id="debug-console" style="position: fixed; bottom: 10px; left: 10px; width: 400px; max-height: 250px; background: rgba(0,0,0,0.9); color: #0f0; font-family: monospace; font-size: 10px; padding: 8px; overflow-y: auto; z-index: 9999; display: none; border: 1px solid #0f0;">
-        <div style="color: #f0f; margin-bottom: 5px; cursor: pointer; text-decoration: underline;" onclick="document.getElementById('debug-status').textContent = JSON.stringify(window.localStorage, null, 2);">LocalStorage DEBUG DATA (Click to view)</div>
-        <div id="debug-status" style="color: #ff0; margin-bottom: 5px; white-space: pre-wrap; word-break: break-word;"></div>
-        <div style="color: #f0f; margin-bottom: 5px;">CONSOLE LOG:</div>
-        <div id="debug-output"></div>
+    <!-- Debug Panel — live Python + JS log viewer -->
+    <div id="debug-console" style="position:fixed;bottom:0;left:0;right:0;height:220px;background:rgba(0,0,0,0.92);color:#0f0;font-family:'SF Mono',Menlo,monospace;font-size:11px;z-index:9999;display:none;border-top:2px solid #333;flex-direction:column;" tabindex="-1">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 10px;background:rgba(255,255,255,0.05);border-bottom:1px solid #333;flex-shrink:0;">
+            <span style="color:#999;font-size:10px;">DEBUG PANEL <span id="debug-source-label" style="color:#666;">— Python + JS</span></span>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button id="debug-copy-all-btn" style="background:none;border:1px solid #555;color:#999;font-size:9px;padding:1px 6px;cursor:pointer;border-radius:3px;">Copy All</button>
+                <button id="debug-clear-btn" style="background:none;border:1px solid #555;color:#999;font-size:9px;padding:1px 6px;cursor:pointer;border-radius:3px;">Clear</button>
+                <button id="debug-close-btn" style="background:none;border:1px solid #555;color:#999;font-size:9px;padding:1px 6px;cursor:pointer;border-radius:3px;">Close</button>
+            </div>
+        </div>
+        <div id="debug-output" style="flex:1;overflow-y:auto;padding:6px 10px;line-height:1.5;user-select:text;cursor:text;"></div>
     </div>
 
     <div class="container-fluid">
@@ -312,19 +317,27 @@
                         <button class="adm-toggle" id="admin-live-sync-toggle" type="button"></button>
                     </div>
                     <p class="adm-status" id="admin-live-sync-status" style="font-size:0.72rem;color:#999;">Instant cloud sync + cross-station duplicate check</p>
+                    <p style="font-size:0.78rem;color:#666;margin:8px 0 8px;">Cross-Station Dup Window <span style="font-weight:400;color:#999;">(other stations)</span></p>
+                    <div class="adm-opt-group" id="admin-live-sync-window-group">
+                        <button class="adm-opt adm-live-sync-window-opt" data-val="5">5m</button>
+                        <button class="adm-opt adm-live-sync-window-opt" data-val="15">15m</button>
+                        <button class="adm-opt adm-live-sync-window-opt" data-val="60">1h</button>
+                        <button class="adm-opt adm-live-sync-window-opt" data-val="1440">Always</button>
+                    </div>
+                    <p class="adm-status" id="admin-live-sync-window-status">--</p>
                 </div>
                 <div class="adm-section">
                     <div class="adm-section__header adm-section__header--scanning"><i class="material-icons">badge</i> Scanning</div>
                     <div class="adm-toggle-row">
-                        <span class="adm-toggle-row__label">Duplicate Detection</span>
+                        <span class="adm-toggle-row__label">Local Duplicate Detection</span>
                         <button class="adm-toggle" id="admin-dup-detection-toggle" type="button"></button>
                     </div>
-                    <p style="font-size:0.78rem;color:#666;margin:8px 0 8px;">Duplicate Window</p>
+                    <p style="font-size:0.78rem;color:#666;margin:8px 0 8px;">Local Dup Window <span style="font-weight:400;color:#999;">(this station)</span></p>
                     <div class="adm-opt-group">
                         <button class="adm-opt adm-dup-window-opt" data-val="60">1m</button>
-                        <button class="adm-opt adm-dup-window-opt" data-val="180">3m</button>
                         <button class="adm-opt adm-dup-window-opt" data-val="300">5m</button>
                         <button class="adm-opt adm-dup-window-opt" data-val="600">10m</button>
+                        <button class="adm-opt adm-dup-window-opt" data-val="86400">Always</button>
                     </div>
                     <p class="adm-status" id="admin-dup-window-status">--</p>
                     <p style="font-size:0.78rem;color:#666;margin:12px 0 8px 0;">Duplicate Action</p>
@@ -362,12 +375,12 @@
                     <div class="adm-section__header adm-section__header--camera"><i class="material-icons">videocam</i> Camera</div>
                     <div class="adm-toggle-row" style="margin-bottom:8px;">
                         <span class="adm-toggle-row__label">Device</span>
-                        <div style="display:flex;gap:6px;flex:1;align-items:center;">
-                            <select id="admin-camera-select" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem;background:#fff;color:#333;">
+                        <div style="display:flex;gap:6px;flex:1;align-items:center;margin-left:12px;">
+                            <select id="admin-camera-select" style="display:block;flex:1;height:auto;margin:0;padding:3px 6px;border:1px solid #ddd;border-radius:6px;font-size:0.78rem;background:#fff;color:#333;">
                                 <option value="-1">Click refresh to scan</option>
                             </select>
-                            <button class="adm-btn adm-btn--secondary" id="admin-camera-refresh-btn" type="button" style="font-size:12px;padding:5px 8px;white-space:nowrap;" title="Scan for cameras">
-                                <i class="material-icons" style="font-size:16px;vertical-align:middle;">refresh</i>
+                            <button id="admin-camera-refresh-btn" type="button" style="background:none;border:none;cursor:pointer;padding:2px;color:#888;transition:color 0.2s;" title="Scan for cameras">
+                                <i class="material-icons" style="font-size:18px;vertical-align:middle;">refresh</i>
                             </button>
                         </div>
                     </div>
@@ -447,6 +460,37 @@
                 <div class="adm-section">
                     <div class="adm-section__header adm-section__header--link"><i class="material-icons">link</i> Dashboard URL</div>
                     <a class="adm-status" id="admin-dashboard-url" href="#" target="_blank" rel="noopener" style="word-break:break-all;user-select:all;cursor:pointer;color:#86BC25;text-decoration:underline;">--</a>
+                </div>
+                <div class="adm-section" id="admin-api-key-section">
+                    <div class="adm-section__header"><i class="material-icons">vpn_key</i> License Key</div>
+                    <p class="adm-status" id="admin-api-key-status" style="font-size:0.78rem;color:#999;">Checking...</p>
+                    <div style="display:flex;gap:6px;margin-top:6px;">
+                        <input type="password" id="admin-api-key-input" placeholder="Paste API key here" autocomplete="off" spellcheck="false"
+                            style="flex:1;background:#1a1a1a;border:1px solid #333;border-radius:6px;color:#fff;padding:8px 10px;font-family:monospace;font-size:0.82rem;">
+                        <button id="admin-api-key-save" class="admin-overlay__btn" style="padding:6px 14px;font-size:0.82rem;white-space:nowrap;">Save</button>
+                    </div>
+                    <button id="admin-api-key-toggle-vis" style="background:none;border:none;color:#666;font-size:0.72rem;cursor:pointer;margin-top:4px;padding:0;">Show key</button>
+                </div>
+                <div class="adm-section">
+                    <div class="adm-section__header" style="color:#9e9e9e;"><i class="material-icons">bug_report</i> Debug</div>
+                    <p style="font-size:0.78rem;color:#666;margin:0 0 8px;">Log Level</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-log-level-opt" data-val="ERROR">Error</button>
+                        <button class="adm-opt adm-log-level-opt" data-val="WARNING">Warn</button>
+                        <button class="adm-opt adm-log-level-opt" data-val="INFO">Info</button>
+                        <button class="adm-opt adm-log-level-opt" data-val="DEBUG">Debug</button>
+                    </div>
+                    <p class="adm-status" id="admin-log-level-status">--</p>
+                    <div class="adm-toggle-row" style="margin-top:8px;">
+                        <span class="adm-toggle-row__label">Console Output</span>
+                        <button class="adm-toggle" id="admin-console-log-toggle" type="button"></button>
+                    </div>
+                    <p class="adm-status" id="admin-console-log-status" style="font-size:0.72rem;color:#999;">Show logs in terminal</p>
+                    <div class="adm-toggle-row" style="margin-top:8px;">
+                        <span class="adm-toggle-row__label">Debug Panel</span>
+                        <button class="adm-toggle" id="admin-debug-panel-toggle" type="button"></button>
+                    </div>
+                    <p class="adm-status" id="admin-debug-panel-status" style="font-size:0.72rem;color:#999;">Live log overlay (Ctrl+Shift+D)</p>
                 </div>
                 <div class="admin-overlay__actions">
                     <button class="admin-overlay__btn admin-overlay__btn--cancel" id="admin-settings-back-bottom">Back</button>

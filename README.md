@@ -43,6 +43,9 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - **Voice file override** — drop custom MP3s in `voices/` next to exe to replace bundled voices without recompiling
 - **CI/CD pipeline** — automated `pytest` runs on every push and PR (338 tests)
 - **Camera proximity greeting** — YuNet DNN face detection with upper body Haar cascade fallback; detects approaching people even when face isn't visible (turned away, too tall/short); ElevenLabs voice greetings; presence-aware state machine with voice overlap prevention (disabled by default)
+- **Debug panel** — live Python log streaming overlay in the kiosk UI with click-to-copy, Copy All, color-coded log levels, and 500ms polling; toggled from admin panel
+- **Admin debug controls** — runtime log level (ERROR/WARN/INFO/DEBUG), console output toggle, debug panel toggle; all settings persist across restarts
+- **Focus lock release** — when debug panel is active, focus lock disengages to allow free clicking, text selection, and clipboard copy
 
 ## 💻 Requirements
 
@@ -171,9 +174,12 @@ docs/                Technical documentation
 - [Product Requirements](docs/PRD.md) — Feature requirements
 - [Feature: Indicator Redesign](docs/FEATURE_INDICATOR_REDESIGN.md) — Connection indicator design
 - [Claude Code Action](docs/CLAUDE_CODE_ACTION.md) — AI-powered code assistance setup
+- [Configuration Reference](docs/CONFIGURATION.md) — All settings with defaults and descriptions
+- [Commercialization Plan](docs/COMMERCIALIZE.md) — Licensing, pricing, Stripe integration, go-to-market strategy
 
 ## 📝 Version History
 
+- **v2.0.0** — Admin debug controls (log level, console output, debug panel toggles), live Python log streaming overlay with click-to-copy and color-coded levels, focus lock release when debug panel active, clipboard fallback for QWebEngineView `file://` context, commercialization plan
 - **v1.9.0** — YuNet DNN face detection with upper body Haar cascade fallback (4-layer detection chain: YuNet → upper body → Haar face → motion), ElevenLabs voice greetings, voice overlap race condition fix, admin controls for confirm frames/strictness/duplicate detection toggle/alert duration with reset-to-defaults, camera icon repositioned below title bar, Excel export timezone conversion (UTC → local), PostgreSQL composite indexes and connection pool scaling (50 connections), BU aggregation query optimized with CTE, 338 tests
 - **v1.8.0** — Admin control center redesign (sectioned panel with runtime settings sliders), voice file override (`voices/` next to exe), duplicate detection by `legacy_id`, detailed duplicate roster report, configurable Haar cascade sensitivity, scan source tracking refined (`badge`/`lookup`/`manual`), dashboard refresh interval setting, station heartbeat & live status, clear this station / clear all with `clear_epoch` coordination, slider UI (green/grey fill bar), settings persistence across restarts, 307 tests
 - **v1.7.0** — Voice toggle (mute/unmute from header), employee email/name lookup for forgot-badge users, scan source tracking (`badge` / `manual_lookup`), unified export columns, `scan_source` column in cloud DB, requirements.txt cleanup (268 tests)
@@ -202,6 +208,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `VOICE_ENABLED` | `True` | Voice confirmation on scan |
 | `VOICE_VOLUME` | `1.0` | Playback volume (`0.0`–`1.0`) |
 | `ADMIN_PIN` | *(empty)* | 4-6 digit PIN to enable admin panel (leave empty to disable) |
+| `DEBUG` | `False` | Enable debug mode (disables focus lock) |
 | `ENABLE_CAMERA_DETECTION` | `False` | Enable camera proximity greeting plugin |
 | `CAMERA_DEVICE_ID` | `0` | Camera index (`0` = default webcam) |
 | `CAMERA_SHOW_OVERLAY` | `True` | Show floating camera preview (set `False` for production) |

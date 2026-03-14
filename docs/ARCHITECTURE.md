@@ -15,6 +15,7 @@ Track Attendance ships as a PyQt6 desktop shell that hosts a single-page web int
   - Applies window chrome (frameless, fade-in animation) and handles close events, including auto-export logic.
   - Manages critical startup failures, such as prompting for a station name if unconfigured or displaying a fallback UI if web assets are missing.
   - **Admin control center** — PIN-protected settings panel with runtime-tunable sliders (duplicate detection toggle + alert duration, voice, camera confirm frames + strictness + reset to defaults, connection check). Settings persist in SQLite `roster_meta` table and reload on startup.
+  - **Debug subsystem** — `DebugLogBuffer(logging.Handler)` is a thread-safe ring buffer (200 lines) that captures Python logs at DEBUG level. Admin panel exposes runtime log level, console output toggle, and debug panel toggle. `admin_get_debug_logs(since_cursor)` provides poll-based log delivery to JS (avoids QWebChannel threading issues). When debug panel is active, `config._DEBUG_PANEL_ACTIVE` flag is set so `get_initial_payload()` includes `debugMode: true`, which disengages the focus lock from first paint.
 
 ### 2.2 Web Interface (HTML/CSS/JavaScript)
 - **Location:** `web/index.html`, `web/css/style.css`, `web/script.js`
