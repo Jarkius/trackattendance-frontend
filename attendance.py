@@ -353,28 +353,72 @@ class AttendanceService:
             "connectionCheckInitialDelayMs": max(0, int(config.CONNECTION_CHECK_INITIAL_DELAY_MS)),
             "duplicateBadgeAlertDurationMs": max(0, int(config.DUPLICATE_BADGE_ALERT_DURATION_MS)),
             "scanFeedbackDurationMs": max(0, int(config.SCAN_FEEDBACK_DURATION_MS)),
-            "debugMode": os.getenv("DEBUG", "False").lower() == "true",
+            "debugMode": os.getenv("DEBUG", "False").lower() == "true"
+                or getattr(config, '_DEBUG_PANEL_ACTIVE', False),
         }
 
     def search_employee(self, query: str) -> List[Dict[str, object]]:
-        """Search employees by email prefix or partial name match."""
-        query = query.strip().lower()
+        """Search employees by email prefix, partial name, or fuzzy match.
+
+        Search strategy (in order):
+        1. Exact email prefix match
+        2. Substring match on full name
+        3. All individual query words must appear in the name (any order)
+        4. Fuzzy fallback — tolerate typos using word-level similarity
+        """
+        # Normalize whitespace: collapse multiple spaces into one
+        query = " ".join(query.split()).lower()
         if not query:
             return []
-        results = []
+
+        query_words = query.split()
+        exact_results = []
+        word_match_results = []
+        fuzzy_results = []  # (similarity_score, employee_dict)
+
         for emp in self._employee_cache.values():
+            emp_dict = {
+                "legacy_id": emp.legacy_id,
+                "full_name": emp.full_name,
+                "email": emp.email,
+                "business_unit": emp.sl_l1_desc,
+            }
             email_prefix = emp.email.split("@")[0].lower() if emp.email else ""
-            name_lower = emp.full_name.lower()
+            name_lower = " ".join(emp.full_name.split()).lower()
+
+            # Tier 1: exact email or substring match
             if (email_prefix and email_prefix == query) or query in name_lower:
-                results.append({
-                    "legacy_id": emp.legacy_id,
-                    "full_name": emp.full_name,
-                    "email": emp.email,
-                    "business_unit": emp.sl_l1_desc,
-                })
-            if len(results) >= 10:
-                break
-        return results
+                exact_results.append(emp_dict)
+                if len(exact_results) >= 10:
+                    break
+                continue
+
+            # Tier 2: all query words appear somewhere in the name (any order)
+            # e.g. "smith john" matches "John Smith"
+            if len(query_words) > 1 and all(w in name_lower for w in query_words):
+                word_match_results.append(emp_dict)
+                continue
+
+            # Tier 3: fuzzy match — each query word must closely match a name word
+            # Handles typos like "Smth" → "Smith", "Jhon" → "John"
+            if len(query_words) >= 1 and len(query) >= 3:
+                name_words = name_lower.split()
+                score = _fuzzy_word_score(query_words, name_words)
+                if score >= 0.75:
+                    fuzzy_results.append((score, emp_dict))
+
+        if exact_results:
+            return exact_results[:10]
+
+        if word_match_results:
+            return word_match_results[:10]
+
+        # Sort fuzzy results by score descending, return top matches
+        if fuzzy_results:
+            fuzzy_results.sort(key=lambda x: x[0], reverse=True)
+            return [r[1] for r in fuzzy_results[:10]]
+
+        return []
 
     def register_scan(self, badge_id: str, scan_source: str = "badge",
                        lookup_legacy_id: str = None) -> Dict[str, object]:
@@ -563,10 +607,32 @@ def _sanitize_filename_component(component: str) -> str:
     return sanitized or fallback
 
 
+def _fuzzy_word_score(query_words: list, name_words: list) -> float:
+    """Score how well query words match name words, tolerating typos.
+
+    Each query word finds its best-matching name word using SequenceMatcher.
+    Returns average of best matches (0.0-1.0). A score >= 0.75 is a good fuzzy match.
+
+    Examples:
+        ["john", "smth"] vs ["john", "smith"]  → ~0.92
+        ["jhon", "smith"] vs ["john", "smith"] → ~0.88
+        ["xyz", "abc"] vs ["john", "smith"]    → ~0.0
+    """
+    from difflib import SequenceMatcher
+    if not query_words or not name_words:
+        return 0.0
+    total = 0.0
+    for qw in query_words:
+        best = max(SequenceMatcher(None, qw, nw).ratio() for nw in name_words)
+        total += best
+    return total / len(query_words)
+
+
 def _safe_string(value: Optional[object]) -> str:
     if value is None:
         return ""
-    return str(value).strip()
+    # Strip leading/trailing whitespace and collapse internal multiple spaces
+    return " ".join(str(value).split())
 
 
 def _format_timestamp(value: Optional[str]) -> str:

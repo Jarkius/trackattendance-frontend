@@ -75,24 +75,18 @@ CLOUD_API_URL = os.getenv(
     "https://trackattendance-api-969370105809.asia-southeast1.run.app"
 )
 
-# API authentication key - REQUIRED
+# API authentication key
 # Load from environment variable for security
-# Fail fast if not provided
+# If not provided, app starts in local-only mode (free tier)
 CLOUD_API_KEY = os.getenv("CLOUD_API_KEY")
 if not CLOUD_API_KEY:
     print("\n" + "="*70)
-    print("ERROR: CLOUD_API_KEY not set")
+    print("NOTE: CLOUD_API_KEY not set — starting in local-only mode")
     print("="*70)
-    print("\nTrackAttendance requires a cloud API key to sync data.")
-    print("\nTo fix this:\n")
-    print("  1. Copy .env.example to .env:")
-    print("     cp .env.example .env\n")
-    print("  2. Edit .env and fill in your CLOUD_API_KEY:\n")
-    print("     CLOUD_API_KEY=your-actual-api-key-here\n")
-    print("  3. Restart the application\n")
-    print("For help, see: README.md > Cloud Synchronization > Configuration")
+    print("\nCloud sync, dashboard, and multi-station features are disabled.")
+    print("Enter your API key in Admin Panel > Settings to enable cloud features.")
+    print("Or set CLOUD_API_KEY in your .env file and restart.")
     print("="*70 + "\n")
-    sys.exit(1)
 
 # Read-only mode: view dashboard data from cloud but don't send anything
 # (no heartbeats, no scan sync, no station registration)
@@ -104,7 +98,7 @@ if CLOUD_READ_ONLY:
 # Disabled automatically when CLOUD_READ_ONLY=true
 LIVE_SYNC_ENABLED = os.getenv("LIVE_SYNC_ENABLED", "False").lower() in ("true", "1", "yes")
 LIVE_SYNC_TIMEOUT_SECONDS = _safe_float("LIVE_SYNC_TIMEOUT_SECONDS", 2.0, min_val=0.5, max_val=10.0)
-LIVE_SYNC_DUP_WINDOW_MINUTES = _safe_int("LIVE_SYNC_DUP_WINDOW_MINUTES", 5, min_val=1, max_val=60)
+LIVE_SYNC_DUP_WINDOW_MINUTES = _safe_int("LIVE_SYNC_DUP_WINDOW_MINUTES", 5, min_val=1, max_val=1440)
 
 # Number of scans to sync in each batch
 CLOUD_SYNC_BATCH_SIZE = _safe_int("CLOUD_SYNC_BATCH_SIZE", 100, min_val=1, max_val=1000)

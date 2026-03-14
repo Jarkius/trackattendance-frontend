@@ -84,7 +84,7 @@ Required Excel columns: `Legacy ID`, `Full Name`, `SL L1 Desc`, `Position Desc`.
 |----------|---------|-------------|
 | `ADMIN_PIN` | *(empty)* | 4-6 digit PIN to enable admin panel. Leave empty to disable. |
 
-Admin panel is accessible from the dashboard header (gear icon). Features: view cloud scan count, clear cloud + local database, runtime camera/voice/duplicate settings, reset camera to defaults.
+Admin panel is accessible from the dashboard header (gear icon). Features: view cloud scan count, clear cloud + local database, runtime camera/voice/duplicate settings, reset camera to defaults, debug controls (log level, console output, debug panel).
 
 ## Camera Detection
 
@@ -102,7 +102,7 @@ Admin panel is accessible from the dashboard header (gear icon). Features: view 
 
 Detection chain: YuNet DNN face → Upper body Haar → Frontal face Haar → Motion (frame differencing).
 
-## Logging
+## Logging & Debug
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -111,6 +111,25 @@ Detection chain: YuNet DNN face → Upper body Haar → Frontal face Haar → Mo
 | `LOGGING_LEVEL` | `INFO` | Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL |
 | `LOGGING_CONSOLE` | `True` | Also log to console/stdout |
 | `LOG_SECRETS` | `False` | Log sensitive data (never enable in production) |
+| `DEBUG` | `False` | Enable debug mode (disables focus lock for kiosk input) |
+
+### Runtime Debug Controls (Admin Panel)
+
+These settings are available in the admin panel under the **Debug** section and persist across restarts in the local SQLite database:
+
+| Setting | Options | Description |
+|---------|---------|-------------|
+| **Log Level** | ERROR / WARN / INFO / DEBUG | Changes the runtime log level for all handlers (except the debug buffer, which always captures at DEBUG level) |
+| **Console Output** | On / Off | Toggles stderr StreamHandler at runtime |
+| **Debug Panel** | On / Off | Enables the live log streaming overlay in the kiosk UI |
+
+**Debug Panel features:**
+- Live Python log streaming via 500ms polling (thread-safe ring buffer, 200 lines)
+- Color-coded log levels (red=ERROR, amber=WARN, cyan=DEBUG, white=INFO)
+- Click any line to copy to clipboard
+- "Copy All" button copies entire log buffer
+- Clipboard fallback for QWebEngineView `file://` context (uses `execCommand('copy')`)
+- When active, focus lock disengages — allows free clicking, text selection, and copy
 
 ## Application Paths
 

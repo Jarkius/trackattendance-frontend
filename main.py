@@ -4,6 +4,7 @@ import sys
 import json
 import time
 import logging
+import logging.handlers
 import threading
 import os
 from pathlib import Path
@@ -366,6 +367,44 @@ class AutoSyncManager(QObject):
         self.web_view.page().runJavaScript(script)
 
 
+class DebugLogBuffer(logging.Handler):
+    """Ring-buffer logging handler that stores recent log lines for UI polling."""
+
+    def __init__(self, capacity: int = 200):
+        super().__init__()
+        self._buffer: list[str] = []
+        self._capacity = capacity
+        self._cursor = 0  # monotonic counter for polling
+        self._lock = threading.Lock()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            with self._lock:
+                self._buffer.append(msg)
+                self._cursor += 1
+                if len(self._buffer) > self._capacity:
+                    self._buffer.pop(0)
+        except Exception:
+            pass
+
+    def get_lines_since(self, since_cursor: int) -> dict:
+        """Return new lines since the given cursor."""
+        with self._lock:
+            total = self._cursor
+            available = len(self._buffer)
+            start_cursor = total - available
+            if since_cursor < start_cursor:
+                since_cursor = start_cursor
+            offset = since_cursor - start_cursor
+            lines = self._buffer[offset:]
+            return {"lines": lines, "cursor": total}
+
+
+# Global debug buffer — attached to root logger when debug panel is enabled
+_debug_log_buffer = DebugLogBuffer(capacity=200)
+
+
 class Api(QObject):
     """Expose desktop controls to the embedded web UI."""
 
@@ -405,6 +444,7 @@ class Api(QObject):
         self._config_defaults = {
             "dup_alert_ms": config.DUPLICATE_BADGE_ALERT_DURATION_MS,
             "voice_volume": config.VOICE_VOLUME,
+            "camera_device_id": config.CAMERA_DEVICE_ID,
             "greeting_cooldown": config.CAMERA_GREETING_COOLDOWN_SECONDS,
             "min_size_pct": config.CAMERA_MIN_SIZE_PCT,
             "absence_threshold": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
@@ -634,11 +674,92 @@ class Api(QObject):
     def get_camera_status(self) -> dict:
         """Return camera detection feature status."""
         if not self._proximity_manager:
+            LOGGER.info("[Camera] get_camera_status: no proximity_manager, returning disabled")
             return {"enabled": False, "running": False}
-        return {
+        result = {
             "enabled": True,
             "running": bool(self._proximity_manager._running),
+            "overlay": bool(self._proximity_manager._show_overlay),
         }
+        LOGGER.info("[Camera] get_camera_status: %s", result)
+        return result
+
+    @pyqtSlot(result="QVariant")
+    def enumerate_cameras(self) -> dict:
+        """Probe camera indices 0-10, return list of available cameras."""
+        LOGGER.info("[Camera] enumerate_cameras called")
+        cameras = []
+        try:
+            import cv2
+        except ImportError:
+            return {"ok": False, "cameras": [], "message": "OpenCV not available"}
+
+        active_id = config.CAMERA_DEVICE_ID
+        active_running = (self._proximity_manager
+                          and self._proximity_manager._running)
+
+        for i in range(4):  # macOS/Windows rarely have more than 3 cameras
+            # Skip probing the active camera if it's running (exclusive access on Windows)
+            if i == active_id and active_running:
+                cameras.append({"index": i, "name": f"Camera {i} (active)"})
+                continue
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                # Some USB/external cameras need a few reads to warm up
+                ret = False
+                for _ in range(3):
+                    ret, _ = cap.read()
+                    if ret:
+                        break
+                if ret:
+                    backend = cap.getBackendName() if hasattr(cap, 'getBackendName') else ""
+                    label = f"Camera {i}"
+                    if backend:
+                        label += f" ({backend})"
+                    cameras.append({"index": i, "name": label})
+                cap.release()
+
+        LOGGER.info("[Camera] enumerate_cameras result: %d cameras found, selected=%d", len(cameras), active_id)
+        return {"ok": True, "cameras": cameras, "selected": active_id}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_select_camera(self, index: int) -> dict:
+        """Select camera by device index. Restarts camera if running. Persisted."""
+        index = max(0, min(10, index))
+        config.CAMERA_DEVICE_ID = index
+        self._save_setting("camera_device_id", str(index))
+
+        if self._proximity_manager:
+            was_running = self._proximity_manager._running
+            self._proximity_manager._camera_id = index
+            if was_running:
+                self._proximity_manager.stop()
+                # Delay restart to let old camera fully release
+                import threading
+                threading.Thread(
+                    target=self._deferred_camera_restart,
+                    daemon=True, name="camera-restart",
+                ).start()
+
+        LOGGER.info("[Admin] Camera selected: index %d", index)
+        return {"ok": True, "index": index}
+
+    def _deferred_camera_restart(self):
+        """Wait briefly, then restart camera on main thread."""
+        time.sleep(0.5)
+        from PyQt6.QtCore import QMetaObject, Qt
+        QMetaObject.invokeMethod(
+            self, "_do_camera_restart",
+            Qt.ConnectionType.QueuedConnection,
+        )
+
+    @pyqtSlot()
+    def _do_camera_restart(self):
+        """Restart camera on main thread after device change."""
+        if self._proximity_manager and not self._proximity_manager._running:
+            started = self._proximity_manager.start()
+            LOGGER.info("[Admin] Camera restart after device change: %s",
+                        "ok" if started else "failed")
 
     @pyqtSlot(result="QVariant")
     def toggle_camera(self) -> dict:
@@ -833,6 +954,7 @@ class Api(QObject):
     @pyqtSlot(result="QVariant")
     def admin_get_local_settings(self) -> dict:
         """Return all runtime-adjustable local settings."""
+        LOGGER.info("[Admin] admin_get_local_settings called, camera_enabled=%s", self._proximity_manager is not None)
         camera_running = False
         camera_overlay = config.CAMERA_SHOW_OVERLAY
         greeting_cooldown = config.CAMERA_GREETING_COOLDOWN_SECONDS
@@ -860,6 +982,7 @@ class Api(QObject):
             "voice_enabled": self._voice_player.enabled if self._voice_player else False,
             "voice_volume": self._voice_player._volume if self._voice_player else 1.0,
             "camera_enabled": self._proximity_manager is not None,
+            "camera_device_id": config.CAMERA_DEVICE_ID,
             "camera_running": camera_running,
             "camera_overlay": camera_overlay,
             "greeting_cooldown": greeting_cooldown,
@@ -872,7 +995,15 @@ class Api(QObject):
             "dashboard_url": dashboard_url,
             "monitoring_mode": config.CLOUD_READ_ONLY,
             "live_sync_enabled": config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY,
+            "live_sync_window_minutes": config.LIVE_SYNC_DUP_WINDOW_MINUTES,
+            "log_level": config.LOGGING_LEVEL,
+            "console_logging": config.LOGGING_CONSOLE,
+            "debug_panel": _debug_log_buffer in logging.getLogger().handlers,
             "defaults": self._config_defaults,
+            "api_key_configured": bool(config.CLOUD_API_KEY),
+            "api_key_masked": (config.CLOUD_API_KEY[:8] + "..." + config.CLOUD_API_KEY[-4:])
+                if config.CLOUD_API_KEY and len(config.CLOUD_API_KEY) > 16
+                else ("***" if config.CLOUD_API_KEY else ""),
         }
 
     # ------------------------------------------------------------------
@@ -882,7 +1013,7 @@ class Api(QObject):
     @pyqtSlot(int, result="QVariant")
     def admin_set_duplicate_window(self, seconds: int) -> dict:
         """Set duplicate badge time window. Persisted across restarts."""
-        seconds = max(1, min(3600, seconds))
+        seconds = max(1, min(86400, seconds))
         config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = seconds
         self._save_setting("duplicate_window", str(seconds))
         LOGGER.info("[Admin] Duplicate window set to %ds", seconds)
@@ -964,7 +1095,7 @@ class Api(QObject):
         v = db.get_meta("setting:duplicate_window")
         if v is not None:
             try:
-                config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = max(1, min(3600, int(v)))
+                config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = max(1, min(86400, int(v)))
                 count += 1
             except ValueError:
                 pass
@@ -994,6 +1125,13 @@ class Api(QObject):
             except ValueError:
                 pass
         # Camera settings
+        v = db.get_meta("setting:camera_device_id")
+        if v is not None:
+            try:
+                config.CAMERA_DEVICE_ID = max(0, min(10, int(v)))
+                count += 1
+            except ValueError:
+                pass
         v = db.get_meta("setting:camera_overlay")
         if v is not None:
             config.CAMERA_SHOW_OVERLAY = v.lower() in ("true", "1")
@@ -1055,6 +1193,62 @@ class Api(QObject):
         v = db.get_meta("setting:live_sync_enabled")
         if v is not None:
             config.LIVE_SYNC_ENABLED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:live_sync_window_minutes")
+        if v is not None:
+            try:
+                config.LIVE_SYNC_DUP_WINDOW_MINUTES = max(1, min(1440, int(v)))
+                count += 1
+            except (ValueError, TypeError):
+                pass
+        # API key from SQLite (Option B: allows setting key without .env)
+        if not config.CLOUD_API_KEY:
+            v = db.get_meta("setting:cloud_api_key")
+            if v:
+                config.CLOUD_API_KEY = v
+                LOGGER.info("[Admin] API key loaded from local database")
+                count += 1
+        # Debug settings
+        v = db.get_meta("setting:log_level")
+        if v is not None and v.upper() in ("DEBUG", "INFO", "WARNING", "ERROR"):
+            config.LOGGING_LEVEL = v.upper()
+            numeric = getattr(logging, v.upper(), logging.INFO)
+            root = logging.getLogger()
+            root.setLevel(min(numeric, logging.DEBUG))
+            for handler in root.handlers:
+                if handler is _debug_log_buffer:
+                    continue
+                handler.setLevel(numeric)
+            count += 1
+        v = db.get_meta("setting:console_logging")
+        if v is not None:
+            want_console = v.lower() in ("true", "1")
+            config.LOGGING_CONSOLE = want_console
+            root = logging.getLogger()
+            has_console = any(
+                isinstance(h, logging.StreamHandler) and not isinstance(h, logging.handlers.RotatingFileHandler)
+                for h in root.handlers
+            )
+            if want_console and not has_console:
+                import sys as _sys
+                console = logging.StreamHandler(_sys.stderr)
+                console.setLevel(getattr(logging, config.LOGGING_LEVEL, logging.INFO))
+                console.setFormatter(logging.Formatter('%(asctime)s [%(levelname)-8s] %(name)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+                root.addHandler(console)
+            elif not want_console and has_console:
+                for h in list(root.handlers):
+                    if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.handlers.RotatingFileHandler):
+                        root.removeHandler(h)
+            count += 1
+        v = db.get_meta("setting:debug_panel")
+        if v is not None and v.lower() in ("true", "1"):
+            root = logging.getLogger()
+            if _debug_log_buffer not in root.handlers:
+                fmt = logging.Formatter('%(asctime)s [%(levelname)-5s] %(name)s - %(message)s', datefmt='%H:%M:%S')
+                _debug_log_buffer.setFormatter(fmt)
+                _debug_log_buffer.setLevel(logging.DEBUG)
+                root.addHandler(_debug_log_buffer)
+            config._DEBUG_PANEL_ACTIVE = True
             count += 1
         if count:
             LOGGER.info("[Admin] Loaded %d saved setting(s) from database", count)
@@ -1124,6 +1318,141 @@ class Api(QObject):
         LOGGER.info("[Admin] Live Sync %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
 
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_live_sync_window(self, minutes: int) -> dict:
+        """Set Live Sync cross-station duplicate window in minutes. Persisted."""
+        minutes = max(1, min(1440, minutes))
+        config.LIVE_SYNC_DUP_WINDOW_MINUTES = minutes
+        self._save_setting("live_sync_window_minutes", str(minutes))
+        LOGGER.info("[Admin] Live Sync window set to %dm", minutes)
+        return {"ok": True, "value": minutes}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_log_level(self, level: str) -> dict:
+        """Change runtime log level. Persisted across restarts."""
+        level = level.upper()
+        if level not in ("DEBUG", "INFO", "WARNING", "ERROR"):
+            return {"ok": False, "message": "Invalid level"}
+        config.LOGGING_LEVEL = level
+        numeric = getattr(logging, level, logging.INFO)
+        root = logging.getLogger()
+        root.setLevel(min(numeric, logging.DEBUG))  # root must pass all levels for debug buffer
+        for handler in root.handlers:
+            if handler is _debug_log_buffer:
+                continue  # debug buffer always captures at DEBUG level
+            handler.setLevel(numeric)
+        self._save_setting("log_level", level)
+        LOGGER.info("[Admin] Log level set to %s", level)
+        return {"ok": True, "value": level}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_console_logging(self, enabled: bool) -> dict:
+        """Toggle console (stderr) logging at runtime. Persisted."""
+        config.LOGGING_CONSOLE = enabled
+        root = logging.getLogger()
+        # Remove or add console handler
+        for handler in list(root.handlers):
+            if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.handlers.RotatingFileHandler):
+                if not enabled:
+                    root.removeHandler(handler)
+        if enabled:
+            has_console = any(
+                isinstance(h, logging.StreamHandler) and not isinstance(h, logging.handlers.RotatingFileHandler)
+                for h in root.handlers
+            )
+            if not has_console:
+                import sys as _sys
+                console = logging.StreamHandler(_sys.stderr)
+                console.setLevel(getattr(logging, config.LOGGING_LEVEL, logging.INFO))
+                log_format = '%(asctime)s [%(levelname)-8s] %(name)s - %(message)s'
+                console.setFormatter(logging.Formatter(log_format, datefmt='%Y-%m-%d %H:%M:%S'))
+                root.addHandler(console)
+        self._save_setting("console_logging", str(enabled))
+        LOGGER.info("[Admin] Console logging %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "enabled": enabled}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_debug_panel(self, enabled: bool) -> dict:
+        """Toggle debug panel visibility. When on, attaches log buffer to root logger."""
+        root = logging.getLogger()
+        if enabled:
+            if _debug_log_buffer not in root.handlers:
+                fmt = logging.Formatter('%(asctime)s [%(levelname)-5s] %(name)s - %(message)s', datefmt='%H:%M:%S')
+                _debug_log_buffer.setFormatter(fmt)
+                _debug_log_buffer.setLevel(logging.DEBUG)
+                root.addHandler(_debug_log_buffer)
+        else:
+            if _debug_log_buffer in root.handlers:
+                root.removeHandler(_debug_log_buffer)
+        config._DEBUG_PANEL_ACTIVE = enabled
+        self._save_setting("debug_panel", str(enabled))
+        LOGGER.info("[Admin] Debug panel %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "enabled": enabled}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_get_debug_logs(self, since_cursor: int) -> dict:
+        """Poll new log lines since cursor. Returns {lines: [...], cursor: int}."""
+        return _debug_log_buffer.get_lines_since(since_cursor)
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_api_key(self, key: str) -> dict:
+        """Set or update the cloud API key at runtime. Persisted across restarts.
+
+        This allows customers to enter their license key from the admin panel
+        without editing .env files. The key is stored in local SQLite and
+        takes effect immediately (no restart needed).
+        """
+        key = key.strip()
+        if not key:
+            return {"ok": False, "message": "API key cannot be empty"}
+
+        # Update runtime config
+        old_key = config.CLOUD_API_KEY
+        config.CLOUD_API_KEY = key
+
+        # Persist to SQLite
+        self._save_setting("cloud_api_key", key)
+
+        # Reinitialise sync service if it wasn't running (first-time key entry)
+        if not old_key and self._sync_service is None:
+            try:
+                self._sync_service = SyncService(
+                    db=self._service._db,
+                    api_url=config.CLOUD_API_URL,
+                    api_key=key,
+                    batch_size=config.CLOUD_SYNC_BATCH_SIZE,
+                    connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
+                )
+                self._service.set_sync_service(self._sync_service)
+                LOGGER.info("[Admin] Sync service initialised with new API key")
+            except Exception as exc:
+                LOGGER.warning("[Admin] Failed to init sync service: %s", exc)
+        elif self._sync_service:
+            # Update existing sync service's API key
+            self._sync_service._api_key = key
+            LOGGER.info("[Admin] Sync service API key updated")
+
+        LOGGER.info("[Admin] API key %s", "updated" if old_key else "set for first time")
+        return {
+            "ok": True,
+            "message": "API key saved. Cloud features are now active." if not old_key
+                else "API key updated.",
+            "had_previous": bool(old_key),
+        }
+
+    @pyqtSlot(result="QVariant")
+    def admin_get_api_key_status(self) -> dict:
+        """Return whether an API key is configured (without exposing the key itself)."""
+        key = config.CLOUD_API_KEY
+        if not key:
+            return {"configured": False, "masked": "", "message": "No API key set — running in local-only mode"}
+        # Show first 8 and last 4 chars, mask the rest
+        if len(key) > 16:
+            masked = key[:8] + "..." + key[-4:]
+        else:
+            masked = key[:4] + "..." + key[-2:] if len(key) > 6 else "***"
+        return {"configured": True, "masked": masked, "message": "Cloud features active"}
+
     @pyqtSlot(float, result="QVariant")
     def admin_set_min_size_pct(self, pct: float) -> dict:
         """Set camera min face size percentage. Persisted across restarts."""
@@ -1187,8 +1516,9 @@ class Api(QObject):
         """Reset all camera settings to .env defaults. Clears DB overrides."""
         db = self._service._db
         camera_keys = [
-            "camera_overlay", "greeting_cooldown", "min_size_pct",
-            "absence_threshold", "confirm_frames", "haar_min_neighbors",
+            "camera_device_id", "camera_overlay", "greeting_cooldown",
+            "min_size_pct", "absence_threshold", "confirm_frames",
+            "haar_min_neighbors",
         ]
         for key in camera_keys:
             db._connection.execute("DELETE FROM roster_meta WHERE key = ?", (f"setting:{key}",))
@@ -1202,9 +1532,11 @@ class Api(QObject):
         config.CAMERA_CONFIRM_FRAMES = d["confirm_frames"]
         config.CAMERA_HAAR_MIN_NEIGHBORS = d["haar_min_neighbors"]
         config.CAMERA_SHOW_OVERLAY = False  # production default
+        config.CAMERA_DEVICE_ID = d.get("camera_device_id", 0)
 
         # Push to live manager/detector
         if self._proximity_manager:
+            self._proximity_manager._camera_id = config.CAMERA_DEVICE_ID
             self._proximity_manager._cooldown = d["greeting_cooldown"]
             self._proximity_manager._min_size_pct = d["min_size_pct"]
             self._proximity_manager._absence_threshold = d["absence_threshold"]
@@ -1539,31 +1871,36 @@ def main() -> None:
             "The application will continue but roster data may be incomplete.",
         )
 
-    # Initialize sync service for cloud integration
-    sync_service = SyncService(
-        db=service._db,
-        api_url=config.CLOUD_API_URL,
-        api_key=config.CLOUD_API_KEY,
-        batch_size=config.CLOUD_SYNC_BATCH_SIZE,
-        connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
-    )
-    # Wire SyncService into AttendanceService for Live Sync (#54)
-    service.set_sync_service(sync_service)
-    LOGGER.info(
-        "Connection status checks: interval=%sms, timeout=%.2fs",
-        config.CONNECTION_CHECK_INTERVAL_MS,
-        config.CONNECTION_CHECK_TIMEOUT_SECONDS,
-    )
+    # Initialize sync service for cloud integration (only if API key is available)
+    sync_service = None
+    dashboard_service = None
+    if config.CLOUD_API_KEY:
+        sync_service = SyncService(
+            db=service._db,
+            api_url=config.CLOUD_API_URL,
+            api_key=config.CLOUD_API_KEY,
+            batch_size=config.CLOUD_SYNC_BATCH_SIZE,
+            connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
+        )
+        # Wire SyncService into AttendanceService for Live Sync (#54)
+        service.set_sync_service(sync_service)
+        LOGGER.info(
+            "Connection status checks: interval=%sms, timeout=%.2fs",
+            config.CONNECTION_CHECK_INTERVAL_MS,
+            config.CONNECTION_CHECK_TIMEOUT_SECONDS,
+        )
 
-    # Initialize dashboard service for multi-station reports (Issue #27)
-    # Uses the same Cloud API as sync service (no direct Neon connection needed)
-    dashboard_service = DashboardService(
-        db_manager=service._db,
-        api_url=config.CLOUD_API_URL,
-        api_key=config.CLOUD_API_KEY,
-        export_directory=EXPORT_DIRECTORY,
-    )
-    LOGGER.info("Dashboard service initialized with Cloud API and export directory")
+        # Initialize dashboard service for multi-station reports (Issue #27)
+        # Uses the same Cloud API as sync service (no direct Neon connection needed)
+        dashboard_service = DashboardService(
+            db_manager=service._db,
+            api_url=config.CLOUD_API_URL,
+            api_key=config.CLOUD_API_KEY,
+            export_directory=EXPORT_DIRECTORY,
+        )
+        LOGGER.info("Dashboard service initialized with Cloud API and export directory")
+    else:
+        LOGGER.info("No API key — cloud sync and dashboard disabled (local-only mode)")
 
     # Initialize voice player for scan confirmation audio
     voice_player = VoicePlayer(
