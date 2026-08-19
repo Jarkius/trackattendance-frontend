@@ -4,14 +4,29 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 logger = logging.getLogger(__name__)
 
 ISO_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # UTC format with Z suffix
+
+
+def _local_midnight_to_utc(local_date: date) -> datetime:
+    """Convert local midnight (00:00:00) of the given calendar date to a UTC datetime.
+
+    Uses time.mktime with tm_isdst=-1 so the OS/C runtime resolves the correct UTC
+    offset independently for that specific date. This matches the DST-aware semantics
+    of SQLite's DATE(x, 'localtime') modifier (which resolves each timestamp's offset
+    using the OS at that instant) — unlike naively adding a fixed 24h/UTC-offset delta
+    to today's midnight, which is wrong for the day a DST transition occurs.
+    """
+    local_struct = (local_date.year, local_date.month, local_date.day, 0, 0, 0, 0, 0, -1)
+    epoch_seconds = time.mktime(local_struct)
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -49,6 +64,7 @@ class DatabaseManager:
         self._connection.execute("PRAGMA journal_mode=WAL")
         self._connection.row_factory = sqlite3.Row
         self._ensure_schema()
+        self._scan_count_cache: Optional[int] = None
 
     def _ensure_schema(self) -> None:
         with self._connection:
@@ -82,10 +98,11 @@ class DatabaseManager:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status ON scans(sync_status);
-                CREATE INDEX IF NOT EXISTS idx_scans_badge_station_time ON scans(badge_id, station_name, scanned_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_scans_legacy_station_time ON scans(legacy_id, station_name, scanned_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_scans_badge_station_time_nocase ON scans(badge_id COLLATE NOCASE, station_name COLLATE NOCASE, scanned_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_scans_legacy_station_time_nocase ON scans(legacy_id COLLATE NOCASE, station_name COLLATE NOCASE, scanned_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status_time ON scans(sync_status, scanned_at);
                 CREATE INDEX IF NOT EXISTS idx_scans_station_name ON scans(station_name);
+                CREATE INDEX IF NOT EXISTS idx_scans_scanned_at ON scans(scanned_at);
                 CREATE INDEX IF NOT EXISTS idx_employees_sl_l1_desc ON employees(sl_l1_desc);
 
                 CREATE TABLE IF NOT EXISTS roster_meta (
@@ -107,6 +124,17 @@ class DatabaseManager:
             self._connection.execute("ALTER TABLE scans ADD COLUMN scan_source TEXT DEFAULT 'manual'")
         except sqlite3.OperationalError:
             pass  # column already exists
+
+        # One-time cleanup: the original duplicate-check indexes were created without
+        # COLLATE NOCASE, so they could never be used by the NOCASE equality checks in
+        # check_if_duplicate_badge/check_if_duplicate_employee (collation mismatch blocks
+        # index usage). They're superseded by the *_nocase indexes above; drop them once
+        # on already-deployed databases so they stop costing write overhead for no benefit.
+        if self.get_roster_meta("schema:dropped_legacy_dup_indexes") is None:
+            with self._connection:
+                self._connection.execute("DROP INDEX IF EXISTS idx_scans_badge_station_time")
+                self._connection.execute("DROP INDEX IF EXISTS idx_scans_legacy_station_time")
+            self.set_roster_meta("schema:dropped_legacy_dup_indexes", "1")
 
     def get_station_name(self) -> Optional[str]:
         cursor = self._connection.execute("SELECT name FROM stations WHERE id = 1")
@@ -229,6 +257,8 @@ class DatabaseManager:
                     scan_source,
                 ),
             )
+        if self._scan_count_cache is not None:
+            self._scan_count_cache += 1
 
     def get_recent_scans(self, limit: int = 25) -> List[ScanRecord]:
         cursor = self._connection.execute(
@@ -280,8 +310,31 @@ class DatabaseManager:
         return [{"bu_name": row["bu_name"], "count": row["count"]} for row in cursor.fetchall()]
 
     def count_scans_today(self) -> int:
+        """Count scans whose scanned_at falls on the current local calendar day.
+
+        Equivalent to the original DATE(scanned_at, 'localtime') = DATE('now', 'localtime')
+        comparison, but expressed as a sargable UTC range so the scanned_at index can be
+        used instead of forcing a full table scan (SQLite can't use an index when the
+        indexed column is wrapped in a function).
+
+        The two range endpoints (today's local midnight and tomorrow's local midnight)
+        are each resolved to UTC independently via _local_midnight_to_utc(), so a DST
+        transition falling on either boundary date is handled correctly — the local day
+        may be 23, 24, or 25 real hours long, matching what DATE(x, 'localtime') would
+        have produced.
+        """
+        today_local = datetime.now().date()
+        range_start_utc = _local_midnight_to_utc(today_local)
+        range_end_utc = _local_midnight_to_utc(today_local + timedelta(days=1))
         cursor = self._connection.execute(
-            "SELECT COUNT(1) FROM scans WHERE DATE(scanned_at, 'localtime') = DATE('now', 'localtime')"
+            """
+            SELECT COUNT(1) FROM scans
+            WHERE scanned_at >= ? AND scanned_at < ?
+            """,
+            (
+                range_start_utc.strftime(ISO_TIMESTAMP_FORMAT),
+                range_end_utc.strftime(ISO_TIMESTAMP_FORMAT),
+            ),
         )
         return int(cursor.fetchone()[0])
 
@@ -549,6 +602,7 @@ class DatabaseManager:
         with self._connection:
             self._connection.execute("DELETE FROM scans")
             self._connection.execute("DELETE FROM sqlite_sequence WHERE name='scans'")
+        self._scan_count_cache = 0
         logger.info(f"Cleared {count} local scan records (station name preserved)")
         return count
 
@@ -570,9 +624,27 @@ class DatabaseManager:
             )
 
     def count_scans_total(self) -> int:
-        """Count total scan records in local database."""
-        cursor = self._connection.execute("SELECT COUNT(*) AS cnt FROM scans")
-        return int(cursor.fetchone()["cnt"] or 0)
+        """Count total scan records in local database.
+
+        Cached in-memory after the first real query. The cache is kept correct by
+        explicit invalidation in record_scan() (+1) and clear_all_scans() (reset to 0) —
+        the only two DatabaseManager methods that change the scan row count. Any other
+        writer touching the scans table (e.g. ad-hoc scripts/tests using raw SQL) bypasses
+        the cache and must call invalidate_scan_count_cache() or construct a fresh
+        DatabaseManager to see correct results.
+        """
+        if self._scan_count_cache is None:
+            cursor = self._connection.execute("SELECT COUNT(*) AS cnt FROM scans")
+            self._scan_count_cache = int(cursor.fetchone()["cnt"] or 0)
+        return self._scan_count_cache
+
+    def invalidate_scan_count_cache(self) -> None:
+        """Force count_scans_total() to re-query on next call.
+
+        Use after any raw SQL that inserts/deletes rows in the scans table outside of
+        record_scan()/clear_all_scans() (e.g. tests, migration scripts).
+        """
+        self._scan_count_cache = None
 
     def close(self) -> None:
         self._connection.close()
