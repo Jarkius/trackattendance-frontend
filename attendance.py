@@ -50,10 +50,19 @@ class AttendanceService:
             self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
         self._sync_service = None  # Set via set_sync_service() for Live Sync
+        self._sync_coordinator = None  # Set via set_sync_service() for Live Sync
 
-    def set_sync_service(self, sync_service) -> None:
-        """Attach SyncService for Live Sync cloud dup check + immediate sync."""
+    def set_sync_service(self, sync_service, coordinator=None) -> None:
+        """Attach SyncService for Live Sync cloud dup check + immediate sync.
+
+        coordinator: shared BackgroundSyncCoordinator (from main.py) used to
+        enqueue Live Sync's fire-and-forget upload instead of spawning a raw
+        thread per scan. If not supplied, Live Sync immediate-sync is disabled
+        (register_scan() checks for this) rather than falling back to the old
+        per-scan threading.Thread pattern.
+        """
         self._sync_service = sync_service
+        self._sync_coordinator = coordinator
 
     def employees_loaded(self) -> bool:
         return self._db.employees_loaded()
@@ -502,18 +511,30 @@ class AttendanceService:
         timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         self._db.record_scan(sanitized, self.station_name, employee, timestamp, scan_source=scan_source)
 
-        # Immediate sync to cloud (Live Sync) — fire-and-forget
+        # Immediate sync to cloud (Live Sync) — fire-and-forget, via the shared
+        # BackgroundSyncCoordinator worker thread instead of a per-scan
+        # threading.Thread. record_scan() above has already committed the scan
+        # to SQLite (offline-first: the local write always happens first,
+        # regardless of whether this enqueue succeeds). sync_single_scan()
+        # itself performs network I/O only — it never touches self._db — so
+        # it's safe to run on the coordinator's worker thread. If the bounded
+        # queue is full or the coordinator is unavailable/paused, the scan
+        # simply stays 'pending' in SQLite and is picked up by the next normal
+        # batch sync — no scan is ever lost, only its immediate-sync latency.
         if (config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
-                and self._sync_service):
-            import threading
+                and self._sync_service and self._sync_coordinator):
             scan_to_sync = self._db.fetch_last_pending_scan()
             if scan_to_sync:
-                threading.Thread(
-                    target=self._sync_service.sync_single_scan,
-                    args=(scan_to_sync,),
-                    daemon=True,
-                    name="live-sync-immediate",
-                ).start()
+                sync_service = self._sync_service
+                job_id = self._sync_coordinator.submit(
+                    lambda: sync_service.sync_single_scan(scan_to_sync)
+                )
+                if job_id is None:
+                    LOGGER.warning(
+                        "Live Sync: coordinator rejected immediate-sync job for badge=%s "
+                        "(queue full/paused/shutdown) — will be picked up by next batch sync",
+                        scan_to_sync.badge_id,
+                    )
 
         history = self._db.get_recent_scans()
         # Only flag as duplicate for UI alert if action is 'warn' (not 'silent')

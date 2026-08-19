@@ -236,6 +236,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let dashboardOpen = false;  // Flag to skip connection checks while dashboard is open
     const apiQueue = [];
 
+    // Tracks the requestId of the most recent sync_now() call so a
+    // sync_now_completed signal belonging to an older, superseded request can
+    // be told apart and ignored (e.g. if the coordinator rejects a call while
+    // an earlier one is still in flight, or in case of any other race).
+    let pendingSyncNowRequestId = null;
+
     const escapeHtml = (str) => {
         if (typeof str !== 'string') return str;
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -451,6 +457,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const bindSyncNowCompletedSignal = () => {
+        if (!api || !api.sync_now_completed || !api.sync_now_completed.connect) {
+            console.warn('[SyncNow] sync_now_completed signal unavailable — manual sync UI will not update on completion');
+            return;
+        }
+        try {
+            api.sync_now_completed.connect((payload) => {
+                handleSyncNowCompleted(payload);
+            });
+            console.info('[SyncNow] Bound sync_now_completed signal');
+        } catch (err) {
+            console.error('[SyncNow] Failed to bind sync_now_completed signal:', err);
+        }
+    };
+
     if (window.qt && window.qt.webChannelTransport) {
         new QWebChannel(window.qt.webChannelTransport, (channel) => {
             console.info('[QWebChannel] Connected, got api object');
@@ -464,6 +485,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 hasConnect: !!(api.connection_status_changed && typeof api.connection_status_changed.connect === 'function'),
             });
             bindConnectionSignal();
+            // Bind sync_now_completed exactly once here (QWebChannel init), not
+            // per button click — a per-click connect() would stack duplicate
+            // listeners across multiple Sync Now presses.
+            bindSyncNowCompletedSignal();
             flushApiQueue();
             loadInitialData();
             // Don't refresh connection status here - loadInitialData() handles the 15s delay
@@ -1474,13 +1499,52 @@ ${destination}` : message;
         });
     }
 
+    const resetSyncNowButton = () => {
+        syncNowBtn.disabled = false;
+        syncNowBtn.innerHTML = '<i class="material-icons">sync</i>';
+        syncNowBtn.title = 'Sync Now';
+    };
+
+    const showSyncNowMessage = (message, success) => {
+        if (!syncStatusMessage) {
+            return;
+        }
+        syncStatusMessage.textContent = message;
+        syncStatusMessage.style.color = success ? '#00A3E0' : 'red';  // Blue for success, red for error
+        window.setTimeout(() => {
+            syncStatusMessage.textContent = '';
+        }, 5000);
+    };
+
+    // Called from the sync_now_completed signal (bound once at QWebChannel init,
+    // see bindSyncNowCompletedSignal). sync_now() itself only returns an
+    // immediate {accepted, requestId, message} acknowledgement — the real
+    // synced/failed/pending result arrives later via this signal, on whatever
+    // schedule the coordinator's background worker actually finishes on.
+    const handleSyncNowCompleted = (payload) => {
+        if (!payload || payload.requestId !== pendingSyncNowRequestId) {
+            // Either a malformed payload, or this result belongs to an older
+            // request that's since been superseded — ignore it so the UI never
+            // regresses to show a stale outcome after a newer sync started.
+            console.debug('[SyncNow] Ignoring stale/unmatched completion', payload, 'expected', pendingSyncNowRequestId);
+            return;
+        }
+        pendingSyncNowRequestId = null;
+        resetSyncNowButton();
+
+        const success = Boolean(payload.ok);
+        showSyncNowMessage(payload.message || (success ? 'Sync complete!' : 'Sync failed'), success);
+
+        // Update sync statistics (with small delay to ensure DB is updated)
+        setTimeout(updateSyncStatus, 100);
+        refreshConnectionStatus();
+        returnFocusToInput();
+    };
+
     const handleSyncNow = () => {
         queueOrRun((bridge) => {
             if (!bridge.sync_now) {
-                if (syncStatusMessage) {
-                    syncStatusMessage.textContent = 'Sync service not available';
-                    syncStatusMessage.style.color = 'red';
-                }
+                showSyncNowMessage('Sync service not available', false);
                 return;
             }
 
@@ -1488,30 +1552,28 @@ ${destination}` : message;
             syncNowBtn.innerHTML = '<i class="material-icons sync-spinning">sync</i>';
             syncNowBtn.title = 'Syncing...';
             if (syncStatusMessage) {
-                syncStatusMessage.textContent = 'Testing connection...';
+                syncStatusMessage.textContent = 'Starting sync...';
                 syncStatusMessage.style.color = '#00A3E0';  // Match sync button color
             }
 
-            bridge.sync_now((result) => {
-                syncNowBtn.disabled = false;
-                syncNowBtn.innerHTML = '<i class="material-icons">sync</i>';
-                syncNowBtn.title = 'Sync Now';
-
-                const success = Boolean(result && result.ok);
-                if (syncStatusMessage) {
-                    syncStatusMessage.textContent = result?.message || (success ? 'Sync complete!' : 'Sync failed');
-                    syncStatusMessage.style.color = success ? '#00A3E0' : 'red';  // Blue for success, red for error
-
-                    // Clear message after 5 seconds
-                    window.setTimeout(() => {
-                        syncStatusMessage.textContent = '';
-                    }, 5000);
+            // sync_now() returns immediately with just an acceptance ack — it
+            // does not carry the final result. The button/spinner stays in the
+            // "syncing" state until handleSyncNowCompleted() runs, driven by the
+            // sync_now_completed signal.
+            bridge.sync_now((ack) => {
+                if (!ack || !ack.accepted) {
+                    // Rejected (already syncing, no service configured, or the
+                    // coordinator couldn't accept the job) — nothing is running,
+                    // so restore the button immediately instead of waiting for a
+                    // completion signal that will never arrive for this call.
+                    resetSyncNowButton();
+                    showSyncNowMessage((ack && ack.message) || 'Sync failed to start', false);
+                    returnFocusToInput();
+                    return;
                 }
-
-                // Update sync statistics (with small delay to ensure DB is updated)
-                setTimeout(updateSyncStatus, 100);
-                refreshConnectionStatus();
-                returnFocusToInput();
+                pendingSyncNowRequestId = ack.requestId;
+                // Button stays disabled/spinning; handleSyncNowCompleted() will
+                // restore it once the matching sync_now_completed signal fires.
             });
         });
     };

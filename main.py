@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import json
 import time
+import itertools
 import logging
 import logging.handlers
 import threading
@@ -46,7 +47,7 @@ import requests
 
 from attendance import AttendanceService
 from audio import VoicePlayer
-from sync import SyncService
+from sync import SyncService, BackgroundSyncCoordinator
 from dashboard import DashboardService
 import config
 
@@ -134,14 +135,28 @@ class AutoSyncManager(QObject):
     Features:
     - Idle detection: Only syncs when user hasn't scanned for a while
     - Network checking: Verifies actual API connectivity before syncing
-    - Non-blocking: Uses Qt's event loop for async operations
+    - Non-blocking: connection/auth/batch-upload network calls run on a
+      BackgroundSyncCoordinator worker thread; every SQLite read/write and every
+      piece of Qt/UI state (is_syncing, sync_completed, web_view JS injection)
+      stays on this object's own thread (the Qt main thread), via
+      QMetaObject.invokeMethod(..., Qt.ConnectionType.QueuedConnection).
     - Status updates: Sends status messages to UI for user feedback
+    - Failure cooldown: after AUTO_SYNC_MAX_CONSECUTIVE_FAILURES consecutive
+      automatic-batch failures, auto-sync suppresses further attempts for
+      AUTO_SYNC_FAILURE_COOLDOWN_SECONDS. A successful (or no-op, no-pending)
+      cycle resets the counter. Manual/live-sync jobs are not part of this
+      slice and do not touch this counter.
     """
 
     # Signal emitted when auto-sync completes (for UI updates)
     sync_completed = pyqtSignal(dict)
 
-    def __init__(self, sync_service: Optional[SyncService], web_view):
+    def __init__(
+        self,
+        sync_service: Optional[SyncService],
+        web_view,
+        coordinator: Optional[BackgroundSyncCoordinator] = None,
+    ):
         super().__init__()
         self.sync_service = sync_service
         self.web_view = web_view
@@ -150,6 +165,20 @@ class AutoSyncManager(QObject):
         self.enabled = config.AUTO_SYNC_ENABLED
         self._sync_lock = threading.Lock()
 
+        # Coordinator is constructor-injected so main() can own one shared instance
+        # across AutoSyncManager/manual-sync/live-sync; falls back to a private one
+        # (e.g. for standalone tests) if none is supplied.
+        self._coordinator = coordinator or BackgroundSyncCoordinator()
+        self._owns_coordinator = coordinator is None
+
+        # Consecutive-failure cooldown state (automatic batch attempts only).
+        self._consecutive_failures = 0
+        self._cooldown_until: Optional[float] = None
+
+        # Set by _deliver/_deliver_error (coordinator worker thread) just before
+        # invoking _on_auto_sync_result (Qt main thread); read-then-cleared there.
+        self._pending_outcome: Optional[dict] = None
+
         # Create timer for periodic auto-sync checks
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_and_sync)
@@ -157,16 +186,27 @@ class AutoSyncManager(QObject):
     def start(self) -> None:
         """Start the auto-sync timer."""
         if not self.enabled or not self.sync_service:
-            print("[AutoSync] Auto-sync is disabled or sync service not available")
+            LOGGER.info("[AutoSync] Auto-sync is disabled or sync service not available")
             return
 
-        print(f"[AutoSync] Starting auto-sync (check interval: {config.AUTO_SYNC_CHECK_INTERVAL_SECONDS}s, idle threshold: {config.AUTO_SYNC_IDLE_SECONDS}s)")
+        LOGGER.info(
+            "[AutoSync] Starting auto-sync (check interval: %ss, idle threshold: %ss)",
+            config.AUTO_SYNC_CHECK_INTERVAL_SECONDS, config.AUTO_SYNC_IDLE_SECONDS,
+        )
         self.timer.start(config.AUTO_SYNC_CHECK_INTERVAL_SECONDS * 1000)
 
     def stop(self) -> None:
         """Stop the auto-sync timer."""
-        print("[AutoSync] Stopping auto-sync")
+        LOGGER.info("[AutoSync] Stopping auto-sync")
         self.timer.stop()
+
+    def shutdown_coordinator(self, timeout: Optional[float] = None) -> None:
+        """Shut down the coordinator if this manager owns it (no coordinator was
+        constructor-injected). If the coordinator was injected by the caller
+        (shared across auto/manual/live sync), the caller owns its lifecycle and
+        must shut it down itself — this is a no-op in that case."""
+        if self._owns_coordinator:
+            self._coordinator.shutdown(timeout=timeout)
 
     def on_scan(self) -> None:
         """
@@ -184,8 +224,48 @@ class AutoSyncManager(QObject):
         idle_time = time.time() - self.last_scan_time
         return idle_time >= config.AUTO_SYNC_IDLE_SECONDS
 
+    def is_in_cooldown(self) -> bool:
+        """True if consecutive-failure cooldown is currently suppressing auto-sync."""
+        if self._cooldown_until is None:
+            return False
+        if time.time() >= self._cooldown_until:
+            # Cooldown window has elapsed on its own; clear it lazily.
+            self._cooldown_until = None
+            return False
+        return True
+
+    def consecutive_failures(self) -> int:
+        """Current consecutive-automatic-failure count (testable, deterministic)."""
+        return self._consecutive_failures
+
+    def _record_auto_sync_outcome(self, failed: bool) -> None:
+        """Update the consecutive-failure counter and cooldown window for an
+        automatic batch attempt. failed=True for a hard failure (connection
+        error, auth failure, or a batch result with failed>0 and synced==0);
+        any other outcome (success, partial success, or no-op) resets the
+        counter, matching 'success resets the counter'."""
+        if failed:
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= config.AUTO_SYNC_MAX_CONSECUTIVE_FAILURES:
+                self._cooldown_until = time.time() + config.AUTO_SYNC_FAILURE_COOLDOWN_SECONDS
+                LOGGER.warning(
+                    "[AutoSync] %d consecutive failures — cooldown for %ss",
+                    self._consecutive_failures, config.AUTO_SYNC_FAILURE_COOLDOWN_SECONDS,
+                )
+        else:
+            if self._consecutive_failures or self._cooldown_until is not None:
+                LOGGER.info("[AutoSync] Sync succeeded — resetting failure counter/cooldown")
+            self._consecutive_failures = 0
+            self._cooldown_until = None
+
     def check_internet_connection(self) -> bool:
-        """Test actual API connectivity by hitting the root endpoint."""
+        """Test actual API connectivity by hitting the root endpoint.
+
+        Synchronous by design — kept for direct/manual use and existing tests.
+        check_and_sync() itself does not call this directly; it submits the
+        network preflight (connection + auth + batch upload) as one coordinator
+        job so none of it runs on the Qt UI thread.
+        """
         try:
             # Use root endpoint like sync.py test_connection() does
             # Root endpoint is public and doesn't require authentication
@@ -203,6 +283,11 @@ class AutoSyncManager(QObject):
         """
         Main auto-sync logic called by timer.
         Checks all conditions and triggers sync if appropriate.
+
+        Only cheap, local, main-thread checks happen here: enabled/idle/cooldown/
+        already-syncing/pending-count. All network I/O (connectivity check, auth
+        check, batch upload) is submitted as a single coordinator job so it never
+        blocks this (Qt UI) thread — see trigger_auto_sync().
         """
         # Skip if already syncing
         if self.is_syncing:
@@ -210,6 +295,14 @@ class AutoSyncManager(QObject):
 
         # Skip if not idle
         if not self.is_idle():
+            return
+
+        # Skip while in failure cooldown — do not touch the network at all.
+        if self.is_in_cooldown():
+            LOGGER.warning(
+                "[AutoSync] Skipped: in failure cooldown (%d consecutive failures)",
+                self._consecutive_failures,
+            )
             return
 
         # Check pending scans
@@ -223,50 +316,160 @@ class AutoSyncManager(QObject):
             if pending_count < config.AUTO_SYNC_MIN_PENDING_SCANS:
                 return
         except Exception as e:
-            print(f"[AutoSync] Error checking pending scans: {e}")
+            LOGGER.warning("[AutoSync] Error checking pending scans: %s", e)
             return
 
-        # Check internet connection
-        if not self.check_internet_connection():
-            print(f"[AutoSync] No internet connection, skipping auto-sync")
-            return
-
-        # Check authentication before attempting sync
-        auth_ok, auth_msg = self.sync_service.test_authentication()
-        if not auth_ok:
-            print(f"[AutoSync] Authentication failed: {auth_msg}")
-            return
-
-        # All conditions met - trigger auto-sync
-        print(f"[AutoSync] Conditions met: idle={self.is_idle()}, pending={pending_count}, connected=True, auth=OK")
+        # All local conditions met - trigger the off-thread network sync.
+        LOGGER.info(
+            "[AutoSync] Conditions met: idle=%s, pending=%d — dispatching to coordinator",
+            self.is_idle(), pending_count,
+        )
         self.trigger_auto_sync()
 
     def trigger_auto_sync(self) -> None:
-        """Execute auto-sync directly (no threading to avoid SQLite issues)."""
+        """Snapshot pending scans + station name on the Qt main thread, then submit
+        the connection/auth/batch-upload network work to the coordinator's worker
+        thread. The submitted job (_network_job) touches only network I/O via
+        SyncService.test_connection/test_authentication/sync_scan_batch_network_only
+        — none of those read or write self.sync_service.db. mark_scans_as_synced/
+        mark_scans_as_failed run later, back on the main thread, in
+        _on_auto_sync_result() once the job's id-classified result comes back.
+        """
         if not self._sync_lock.acquire(blocking=False):
+            LOGGER.warning("[AutoSync] Skipped: sync lock already held — previous job may be stuck")
             return
         self.is_syncing = True
+
+        sync_service = self.sync_service
+
+        # Main-thread SQLite snapshot — the only SQLite access in this whole
+        # sync attempt until the result callback runs later on this same thread.
+        try:
+            station_name = sync_service.db.get_station_name() or "UnknownStation"
+            pending_scans = sync_service.db.fetch_pending_scans(limit=sync_service.batch_size)
+        except Exception as e:
+            LOGGER.exception("[AutoSync] Error snapshotting pending scans: %s", e)
+            self._record_auto_sync_outcome(failed=True)
+            self.is_syncing = False
+            self._sync_lock.release()
+            return
+
+        if not pending_scans:
+            # Nothing left to upload (e.g. raced with another sync path since
+            # check_and_sync's earlier pending-count check) — not a failure.
+            self._record_auto_sync_outcome(failed=False)
+            self.is_syncing = False
+            self._sync_lock.release()
+            return
 
         # Show start message if enabled
         if config.AUTO_SYNC_SHOW_START_MESSAGE:
             self.show_status_message("Auto-syncing pending scans...", "info")
 
-        try:
-            print("[AutoSync] Starting sync...")
+        def _network_job() -> dict:
+            """Runs on the coordinator worker thread. Network-only: pending_scans
+            and station_name were already snapshotted above on the main thread;
+            this closure never touches sync_service.db."""
+            ok, msg = sync_service.test_connection()
+            if not ok:
+                return {"stage": "connection", "ok": False, "message": msg}
+            auth_ok, auth_msg = sync_service.test_authentication()
+            if not auth_ok:
+                return {"stage": "auth", "ok": False, "message": auth_msg}
+            batch_result = sync_service.sync_scan_batch_network_only(pending_scans, station_name)
+            return {"stage": "batch", "ok": True, "batch_result": batch_result}
 
-            # Perform the sync directly (no threading needed - sync is fast)
-            result = self.sync_service.sync_pending_scans()
+        def _deliver(job_id: int, outcome: dict) -> None:
+            # Called on the coordinator worker thread; hop to the Qt main thread
+            # before touching self.is_syncing, self.sync_completed, web_view, or DB.
+            self._pending_outcome = outcome
+            QMetaObject.invokeMethod(self, "_on_auto_sync_result", Qt.ConnectionType.QueuedConnection)
+
+        def _deliver_error(job_id: int, exc: Exception) -> None:
+            self._pending_outcome = {"stage": "exception", "ok": False, "message": str(exc)}
+            QMetaObject.invokeMethod(self, "_on_auto_sync_result", Qt.ConnectionType.QueuedConnection)
+
+        job_id = self._coordinator.submit(_network_job, on_result=_deliver, on_error=_deliver_error)
+        if job_id is None:
+            # Coordinator rejected the job (shut down, paused, or queue full).
+            # Release the lock immediately so a future timer tick can retry —
+            # there is no in-flight worker to wait for. The snapshotted scans
+            # remain pending in SQLite untouched, so nothing is lost.
+            LOGGER.warning("[AutoSync] Coordinator rejected the sync job (paused/shutdown/queue full)")
+            self.is_syncing = False
+            self._sync_lock.release()
+
+    @pyqtSlot()
+    def _on_auto_sync_result(self) -> None:
+        """Runs on the Qt main thread (invoked via QMetaObject.invokeMethod from the
+        coordinator worker's callback). This is the only place that applies
+        mark_scans_as_synced/mark_scans_as_failed for the automatic-sync path,
+        and the only place that touches web_view or emits sync_completed.
+        """
+        outcome = self._pending_outcome
+        self._pending_outcome = None
+        try:
+            if outcome is None:
+                LOGGER.warning("[AutoSync] Missing outcome for auto-sync result (unexpected)")
+                self._record_auto_sync_outcome(failed=True)
+                return
+
+            stage = outcome.get("stage")
+            if stage in ("connection", "auth", "exception"):
+                message = outcome.get("message", "")
+                if stage == "connection":
+                    LOGGER.warning("[AutoSync] No internet connection, skipping auto-sync: %s", message)
+                elif stage == "auth":
+                    LOGGER.warning("[AutoSync] Authentication failed: %s", message)
+                else:
+                    LOGGER.error("[AutoSync] Error during sync: %s", message)
+                self._record_auto_sync_outcome(failed=True)
+                if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE and stage == "exception":
+                    self.show_status_message(f"Auto-sync failed: {message}", "error")
+                return
+
+            # stage == "batch": the network job completed a real upload attempt.
+            # Apply the returned id classification to SQLite here, on the main
+            # thread — this is the only place these mutations happen.
+            batch_result = outcome.get("batch_result", {})
+            synced_ids = batch_result.get("synced_ids", [])
+            failed_ids = batch_result.get("failed_ids", [])
+            synced_count = batch_result.get("synced_count", 0)
+            error_msg = batch_result.get("error")
+
+            sync_service = self.sync_service
+            try:
+                if synced_ids:
+                    sync_service.db.mark_scans_as_synced(synced_ids)
+                if failed_ids:
+                    sync_service.db.mark_scans_as_failed(failed_ids, error_msg or "Sync failed")
+                pending_after = sync_service.db.get_sync_statistics()["pending"]
+            except Exception as e:
+                LOGGER.exception("[AutoSync] Error applying sync result to DB: %s", e)
+                pending_after = 0
+
+            result = {
+                "synced": synced_count,
+                "failed": len(failed_ids),
+                "pending": pending_after,
+            }
+            synced_count_out = result["synced"]
+            failed_count = result["failed"]
+
+            # A hard batch failure: nothing synced and either scans were marked
+            # failed outright, or an error was returned (401 / retry exhaustion —
+            # both leave ids as pending_ids, not failed_ids, but still represent a
+            # genuine failed sync attempt for cooldown purposes).
+            batch_failed = synced_count_out == 0 and (failed_count > 0 or error_msg is not None)
+            self._record_auto_sync_outcome(failed=batch_failed)
 
             # Emit signal with result
             self.sync_completed.emit(result)
 
             # Show completion message if enabled
             if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
-                synced_count = result.get('synced', 0)
-                failed_count = result.get('failed', 0)
-
-                if synced_count > 0:
-                    message = f"Auto-sync complete: {synced_count} scan(s) synced"
+                if synced_count_out > 0:
+                    message = f"Auto-sync complete: {synced_count_out} scan(s) synced"
                     if failed_count > 0:
                         message += f", {failed_count} failed"
                         self.show_status_message(message, "warning")
@@ -278,12 +481,11 @@ class AutoSyncManager(QObject):
             # Update UI stats directly with the result we got
             self.update_sync_stats(result)
 
-            print(f"[AutoSync] Completed: synced={result.get('synced', 0)}, failed={result.get('failed', 0)}, pending={result.get('pending', 0)}")
+            LOGGER.info(
+                "[AutoSync] Completed: synced=%d, failed=%d, pending=%d",
+                synced_count_out, failed_count, pending_after,
+            )
 
-        except Exception as e:
-            print(f"[AutoSync] Error during sync: {e}")
-            if config.AUTO_SYNC_SHOW_COMPLETE_MESSAGE:
-                self.show_status_message(f"Auto-sync failed: {str(e)}", "error")
         finally:
             self.is_syncing = False
             self._sync_lock.release()
@@ -326,7 +528,7 @@ class AutoSyncManager(QObject):
         }})();
         """
 
-        print(f"[AutoSync] Injecting status message JS: {message}")
+        LOGGER.debug("[AutoSync] Injecting status message JS: %s", message)
         self.web_view.page().runJavaScript(script)
 
     def update_sync_stats(self, result: dict) -> None:
@@ -363,7 +565,7 @@ class AutoSyncManager(QObject):
             console.log('[AutoSync UI] Sync stats updated successfully');
         }})();
         """
-        print(f"[AutoSync] Updating UI stats: pending={pending}, synced={synced}, failed={failed}")
+        LOGGER.debug("[AutoSync] Updating UI stats: pending=%d, synced=%d, failed=%d", pending, synced, failed)
         self.web_view.page().runJavaScript(script)
 
 
@@ -411,6 +613,12 @@ class Api(QObject):
     # Use QVariant so QWebChannel can deliver payloads to JS reliably
     connection_status_changed = pyqtSignal("QVariant")
 
+    # Emitted when a manual sync_now() job finishes. Payload always carries the
+    # requestId the JS caller supplied to sync_now(), so a stale/superseded
+    # request can be told apart from the current one. See sync_now()/
+    # _on_manual_sync_result() for the full async ack+signal contract.
+    sync_now_completed = pyqtSignal("QVariant")
+
     def __init__(
         self,
         service: AttendanceService,
@@ -419,6 +627,7 @@ class Api(QObject):
         auto_sync_manager: Optional[AutoSyncManager] = None,
         dashboard_service: Optional[DashboardService] = None,
         voice_player: Optional[VoicePlayer] = None,
+        sync_coordinator: Optional[BackgroundSyncCoordinator] = None,
     ):
         super().__init__()
         self._service = service
@@ -431,6 +640,15 @@ class Api(QObject):
         self._window = None
         self._connection_check_inflight = False
         self._roster_synced = False  # one-time roster push after first successful health check
+        # Shared coordinator for manual sync_now() network work. Prefer the same
+        # instance AutoSyncManager uses (passed in by main()) so auto/manual sync
+        # jobs serialize through one worker thread; falls back to a private
+        # instance if none is supplied (e.g. Api constructed standalone in tests).
+        self._sync_coordinator = sync_coordinator or BackgroundSyncCoordinator()
+        self._owns_sync_coordinator = sync_coordinator is None
+        self._manual_sync_request_id_counter = itertools.count(1)
+        self._manual_sync_in_progress = False
+        self._pending_manual_sync_outcome: Optional[Dict[str, object]] = None
         # Pre-fetch BU data on main thread (SQLite not thread-safe)
         try:
             self._cached_bu_data = self._service._db.get_employees_by_bu()
@@ -481,6 +699,14 @@ class Api(QObject):
 
     def attach_window(self, window: QMainWindow) -> None:
         self._window = window
+
+    def shutdown_sync_coordinator(self, timeout: Optional[float] = None) -> None:
+        """Shut down the manual-sync coordinator if this Api instance owns it
+        (no coordinator was constructor-injected). If the coordinator was
+        injected by the caller (shared with AutoSyncManager), the caller owns
+        its lifecycle and must shut it down itself — this is a no-op then."""
+        if self._owns_sync_coordinator:
+            self._sync_coordinator.shutdown(timeout=timeout)
 
     @pyqtSlot(result="QVariant")
     def get_initial_data(self) -> dict:
@@ -570,47 +796,187 @@ class Api(QObject):
 
     @pyqtSlot(result="QVariant")
     def sync_now(self) -> dict:
-        """Manually trigger sync and return results."""
+        """Manually trigger sync. Returns an immediate acceptance/rejection ack;
+        the eventual result is delivered later via the sync_now_completed signal
+        carrying a matching requestId, not via this method's return value.
+
+        This is a deliberate contract change from a synchronous result: the old
+        version ran test_connection/test_authentication/sync_pending_scans
+        directly on this call, which blocked the Qt UI thread (and the
+        QWebChannel round-trip) for the full network round-trip plus any retry
+        backoff. Network I/O now runs on the shared BackgroundSyncCoordinator
+        worker thread; SQLite reads/writes stay here on the main thread, applied
+        in _on_manual_sync_result() once the job's result comes back.
+
+        Immediate return shape: {"accepted": bool, "requestId": int|None, "message": str}.
+        Final result (via sync_now_completed): {"requestId": int, "ok": bool,
+        "message": str, "synced": int, "failed": int, "pending": int}.
+        """
         if not self._sync_service:
             return {
-                "ok": False,
+                "accepted": False,
+                "requestId": None,
                 "message": "Sync service not configured",
-                "synced": 0,
-                "failed": 0,
-                "pending": 0,
             }
 
-        # First test connection
-        success, message = self._sync_service.test_connection()
-        if not success:
+        if self._manual_sync_in_progress:
             return {
-                "ok": False,
-                "message": f"Cannot connect: {message}",
-                "synced": 0,
-                "failed": 0,
-                "pending": 0,
+                "accepted": False,
+                "requestId": None,
+                "message": "A sync is already in progress",
             }
 
-        # Then test authentication
-        auth_ok, auth_msg = self._sync_service.test_authentication()
-        if not auth_ok:
+        # Main-thread SQLite snapshot — station name + pending scans — before any
+        # network work is submitted. Matches AutoSyncManager.trigger_auto_sync()'s
+        # snapshot-then-submit-then-apply shape.
+        try:
+            station_name = self._sync_service.db.get_station_name() or "UnknownStation"
+            pending_scans = self._sync_service.db.fetch_pending_scans(limit=self._sync_service.batch_size)
+        except Exception as exc:
+            LOGGER.exception("sync_now: failed to snapshot pending scans: %s", exc)
             return {
-                "ok": False,
-                "message": f"Authentication failed: {auth_msg}",
-                "synced": 0,
-                "failed": 0,
-                "pending": 0,
+                "accepted": False,
+                "requestId": None,
+                "message": f"Failed to read pending scans: {exc}",
             }
 
-        # Perform sync
-        result = self._sync_service.sync_pending_scans()
+        request_id = next(self._manual_sync_request_id_counter)
+        sync_service = self._sync_service
+
+        def _network_job() -> dict:
+            """Runs on the coordinator worker thread. Network-only: pending_scans
+            and station_name were already snapshotted above on the main thread;
+            this closure never touches sync_service.db."""
+            success, message = sync_service.test_connection()
+            if not success:
+                return {"stage": "connection", "ok": False, "message": f"Cannot connect: {message}"}
+
+            auth_ok, auth_msg = sync_service.test_authentication()
+            if not auth_ok:
+                return {"stage": "auth", "ok": False, "message": f"Authentication failed: {auth_msg}"}
+
+            if not pending_scans:
+                return {"stage": "batch", "ok": True, "batch_result": None}
+
+            batch_result = sync_service.sync_scan_batch_network_only(pending_scans, station_name)
+            return {"stage": "batch", "ok": True, "batch_result": batch_result}
+
+        def _deliver(job_id: int, outcome: dict) -> None:
+            # Runs on the coordinator worker thread; hop to the Qt main thread
+            # before touching SQLite, self._manual_sync_in_progress, or emitting
+            # sync_now_completed.
+            self._pending_manual_sync_outcome = {"requestId": request_id, **outcome}
+            QMetaObject.invokeMethod(self, "_on_manual_sync_result", Qt.ConnectionType.QueuedConnection)
+
+        def _deliver_error(job_id: int, exc: Exception) -> None:
+            self._pending_manual_sync_outcome = {
+                "requestId": request_id, "stage": "exception", "ok": False, "message": str(exc),
+            }
+            QMetaObject.invokeMethod(self, "_on_manual_sync_result", Qt.ConnectionType.QueuedConnection)
+
+        job_id = self._sync_coordinator.submit(_network_job, on_result=_deliver, on_error=_deliver_error)
+        if job_id is None:
+            # Coordinator rejected the job (shut down, paused for a clear barrier,
+            # or queue full). Nothing was mutated — the snapshotted scans remain
+            # pending in SQLite untouched.
+            LOGGER.warning("sync_now: coordinator rejected submission (queue full/paused/shutdown)")
+            return {
+                "accepted": False,
+                "requestId": None,
+                "message": "Sync is temporarily unavailable, please try again shortly",
+            }
+
+        self._manual_sync_in_progress = True
+        LOGGER.info("sync_now: accepted request %d (%d pending scan(s) snapshotted)", request_id, len(pending_scans))
         return {
-            "ok": True,
-            "message": f"Synced {result['synced']} scans successfully",
-            "synced": result["synced"],
-            "failed": result["failed"],
-            "pending": result["pending"],
+            "accepted": True,
+            "requestId": request_id,
+            "message": "Sync started",
         }
+
+    @pyqtSlot()
+    def _on_manual_sync_result(self) -> None:
+        """Runs on the Qt main thread (invoked via QMetaObject.invokeMethod from
+        the coordinator worker's callback in sync_now()). Applies
+        mark_scans_as_synced/mark_scans_as_failed here, then emits
+        sync_now_completed with the matching requestId so the JS side can
+        discard stale results from a superseded request.
+        """
+        outcome = self._pending_manual_sync_outcome
+        self._pending_manual_sync_outcome = None
+        self._manual_sync_in_progress = False
+
+        if outcome is None:
+            LOGGER.warning("_on_manual_sync_result: missing outcome (unexpected)")
+            return
+
+        request_id = outcome.get("requestId")
+        stage = outcome.get("stage")
+
+        if stage in ("connection", "auth", "exception"):
+            message = outcome.get("message", "Sync failed")
+            LOGGER.info("sync_now request %s failed at stage=%s: %s", request_id, stage, message)
+            self.sync_now_completed.emit({
+                "requestId": request_id,
+                "ok": False,
+                "message": message,
+                "synced": 0,
+                "failed": 0,
+                "pending": 0,
+            })
+            return
+
+        # stage == "batch"
+        batch_result = outcome.get("batch_result")
+        if batch_result is None:
+            # No pending scans at snapshot time — nothing to upload.
+            self.sync_now_completed.emit({
+                "requestId": request_id,
+                "ok": True,
+                "message": "No pending scans to sync",
+                "synced": 0,
+                "failed": 0,
+                "pending": 0,
+            })
+            return
+
+        synced_ids = batch_result.get("synced_ids", [])
+        failed_ids = batch_result.get("failed_ids", [])
+        synced_count = batch_result.get("synced_count", 0)
+        error_msg = batch_result.get("error")
+
+        try:
+            if synced_ids:
+                self._sync_service.db.mark_scans_as_synced(synced_ids)
+            if failed_ids:
+                self._sync_service.db.mark_scans_as_failed(failed_ids, error_msg or "Sync failed")
+            pending_after = self._sync_service.db.get_sync_statistics()["pending"]
+        except Exception as exc:
+            LOGGER.exception("sync_now request %s: failed to apply result to DB: %s", request_id, exc)
+            self.sync_now_completed.emit({
+                "requestId": request_id,
+                "ok": False,
+                "message": f"Sync completed but failed to update local records: {exc}",
+                "synced": 0,
+                "failed": 0,
+                "pending": 0,
+            })
+            return
+
+        failed_count = len(failed_ids)
+        LOGGER.info(
+            "sync_now request %s completed: synced=%d failed=%d pending=%d",
+            request_id, synced_count, failed_count, pending_after,
+        )
+        self.sync_now_completed.emit({
+            "requestId": request_id,
+            "ok": failed_count == 0,
+            "message": f"Synced {synced_count} scans successfully"
+                if failed_count == 0 else f"Synced {synced_count} scan(s), {failed_count} failed",
+            "synced": synced_count,
+            "failed": failed_count,
+            "pending": pending_after,
+        })
 
     @pyqtSlot(result="QVariant")
     def get_sync_status(self) -> dict:
@@ -907,11 +1273,26 @@ class Api(QObject):
             cloud_deleted = 0
             clear_epoch = ""
 
+        # Raise the coordinator barrier before the local clear — same race as
+        # the remote-clear-detection path in _handle_clear_epoch_and_heartbeat_slot:
+        # a queued/in-flight sync job must not apply a stale result after
+        # clear_all_scans() runs below.
+        if self._sync_coordinator:
+            new_generation = self._sync_coordinator.pause_barrier()
+            LOGGER.info("[Admin] Coordinator paused for cloud-clear barrier (generation=%s)", new_generation)
+
         # Clear local scans
         try:
             local_count = self._service._db.clear_all_scans()
         except Exception as e:
+            if self._sync_coordinator:
+                self._sync_coordinator.resume()
+                LOGGER.info("[Admin] Coordinator resumed after cloud-clear failure")
             return {"ok": False, "message": f"Cloud cleared but local clear failed: {e}"}
+
+        if self._sync_coordinator:
+            self._sync_coordinator.resume()
+            LOGGER.info("[Admin] Coordinator resumed after cloud clear")
 
         # Update local clear_epoch and send heartbeat immediately
         if clear_epoch:
@@ -972,11 +1353,24 @@ class Api(QObject):
                 return {"ok": False, "message": f"Cloud clear failed: {cloud_result.get('message', 'unknown')}"}
             cloud_deleted = cloud_result.get("deleted", 0)
 
+        # Raise the coordinator barrier before the local clear — see
+        # admin_clear_cloud_data() for why this must happen before clear_all_scans().
+        if self._sync_coordinator:
+            new_generation = self._sync_coordinator.pause_barrier()
+            LOGGER.info("[Admin] Coordinator paused for station-clear barrier (generation=%s)", new_generation)
+
         # Clear local scans
         try:
             local_count = self._service._db.clear_all_scans()
         except Exception as e:
+            if self._sync_coordinator:
+                self._sync_coordinator.resume()
+                LOGGER.info("[Admin] Coordinator resumed after station-clear failure")
             return {"ok": False, "message": f"Cloud cleared but local clear failed: {e}"}
+
+        if self._sync_coordinator:
+            self._sync_coordinator.resume()
+            LOGGER.info("[Admin] Coordinator resumed after station clear")
 
         msg = f"Cleared {cloud_deleted} cloud + {local_count} local records for {station}"
         LOGGER.info(f"Admin clear-station: {msg}")
@@ -1493,7 +1887,12 @@ class Api(QObject):
                     batch_size=config.CLOUD_SYNC_BATCH_SIZE,
                     connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
                 )
-                self._service.set_sync_service(self._sync_service)
+                # Wire the SyncService plus this Api instance's own coordinator
+                # (self._sync_coordinator — injected by main() at startup, or a
+                # private one Api created itself if no API key was configured
+                # then) into AttendanceService, so live-sync jobs from
+                # register_scan() serialize with this Api's own sync_now() jobs.
+                self._service.set_sync_service(self._sync_service, coordinator=self._sync_coordinator)
                 LOGGER.info("[Admin] Sync service initialised with new API key")
             except Exception as exc:
                 LOGGER.warning("[Admin] Failed to init sync service: %s", exc)
@@ -1645,10 +2044,23 @@ class Api(QObject):
         # Existing station: detect remote clear
         elif cloud_epoch and local_epoch and cloud_epoch != local_epoch:
             LOGGER.info("[Sync] Remote clear detected (cloud=%s, local=%s) — exporting + clearing", cloud_epoch, local_epoch)
-            # Pause auto-sync to prevent re-uploading stale data
+            # Pause auto-sync's timer so no NEW automatic sync attempt starts.
             if self._auto_sync_manager:
                 self._auto_sync_manager.stop()
                 LOGGER.info("[Sync] Auto-sync paused during remote clear")
+            # Raise the coordinator barrier: stop accepting new sync jobs (auto,
+            # manual, live) and drop everything still queued. Advances the
+            # coordinator's generation so a job already in flight — dequeued
+            # and mid-network-call when this fires — has its result callback
+            # skipped when it finishes, even though the call itself still runs
+            # to completion. Without this, a queued/in-flight sync job's
+            # mark_scans_as_synced/mark_scans_as_failed could apply to rows
+            # that clear_all_scans() below is about to delete, or re-mark scans
+            # from before the clear as synced after the clear (stale state).
+            new_generation = None
+            if self._sync_coordinator:
+                new_generation = self._sync_coordinator.pause_barrier()
+                LOGGER.info("[Sync] Coordinator paused for clear barrier (generation=%s)", new_generation)
             try:
                 self._service.export_scans()
                 LOGGER.info("[Sync] Backup exported before remote clear")
@@ -1659,7 +2071,13 @@ class Api(QObject):
             LOGGER.info("[Sync] Local data cleared after remote clear")
             # Refresh UI: reset counters and show alert modal
             self._notify_remote_clear()
-            # Resume auto-sync
+            # Resume the coordinator now that the clear has committed — any
+            # sync job submitted from this point on is a fresh post-clear job,
+            # never a stale pre-clear one.
+            if self._sync_coordinator:
+                self._sync_coordinator.resume()
+                LOGGER.info("[Sync] Coordinator resumed after remote clear")
+            # Resume auto-sync's timer.
             if self._auto_sync_manager:
                 self._auto_sync_manager.start()
                 LOGGER.info("[Sync] Auto-sync resumed after remote clear")
@@ -1944,6 +2362,7 @@ def main() -> None:
     # Initialize sync service for cloud integration (only if API key is available)
     sync_service = None
     dashboard_service = None
+    sync_coordinator = None
     if config.CLOUD_API_KEY:
         sync_service = SyncService(
             db=service._db,
@@ -1952,8 +2371,13 @@ def main() -> None:
             batch_size=config.CLOUD_SYNC_BATCH_SIZE,
             connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
         )
-        # Wire SyncService into AttendanceService for Live Sync (#54)
-        service.set_sync_service(sync_service)
+        # Single shared coordinator for all manual/automatic/live sync network
+        # work, so those jobs serialize through one worker thread instead of
+        # racing each other. Created here (not unconditionally) so local-only
+        # (no API key) installs never spin up an unused background thread.
+        sync_coordinator = BackgroundSyncCoordinator()
+        # Wire SyncService + coordinator into AttendanceService for Live Sync (#54)
+        service.set_sync_service(sync_service, coordinator=sync_coordinator)
         LOGGER.info(
             "Connection status checks: interval=%sms, timeout=%.2fs",
             config.CONNECTION_CHECK_INTERVAL_MS,
@@ -1995,12 +2419,14 @@ def main() -> None:
             auto_sync_manager=auto_sync_manager_ref[0],
             dashboard_service=dashboard_service,
             voice_player=voice_player,
+            sync_coordinator=sync_coordinator,
         )
 
     app, window, view, _animation = initialize_app(api_factory=api_factory, load_ui=False)
 
-    # Now that view is created, instantiate AutoSyncManager
-    auto_sync_manager = AutoSyncManager(sync_service=sync_service, web_view=view)
+    # Now that view is available, instantiate AutoSyncManager with the same
+    # shared coordinator so its jobs serialize with manual sync_now() jobs.
+    auto_sync_manager = AutoSyncManager(sync_service=sync_service, web_view=view, coordinator=sync_coordinator)
     auto_sync_manager_ref[0] = auto_sync_manager
 
     # Update the API object to use the auto_sync_manager
@@ -2317,6 +2743,13 @@ def main() -> None:
                 pass
         if proximity_manager:
             proximity_manager.stop()
+        if sync_coordinator:
+            # Bounded join: any job still queued is left unrun (its scans remain
+            # pending in SQLite for the next launch); a job already in flight is
+            # given up to 5s to finish before we proceed. Must happen before
+            # service.close() so the worker never touches SQLite after the main
+            # thread's connection is closed.
+            sync_coordinator.shutdown(timeout=5)
         service.close()
 
 
