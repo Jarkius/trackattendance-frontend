@@ -22,7 +22,14 @@ os.environ.setdefault("CLOUD_API_URL", "http://test.example.com")
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from attendance import AttendanceService
+try:
+    from PyQt6.QtWidgets import QApplication  # noqa: F401
+    PYQT6_AVAILABLE = True
+except ImportError:
+    PYQT6_AVAILABLE = False
+
+if PYQT6_AVAILABLE:
+    from attendance import AttendanceService
 
 
 class FakeEmployee:
@@ -41,6 +48,7 @@ def _make_service(employees):
     return svc
 
 
+@unittest.skipUnless(PYQT6_AVAILABLE, "PyQt6 not installed in this environment")
 class TestSearchEmployeePrefixPriority(unittest.TestCase):
     def test_prefix_match_not_starved_out_by_mid_name_matches(self):
         """The exact regression: 10 'contains c' names inserted before a
@@ -105,6 +113,11 @@ def main():
     print("=" * 70)
     print("SEARCH EMPLOYEE PREFIX PRIORITY TESTS")
     print("=" * 70)
+    if not PYQT6_AVAILABLE:
+        print("\n[SKIP] PyQt6 is not installed in this environment.")
+        print("All tests in this file are skipped — attendance.py cannot be")
+        print("imported without PyQt6. Run this file in a PyQt6-enabled")
+        print("environment for real coverage.\n")
     print()
 
     loader = unittest.TestLoader()
@@ -117,6 +130,7 @@ def main():
     print()
     print("=" * 70)
     print(f"Tests run: {result.testsRun}")
+    print(f"Skipped: {len(result.skipped)}")
     print(f"Failures: {len(result.failures)}")
     print(f"Errors: {len(result.errors)}")
     print("=" * 70)
