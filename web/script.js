@@ -633,8 +633,55 @@ ${destination}` : message;
         }, 80);
     };
 
+    // Short synthesized alert tone for rejected/blocked scans — plays via the
+    // Web Audio API (no MP3 asset, no Python bridge round-trip) so it's fully
+    // independent of the VoicePlayer used for success greetings. Two quick
+    // descending beeps read as "error" without needing a voice line.
+    let alertAudioCtx = null;
+    const playErrorTone = () => {
+        try {
+            if (!alertAudioCtx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                alertAudioCtx = new AudioCtx();
+            }
+            const ctx = alertAudioCtx;
+            const now = ctx.currentTime;
+            [[880, 0], [660, 0.14]].forEach(([freq, delay]) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freq, now + delay);
+                gain.gain.setValueAtTime(0.15, now + delay);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.12);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + delay);
+                osc.stop(now + delay + 0.13);
+            });
+        } catch (e) {
+            console.warn('[Alert] Failed to play error tone:', e);
+        }
+    };
+
     // Duplicate Badge Alert Handler (Issue #21) - Uses export overlay pattern
     let duplicateOverlayTimeout = null;
+    const dismissDuplicateOverlay = () => {
+        const duplicateOverlay = document.getElementById('duplicate-overlay');
+        if (!duplicateOverlay) return;
+        if (duplicateOverlayTimeout) {
+            window.clearTimeout(duplicateOverlayTimeout);
+            duplicateOverlayTimeout = null;
+        }
+        duplicateOverlay.classList.remove('duplicate-overlay--visible');
+        duplicateOverlay.setAttribute('aria-hidden', 'true');
+        barcodeInput.disabled = false;
+        returnFocusToInput();
+    };
+    const isDuplicateOverlayOpen = () => {
+        const duplicateOverlay = document.getElementById('duplicate-overlay');
+        return Boolean(duplicateOverlay && duplicateOverlay.classList.contains('duplicate-overlay--visible'));
+    };
     window.__handleDuplicateBadge = (payload = {}) => {
         const duplicateOverlay = document.getElementById('duplicate-overlay');
         const duplicateTitle = document.getElementById('duplicate-overlay-title');
@@ -671,6 +718,12 @@ ${destination}` : message;
         duplicateOverlay.classList.add('duplicate-overlay--visible');
         duplicateOverlay.setAttribute('aria-hidden', 'false');
         barcodeInput.disabled = true;
+
+        // Audible cue for rejected/blocked scans (error state only — the
+        // yellow "accepted but flagged" warn case stays silent).
+        if (isError) {
+            playErrorTone();
+        }
 
         // Auto-dismiss after configured duration
         const duration = payload.alertDurationMs || 3000;
@@ -2802,6 +2855,13 @@ ${destination}` : message;
             // Then employee lookup overlay
             if (isLookupOverlayOpen()) {
                 hideLookupOverlay();
+                return;
+            }
+            // Then the duplicate/failure alert overlay — lets testing skip the
+            // configured auto-dismiss wait without affecting normal scanning
+            // (a no-op for anyone not pressing Escape).
+            if (isDuplicateOverlayOpen()) {
+                dismissDuplicateOverlay();
                 return;
             }
             queueOrRun((bridge) => bridge.close_window());
