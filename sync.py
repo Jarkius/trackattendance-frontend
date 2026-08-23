@@ -728,14 +728,14 @@ class SyncService:
                         error_msg = "API error: 401 (Unauthorized - check API key)"
                         LOGGER.error(f"[NetworkOnly] {error_msg}")
                         return {
-                            "ok": True, "synced_ids": [], "failed_ids": [],
+                            "ok": False, "synced_ids": [], "failed_ids": [],
                             "pending_ids": all_ids, "synced_count": 0, "error": error_msg,
                         }
                     elif 400 <= response.status_code < 500 and response.status_code != 429:
                         error_msg = f"API error: {response.status_code} (non-retryable)"
                         LOGGER.error(f"[NetworkOnly] Sync failed: {error_msg}")
                         return {
-                            "ok": True, "synced_ids": [], "failed_ids": all_ids,
+                            "ok": False, "synced_ids": [], "failed_ids": all_ids,
                             "pending_ids": [], "synced_count": 0, "error": error_msg,
                         }
                     else:
@@ -771,7 +771,7 @@ class SyncService:
                 error_msg = f"Network error: {str(e)}"
                 LOGGER.error(f"[NetworkOnly] Sync failed: {error_msg}")
                 return {
-                    "ok": True, "synced_ids": [], "failed_ids": all_ids,
+                    "ok": False, "synced_ids": [], "failed_ids": all_ids,
                     "pending_ids": [], "synced_count": 0, "error": error_msg,
                 }
 
@@ -780,7 +780,7 @@ class SyncService:
             error_msg = f"Network error (after {max_attempts} attempts): {last_error}"
             LOGGER.warning("[NetworkOnly] %s — scans kept as pending for future retry", error_msg)
         return {
-            "ok": True, "synced_ids": [], "failed_ids": [], "pending_ids": all_ids,
+            "ok": last_error is None, "synced_ids": [], "failed_ids": [], "pending_ids": all_ids,
             "synced_count": 0, "error": last_error,
         }
 
@@ -814,13 +814,18 @@ class SyncService:
             LOGGER.warning("Cloud dup check failed (fail-open): %s", e)
             return {"duplicate": False, "error": str(e)}
 
-    def sync_single_scan(self, scan: ScanRecord) -> dict:
-        """Immediately sync a single scan to cloud. Fire-and-forget safe."""
+    def sync_single_scan(self, scan: ScanRecord, station_name: str) -> dict:
+        """Immediately sync a single scan to cloud. Fire-and-forget safe.
+
+        Network-only — never touches self.db. station_name must be resolved by
+        the caller on the thread that owns self.db (the main thread) beforehand;
+        this matches the pattern established by sync_scan_batch_network_only().
+        """
         from config import CLOUD_READ_ONLY
         if CLOUD_READ_ONLY:
             return {"ok": False, "skipped": True}
         try:
-            key = self._generate_idempotency_key(scan)
+            key = self._build_idempotency_key(station_name, scan.badge_id, scan.id)
             payload = {
                 "events": [{
                     "idempotency_key": key,

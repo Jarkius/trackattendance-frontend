@@ -223,6 +223,26 @@ class TestBarrierInvalidatesStaleResults(unittest.TestCase):
         self.coordinator.pause_barrier()
         self.assertIsNone(self.coordinator.submit(lambda: None))
 
+    def test_pause_barrier_return_value_is_new_generation_after_in_flight_job(self):
+        """pause_barrier()'s return value increments even while a job is
+        dequeued/mid-run — documenting the guarantee that main.py's
+        reset_after_barrier()/_reset_manual_sync_state() rely on: by the time
+        pause_barrier() returns, the generation bump has already happened, so
+        no stale callback for the in-flight job can possibly fire afterward."""
+        job_started = threading.Event()
+        release_job = threading.Event()
+
+        def in_flight_job():
+            job_started.set()
+            release_job.wait(timeout=5)
+
+        self.coordinator.submit(in_flight_job)
+        self.assertTrue(job_started.wait(timeout=5), "job did not start")
+
+        new_generation = self.coordinator.pause_barrier()
+        self.assertGreater(new_generation, 0)
+        release_job.set()
+
 
 class TestCallbackDelivery(unittest.TestCase):
     def setUp(self):

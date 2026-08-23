@@ -1018,12 +1018,41 @@ ${destination}` : message;
 
     // ── Employee Lookup ───────────────────────────────────────────────
 
+    const LOOKUP_RESULT_ACTIVE_CLASS = 'lookup-overlay__result--active';
+
+    // Tracks which result row is highlighted for Up/Down keyboard navigation.
+    let lookupActiveIndex = -1;
+
+    const lookupResultButtons = () =>
+        lookupResults ? Array.from(lookupResults.querySelectorAll('.lookup-overlay__result-btn')) : [];
+
+    const setLookupActiveIndex = (index) => {
+        const buttons = lookupResultButtons();
+        if (buttons.length === 0) {
+            lookupActiveIndex = -1;
+            return;
+        }
+        lookupActiveIndex = ((index % buttons.length) + buttons.length) % buttons.length;
+        buttons.forEach((btn, i) => {
+            btn.closest('.lookup-overlay__result')?.classList.toggle(
+                LOOKUP_RESULT_ACTIVE_CLASS, i === lookupActiveIndex
+            );
+        });
+        const activeBtn = buttons[lookupActiveIndex];
+        activeBtn.focus();
+        activeBtn.scrollIntoView({ block: 'nearest' });
+    };
+
     const showLookupOverlay = (query, results) => {
         if (!lookupOverlay) return;
         if (lookupSearchQuery) lookupSearchQuery.textContent = `Search: "${query}"`;
+        lookupActiveIndex = -1;
 
         if (lookupResults) {
             lookupResults.innerHTML = '';
+            // Reset scroll position — otherwise a second search reopens the
+            // overlay still scrolled from wherever the previous search left it.
+            lookupResults.scrollTop = 0;
             if (results.length === 0) {
                 lookupResults.innerHTML = '<div class="lookup-overlay__empty">No employees found</div>';
             } else {
@@ -1051,10 +1080,10 @@ ${destination}` : message;
         lookupOverlay.classList.add('lookup-overlay--visible');
         lookupOverlay.setAttribute('aria-hidden', 'false');
 
-        // Focus Record Scan button only when exactly one result (Enter to confirm)
-        if (results.length === 1) {
-            const firstBtn = lookupResults?.querySelector('.lookup-overlay__result-btn');
-            if (firstBtn) firstBtn.focus();
+        // Focus the first result so Up/Down/Enter work immediately without
+        // requiring a mouse click first.
+        if (results.length > 0) {
+            setLookupActiveIndex(0);
         }
     };
 
@@ -1062,8 +1091,27 @@ ${destination}` : message;
         if (!lookupOverlay) return;
         lookupOverlay.classList.remove('lookup-overlay--visible');
         lookupOverlay.setAttribute('aria-hidden', 'true');
+        lookupActiveIndex = -1;
         returnFocusToInput();
     };
+
+    const isLookupOverlayOpen = () =>
+        Boolean(lookupOverlay && lookupOverlay.classList.contains('lookup-overlay--visible'));
+
+    // Up/Down move the highlighted result; Enter activates whatever button
+    // currently has focus (native <button> behavior — no extra handling
+    // needed here beyond keeping focus in sync with lookupActiveIndex).
+    if (lookupResults) {
+        lookupResults.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setLookupActiveIndex(lookupActiveIndex + 1);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setLookupActiveIndex(lookupActiveIndex - 1);
+            }
+        });
+    }
 
     const handleManualScan = (originalQuery, legacyId) => {
         hideLookupOverlay();
@@ -2727,12 +2775,13 @@ ${destination}` : message;
 
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
-            // Don't steal focus from admin overlay, dashboard, or debug panel
+            // Don't steal focus from admin overlay, dashboard, lookup overlay, or debug panel
             const inAdmin = adminOverlay && adminOverlay.contains(event.target);
             const inDashboard = dashboardOverlay && dashboardOverlay.contains(event.target);
+            const inLookup = lookupOverlay && lookupOverlay.contains(event.target);
             const debugEl = document.getElementById('debug-console');
             const inDebug = debugEl && debugEl.contains(event.target);
-            if (!inAdmin && !inDashboard && !inDebug) {
+            if (!inAdmin && !inDashboard && !inLookup && !inDebug) {
                 returnFocusToInput();
             }
         }
@@ -2750,12 +2799,18 @@ ${destination}` : message;
                 hideDashboardOverlay();
                 return;
             }
+            // Then employee lookup overlay
+            if (isLookupOverlayOpen()) {
+                hideLookupOverlay();
+                return;
+            }
             queueOrRun((bridge) => bridge.close_window());
             return;
         }
-        // Don't steal focus from admin/dashboard overlay inputs
+        // Don't steal focus from admin/dashboard/lookup overlay inputs
         const inOverlay = (adminOverlay && adminOverlay.contains(event.target))
-            || (dashboardOverlay && dashboardOverlay.contains(event.target));
+            || (dashboardOverlay && dashboardOverlay.contains(event.target))
+            || (lookupOverlay && lookupOverlay.contains(event.target));
         if (!inOverlay && event.target !== barcodeInput && event.key.length === 1) {
             returnFocusToInput();
         }

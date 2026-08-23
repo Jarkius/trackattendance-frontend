@@ -243,6 +243,7 @@ class TestResultClassification(unittest.TestCase):
         self.assertEqual(result["pending_ids"], [scan.id])
         self.assertEqual(result["failed_ids"], [])
         self.assertIsNotNone(result["error"])
+        self.assertFalse(result["ok"])
 
     @patch('sync.requests.post')
     def test_400_marks_as_failed(self, mock_post):
@@ -254,6 +255,7 @@ class TestResultClassification(unittest.TestCase):
 
         self.assertEqual(result["failed_ids"], [scan.id])
         self.assertEqual(result["pending_ids"], [])
+        self.assertFalse(result["ok"])
 
     @patch('sync.time.sleep')
     @patch('sync.requests.post')
@@ -284,6 +286,7 @@ class TestResultClassification(unittest.TestCase):
         result = service.sync_scan_batch_network_only([scan], "TestStation")
 
         self.assertEqual(result["failed_ids"], [scan.id])
+        self.assertFalse(result["ok"])
 
     @patch('sync.time.sleep')
     @patch('sync.requests.post')
@@ -305,6 +308,7 @@ class TestResultClassification(unittest.TestCase):
         self.assertEqual(result["pending_ids"], [scan.id])
         self.assertEqual(result["synced_ids"], [])
         self.assertEqual(result["failed_ids"], [])
+        self.assertFalse(result["ok"])
 
 
 class TestCoordinatorIntegration(unittest.TestCase):

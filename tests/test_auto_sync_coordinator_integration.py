@@ -318,6 +318,74 @@ class TestMainThreadResultApplication(unittest.TestCase):
         stats = self.db.get_sync_statistics()
         self.assertEqual(stats["pending"], 1)
 
+    def test_reset_after_barrier_clears_stranded_lock_and_flag(self):
+        """Simulates a job that's dequeued/in-flight when a barrier fires and
+        whose callback will never arrive (issue #65)."""
+        manager = self._make_manager(SynchronousCoordinator())
+        manager.is_syncing = True
+        manager._sync_lock.acquire()
+
+        manager.reset_after_barrier()
+
+        self.assertFalse(manager.is_syncing)
+        self.assertTrue(manager._sync_lock.acquire(blocking=False))
+        manager._sync_lock.release()
+
+    def test_reset_after_barrier_then_trigger_auto_sync_succeeds(self):
+        """The exact 'stuck forever' regression scenario from issue #65: a
+        stranded lock/flag must not prevent a subsequent trigger_auto_sync()
+        from actually submitting a job."""
+        self.db.record_scan("EMP001", "TestStation",
+                             EmployeeRecord("EMP001", "Test User", "IT", "Engineer"))
+        manager = self._make_manager(SynchronousCoordinator())
+        manager.is_syncing = True
+        manager._sync_lock.acquire()
+
+        manager.reset_after_barrier()
+        manager.trigger_auto_sync()
+
+        coordinator = manager._coordinator
+        self.assertEqual(len(coordinator.submitted), 1, "trigger_auto_sync must not hit the stale-lock early-out")
+
+    def test_reset_after_barrier_is_idempotent_when_lock_not_held(self):
+        manager = self._make_manager(SynchronousCoordinator())
+        manager.reset_after_barrier()  # must not raise
+        self.assertFalse(manager.is_syncing)
+
+    def test_unrecognized_stage_treated_as_failure(self):
+        """Issue #69: an unrecognized stage must not silently fall through
+        into the batch-handling logic and record a false success."""
+        manager = self._make_manager(SynchronousCoordinator())
+        manager.is_syncing = True
+        manager._sync_lock.acquire()
+        manager._pending_outcome = {"stage": "bogus"}
+
+        manager._on_auto_sync_result()
+
+        self.assertEqual(manager.consecutive_failures(), 1)
+        self.assertFalse(manager.is_syncing)
+
+    def test_db_apply_exception_counts_as_failure_for_cooldown(self):
+        """Issue #67: a network-successful upload whose local bookkeeping
+        write then fails must not be treated as a success for cooldown
+        purposes."""
+        manager = self._make_manager(SynchronousCoordinator())
+        manager.is_syncing = True
+        manager._sync_lock.acquire()
+        manager.sync_service.db.mark_scans_as_synced = MagicMock(side_effect=Exception("db write failed"))
+        manager._pending_outcome = {
+            "stage": "batch",
+            "ok": True,
+            "batch_result": {
+                "ok": True, "synced_ids": [999], "failed_ids": [],
+                "pending_ids": [], "synced_count": 1, "error": None,
+            },
+        }
+
+        manager._on_auto_sync_result()
+
+        self.assertEqual(manager.consecutive_failures(), 1)
+
 
 def main():
     print("=" * 70)

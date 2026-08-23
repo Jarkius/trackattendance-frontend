@@ -208,6 +208,23 @@ class AutoSyncManager(QObject):
         if self._owns_coordinator:
             self._coordinator.shutdown(timeout=timeout)
 
+    def reset_after_barrier(self) -> None:
+        """Force-clear auto-sync's in-flight guard state after a coordinator
+        pause_barrier() call. Safe to call synchronously on the Qt main
+        thread: pause_barrier() always runs on this same thread (see the
+        three barrier call sites in Api), so there is no race with
+        trigger_auto_sync()/_on_auto_sync_result() — both of those also only
+        ever run on the main thread. Without this, a barrier raised while an
+        auto-sync job was already dequeued/in-flight permanently strands
+        is_syncing=True and a held _sync_lock, since the job's own callback
+        (the only other code that clears them) is dropped by the barrier's
+        generation check and never runs.
+        """
+        self._pending_outcome = None
+        if self._sync_lock.locked():
+            self._sync_lock.release()
+        self.is_syncing = False
+
     def on_scan(self) -> None:
         """
         Update last scan time when user scans a badge.
@@ -428,6 +445,14 @@ class AutoSyncManager(QObject):
                     self.show_status_message(f"Auto-sync failed: {message}", "error")
                 return
 
+            if stage != "batch":
+                # Unrecognized stage — treat as a hard failure rather than
+                # silently falling through into the batch-handling logic
+                # below with an empty/missing batch_result (issue #69).
+                LOGGER.error("[AutoSync] Unexpected sync outcome stage=%r — treating as failure", stage)
+                self._record_auto_sync_outcome(failed=True)
+                return
+
             # stage == "batch": the network job completed a real upload attempt.
             # Apply the returned id classification to SQLite here, on the main
             # thread — this is the only place these mutations happen.
@@ -438,6 +463,7 @@ class AutoSyncManager(QObject):
             error_msg = batch_result.get("error")
 
             sync_service = self.sync_service
+            db_apply_failed = False
             try:
                 if synced_ids:
                     sync_service.db.mark_scans_as_synced(synced_ids)
@@ -447,6 +473,7 @@ class AutoSyncManager(QObject):
             except Exception as e:
                 LOGGER.exception("[AutoSync] Error applying sync result to DB: %s", e)
                 pending_after = 0
+                db_apply_failed = True
 
             result = {
                 "synced": synced_count,
@@ -456,11 +483,16 @@ class AutoSyncManager(QObject):
             synced_count_out = result["synced"]
             failed_count = result["failed"]
 
-            # A hard batch failure: nothing synced and either scans were marked
-            # failed outright, or an error was returned (401 / retry exhaustion —
-            # both leave ids as pending_ids, not failed_ids, but still represent a
-            # genuine failed sync attempt for cooldown purposes).
-            batch_failed = synced_count_out == 0 and (failed_count > 0 or error_msg is not None)
+            # A hard batch failure: a DB-apply exception above (issue #67 — a
+            # network-successful upload whose local bookkeeping write then
+            # failed must not be treated as a success), OR nothing synced and
+            # either scans were marked failed outright, or an error was
+            # returned (401 / retry exhaustion — both leave ids as
+            # pending_ids, not failed_ids, but still represent a genuine
+            # failed sync attempt for cooldown purposes).
+            batch_failed = db_apply_failed or (
+                synced_count_out == 0 and (failed_count > 0 or error_msg is not None)
+            )
             self._record_auto_sync_outcome(failed=batch_failed)
 
             # Emit signal with result
@@ -708,6 +740,22 @@ class Api(QObject):
         if self._owns_sync_coordinator:
             self._sync_coordinator.shutdown(timeout=timeout)
 
+    def _reset_manual_sync_state(self) -> None:
+        """Force-clear manual-sync's in-flight guard state after a coordinator
+        pause_barrier() call. Safe to call synchronously on the Qt main
+        thread for the same reason as AutoSyncManager.reset_after_barrier():
+        pause_barrier() and sync_now()/_on_manual_sync_result() all run on
+        this thread, so there is no cross-thread race. Without this, a
+        barrier raised while a manual sync_now() job was already
+        dequeued/in-flight permanently strands _manual_sync_in_progress=True,
+        since the job's own callback (the only other code that clears it) is
+        dropped by the barrier's generation check and never runs — every
+        future sync_now() call then returns {"accepted": False, ...,
+        "message": "A sync is already in progress"} forever.
+        """
+        self._pending_manual_sync_outcome = None
+        self._manual_sync_in_progress = False
+
     @pyqtSlot(result="QVariant")
     def get_initial_data(self) -> dict:
         """Return initial metrics and history so the web UI can render the dashboard."""
@@ -920,6 +968,21 @@ class Api(QObject):
                 "requestId": request_id,
                 "ok": False,
                 "message": message,
+                "synced": 0,
+                "failed": 0,
+                "pending": 0,
+            })
+            return
+
+        if stage != "batch":
+            # Unrecognized stage — treat as a hard failure rather than
+            # silently falling into the "no pending scans" success branch
+            # below with a missing batch_result (issue #69).
+            LOGGER.error("sync_now request %s: unexpected outcome stage=%r", request_id, stage)
+            self.sync_now_completed.emit({
+                "requestId": request_id,
+                "ok": False,
+                "message": f"Unexpected sync outcome (stage={stage!r})",
                 "synced": 0,
                 "failed": 0,
                 "pending": 0,
@@ -1280,6 +1343,9 @@ class Api(QObject):
         if self._sync_coordinator:
             new_generation = self._sync_coordinator.pause_barrier()
             LOGGER.info("[Admin] Coordinator paused for cloud-clear barrier (generation=%s)", new_generation)
+            if self._auto_sync_manager:
+                self._auto_sync_manager.reset_after_barrier()
+            self._reset_manual_sync_state()
 
         # Clear local scans
         try:
@@ -1358,6 +1424,9 @@ class Api(QObject):
         if self._sync_coordinator:
             new_generation = self._sync_coordinator.pause_barrier()
             LOGGER.info("[Admin] Coordinator paused for station-clear barrier (generation=%s)", new_generation)
+            if self._auto_sync_manager:
+                self._auto_sync_manager.reset_after_barrier()
+            self._reset_manual_sync_state()
 
         # Clear local scans
         try:
@@ -2061,6 +2130,9 @@ class Api(QObject):
             if self._sync_coordinator:
                 new_generation = self._sync_coordinator.pause_barrier()
                 LOGGER.info("[Sync] Coordinator paused for clear barrier (generation=%s)", new_generation)
+                if self._auto_sync_manager:
+                    self._auto_sync_manager.reset_after_barrier()
+                self._reset_manual_sync_state()
             try:
                 self._service.export_scans()
                 LOGGER.info("[Sync] Backup exported before remote clear")

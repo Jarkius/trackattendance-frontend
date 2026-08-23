@@ -327,6 +327,38 @@ class TestSyncNowCompletionSignal(unittest.TestCase):
 
         self.assertFalse(api._manual_sync_in_progress)
 
+    def test_reset_manual_sync_state_clears_stranded_flag(self):
+        """Issue #65: a barrier raised while a manual sync_now() job was
+        already dequeued/in-flight must not strand _manual_sync_in_progress
+        forever — _reset_manual_sync_state() must clear it and allow a fresh
+        sync_now() call to be accepted."""
+        self.sync_service.test_connection = MagicMock(return_value=(True, "ok"))
+        self.sync_service.test_authentication = MagicMock(return_value=(True, "ok"))
+        api = _make_api(self.sync_service, SynchronousCoordinator())
+        api._manual_sync_in_progress = True
+
+        api._reset_manual_sync_state()
+
+        self.assertFalse(api._manual_sync_in_progress)
+
+        result = api.sync_now()
+        self.assertTrue(result["accepted"])
+
+    def test_unrecognized_stage_emits_not_ok(self):
+        """Issue #69: an unrecognized stage must not silently fall into the
+        'no pending scans' success branch."""
+        api = _make_api(self.sync_service, SynchronousCoordinator())
+        received = []
+        api.sync_now_completed.connect(lambda payload: received.append(payload))
+        api._manual_sync_in_progress = True
+        api._pending_manual_sync_outcome = {"requestId": 1, "stage": "bogus"}
+
+        api._on_manual_sync_result()
+
+        self.assertEqual(len(received), 1)
+        self.assertFalse(received[0]["ok"])
+        self.assertIn("Unexpected sync outcome", received[0]["message"])
+
 
 def main():
     print("=" * 70)

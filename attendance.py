@@ -370,10 +370,17 @@ class AttendanceService:
         """Search employees by email prefix, partial name, or fuzzy match.
 
         Search strategy (in order):
-        1. Exact email prefix match
-        2. Substring match on full name
-        3. All individual query words must appear in the name (any order)
-        4. Fuzzy fallback — tolerate typos using word-level similarity
+        1. Exact email prefix match, or query matches the start of the
+           first name (e.g. "j" -> "Jihun Jung")
+        2. Query matches the start of a later name word, e.g. a surname
+           (e.g. "j" -> "Parichart Jiravachara") — ranked below #1 so a
+           first-name match surfaces before a surname match for the same
+           query, matching how people expect name search to behave
+        3. Substring match anywhere in the full name (lower priority than
+           #1/#2 so a short query like "c" doesn't get filled up with
+           mid-name hits like "Marcus" before prefix matches are considered)
+        4. All individual query words must appear in the name (any order)
+        5. Fuzzy fallback — tolerate typos using word-level similarity
         """
         # Normalize whitespace: collapse multiple spaces into one
         query = " ".join(query.split()).lower()
@@ -381,7 +388,9 @@ class AttendanceService:
             return []
 
         query_words = query.split()
-        exact_results = []
+        first_name_prefix_results = []
+        other_prefix_results = []
+        contains_results = []
         word_match_results = []
         fuzzy_results = []  # (similarity_score, employee_dict)
 
@@ -394,30 +403,43 @@ class AttendanceService:
             }
             email_prefix = emp.email.split("@")[0].lower() if emp.email else ""
             name_lower = " ".join(emp.full_name.split()).lower()
+            name_words = name_lower.split()
 
-            # Tier 1: exact email or substring match
-            if (email_prefix and email_prefix == query) or query in name_lower:
-                exact_results.append(emp_dict)
-                if len(exact_results) >= 10:
-                    break
+            # Tier 1: exact email match, or query matches the start of the
+            # first name.
+            if (email_prefix and email_prefix == query) or (
+                name_words and name_words[0].startswith(query)
+            ):
+                first_name_prefix_results.append(emp_dict)
                 continue
 
-            # Tier 2: all query words appear somewhere in the name (any order)
+            # Tier 2: query matches the start of a later name word (surname,
+            # middle name, etc.) — ranked below a first-name match.
+            if any(w.startswith(query) for w in name_words[1:]):
+                other_prefix_results.append(emp_dict)
+                continue
+
+            # Tier 3: substring match anywhere in the name
+            if query in name_lower:
+                contains_results.append(emp_dict)
+                continue
+
+            # Tier 4: all query words appear somewhere in the name (any order)
             # e.g. "smith john" matches "John Smith"
             if len(query_words) > 1 and all(w in name_lower for w in query_words):
                 word_match_results.append(emp_dict)
                 continue
 
-            # Tier 3: fuzzy match — each query word must closely match a name word
+            # Tier 5: fuzzy match — each query word must closely match a name word
             # Handles typos like "Smth" → "Smith", "Jhon" → "John"
             if len(query_words) >= 1 and len(query) >= 3:
-                name_words = name_lower.split()
                 score = _fuzzy_word_score(query_words, name_words)
                 if score >= 0.75:
                     fuzzy_results.append((score, emp_dict))
 
-        if exact_results:
-            return exact_results[:10]
+        combined_prefix = first_name_prefix_results + other_prefix_results
+        if combined_prefix or contains_results:
+            return (combined_prefix + contains_results)[:10]
 
         if word_match_results:
             return word_match_results[:10]
@@ -526,8 +548,9 @@ class AttendanceService:
             scan_to_sync = self._db.fetch_last_pending_scan()
             if scan_to_sync:
                 sync_service = self._sync_service
+                station = self.station_name  # resolved on the main thread, not the worker
                 job_id = self._sync_coordinator.submit(
-                    lambda: sync_service.sync_single_scan(scan_to_sync)
+                    lambda: sync_service.sync_single_scan(scan_to_sync, station)
                 )
                 if job_id is None:
                     LOGGER.warning(

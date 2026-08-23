@@ -142,6 +142,7 @@ class TestLiveSyncEnqueue(unittest.TestCase):
             sync_service.sync_single_scan.assert_called_once()
             scan_arg = sync_service.sync_single_scan.call_args[0][0]
             self.assertEqual(scan_arg.badge_id, "TEST001")
+            self.assertEqual(sync_service.sync_single_scan.call_args[0][1], "TestStation")
         finally:
             service.close()
 
