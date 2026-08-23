@@ -31,7 +31,9 @@ a = Analysis(
         # Unused PyQt6 modules — reduces bundle by ~30-50MB
         'PyQt6.QtDesigner',
         'PyQt6.QtHelp',
-        'PyQt6.QtNetwork',       # requests handles HTTP
+        # NOTE: QtNetwork was previously excluded on the assumption that
+        # `requests` covers all HTTP needs, but QtWebEngineWidgets depends on
+        # it internally (QWebEngineView fails to import without it) — keep it.
         'PyQt6.QtSql',
         'PyQt6.QtSvg',
         'PyQt6.QtSvgWidgets',

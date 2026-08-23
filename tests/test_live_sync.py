@@ -125,7 +125,7 @@ class TestSyncSingleScan:
         scan = FakeScanRecord()
         mock_resp = MagicMock(status_code=200)
         with patch("sync.requests.post", return_value=mock_resp):
-            result = svc.sync_single_scan(scan)
+            result = svc.sync_single_scan(scan, "TestStation")
             assert result["ok"] is True
             # Should NOT call mark_scans_as_synced (threading fix)
             db.mark_scans_as_synced.assert_not_called()
@@ -136,7 +136,7 @@ class TestSyncSingleScan:
         scan = FakeScanRecord()
         mock_resp = MagicMock(status_code=200)
         with patch("sync.requests.post", return_value=mock_resp):
-            svc.sync_single_scan(scan)
+            svc.sync_single_scan(scan, "TestStation")
             db.mark_scans_as_synced.assert_not_called()
 
     def test_http_error_returns_failure(self):
@@ -144,7 +144,7 @@ class TestSyncSingleScan:
         scan = FakeScanRecord()
         mock_resp = MagicMock(status_code=502)
         with patch("sync.requests.post", return_value=mock_resp):
-            result = svc.sync_single_scan(scan)
+            result = svc.sync_single_scan(scan, "TestStation")
             assert result["ok"] is False
             assert "502" in result["error"]
 
@@ -156,7 +156,7 @@ class TestSyncSingleScan:
         with patch(
             "sync.requests.post", side_effect=requests.ConnectionError("offline")
         ):
-            result = svc.sync_single_scan(scan)
+            result = svc.sync_single_scan(scan, "TestStation")
             assert result["ok"] is False
             assert "offline" in result["error"]
 
@@ -167,7 +167,7 @@ class TestSyncSingleScan:
         )
         mock_resp = MagicMock(status_code=200)
         with patch("sync.requests.post", return_value=mock_resp) as mock_post:
-            svc.sync_single_scan(scan)
+            svc.sync_single_scan(scan, "S1")
             payload = mock_post.call_args[1]["json"]
             event = payload["events"][0]
             assert event["badge_id"] == "B123"
@@ -182,9 +182,23 @@ class TestSyncSingleScan:
 
         importlib.reload(config)
         try:
-            result = svc.sync_single_scan(FakeScanRecord())
+            result = svc.sync_single_scan(FakeScanRecord(), "TestStation")
             assert result["ok"] is False
             assert result.get("skipped") is True
         finally:
             os.environ["CLOUD_READ_ONLY"] = "False"
             importlib.reload(config)
+
+    def test_never_calls_get_station_name(self):
+        """Proves the fixed method genuinely never touches self.db — station_name
+        is supplied by the caller, not resolved via db.get_station_name()."""
+        svc, db = _make_service()
+        db.get_station_name = MagicMock(side_effect=AssertionError(
+            "sync_single_scan must never call db.get_station_name()"
+        ))
+        scan = FakeScanRecord()
+        mock_resp = MagicMock(status_code=200)
+        with patch("sync.requests.post", return_value=mock_resp):
+            result = svc.sync_single_scan(scan, "Station-A")
+            assert result["ok"] is True
+            db.get_station_name.assert_not_called()

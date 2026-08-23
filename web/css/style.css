@@ -1416,6 +1416,11 @@ body.dashboard-open {
     border-color: var(--deloitte-green);
 }
 
+.lookup-overlay__result--active {
+    border-color: var(--deloitte-green);
+    background: rgba(134, 188, 37, 0.08);
+}
+
 .lookup-overlay__result-info {
     flex: 1;
     min-width: 0;

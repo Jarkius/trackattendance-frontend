@@ -236,6 +236,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let dashboardOpen = false;  // Flag to skip connection checks while dashboard is open
     const apiQueue = [];
 
+    // Tracks the requestId of the most recent sync_now() call so a
+    // sync_now_completed signal belonging to an older, superseded request can
+    // be told apart and ignored (e.g. if the coordinator rejects a call while
+    // an earlier one is still in flight, or in case of any other race).
+    let pendingSyncNowRequestId = null;
+
     const escapeHtml = (str) => {
         if (typeof str !== 'string') return str;
         return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -451,6 +457,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const bindSyncNowCompletedSignal = () => {
+        if (!api || !api.sync_now_completed || !api.sync_now_completed.connect) {
+            console.warn('[SyncNow] sync_now_completed signal unavailable — manual sync UI will not update on completion');
+            return;
+        }
+        try {
+            api.sync_now_completed.connect((payload) => {
+                handleSyncNowCompleted(payload);
+            });
+            console.info('[SyncNow] Bound sync_now_completed signal');
+        } catch (err) {
+            console.error('[SyncNow] Failed to bind sync_now_completed signal:', err);
+        }
+    };
+
     if (window.qt && window.qt.webChannelTransport) {
         new QWebChannel(window.qt.webChannelTransport, (channel) => {
             console.info('[QWebChannel] Connected, got api object');
@@ -464,6 +485,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 hasConnect: !!(api.connection_status_changed && typeof api.connection_status_changed.connect === 'function'),
             });
             bindConnectionSignal();
+            // Bind sync_now_completed exactly once here (QWebChannel init), not
+            // per button click — a per-click connect() would stack duplicate
+            // listeners across multiple Sync Now presses.
+            bindSyncNowCompletedSignal();
             flushApiQueue();
             loadInitialData();
             // Don't refresh connection status here - loadInitialData() handles the 15s delay
@@ -608,8 +633,55 @@ ${destination}` : message;
         }, 80);
     };
 
+    // Short synthesized alert tone for rejected/blocked scans — plays via the
+    // Web Audio API (no MP3 asset, no Python bridge round-trip) so it's fully
+    // independent of the VoicePlayer used for success greetings. Two quick
+    // descending beeps read as "error" without needing a voice line.
+    let alertAudioCtx = null;
+    const playErrorTone = () => {
+        try {
+            if (!alertAudioCtx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                alertAudioCtx = new AudioCtx();
+            }
+            const ctx = alertAudioCtx;
+            const now = ctx.currentTime;
+            [[880, 0], [660, 0.14]].forEach(([freq, delay]) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freq, now + delay);
+                gain.gain.setValueAtTime(0.15, now + delay);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.12);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + delay);
+                osc.stop(now + delay + 0.13);
+            });
+        } catch (e) {
+            console.warn('[Alert] Failed to play error tone:', e);
+        }
+    };
+
     // Duplicate Badge Alert Handler (Issue #21) - Uses export overlay pattern
     let duplicateOverlayTimeout = null;
+    const dismissDuplicateOverlay = () => {
+        const duplicateOverlay = document.getElementById('duplicate-overlay');
+        if (!duplicateOverlay) return;
+        if (duplicateOverlayTimeout) {
+            window.clearTimeout(duplicateOverlayTimeout);
+            duplicateOverlayTimeout = null;
+        }
+        duplicateOverlay.classList.remove('duplicate-overlay--visible');
+        duplicateOverlay.setAttribute('aria-hidden', 'true');
+        barcodeInput.disabled = false;
+        returnFocusToInput();
+    };
+    const isDuplicateOverlayOpen = () => {
+        const duplicateOverlay = document.getElementById('duplicate-overlay');
+        return Boolean(duplicateOverlay && duplicateOverlay.classList.contains('duplicate-overlay--visible'));
+    };
     window.__handleDuplicateBadge = (payload = {}) => {
         const duplicateOverlay = document.getElementById('duplicate-overlay');
         const duplicateTitle = document.getElementById('duplicate-overlay-title');
@@ -646,6 +718,12 @@ ${destination}` : message;
         duplicateOverlay.classList.add('duplicate-overlay--visible');
         duplicateOverlay.setAttribute('aria-hidden', 'false');
         barcodeInput.disabled = true;
+
+        // Audible cue for rejected/blocked scans (error state only — the
+        // yellow "accepted but flagged" warn case stays silent).
+        if (isError) {
+            playErrorTone();
+        }
 
         // Auto-dismiss after configured duration
         const duration = payload.alertDurationMs || 3000;
@@ -993,12 +1071,41 @@ ${destination}` : message;
 
     // ── Employee Lookup ───────────────────────────────────────────────
 
+    const LOOKUP_RESULT_ACTIVE_CLASS = 'lookup-overlay__result--active';
+
+    // Tracks which result row is highlighted for Up/Down keyboard navigation.
+    let lookupActiveIndex = -1;
+
+    const lookupResultButtons = () =>
+        lookupResults ? Array.from(lookupResults.querySelectorAll('.lookup-overlay__result-btn')) : [];
+
+    const setLookupActiveIndex = (index) => {
+        const buttons = lookupResultButtons();
+        if (buttons.length === 0) {
+            lookupActiveIndex = -1;
+            return;
+        }
+        lookupActiveIndex = ((index % buttons.length) + buttons.length) % buttons.length;
+        buttons.forEach((btn, i) => {
+            btn.closest('.lookup-overlay__result')?.classList.toggle(
+                LOOKUP_RESULT_ACTIVE_CLASS, i === lookupActiveIndex
+            );
+        });
+        const activeBtn = buttons[lookupActiveIndex];
+        activeBtn.focus();
+        activeBtn.scrollIntoView({ block: 'nearest' });
+    };
+
     const showLookupOverlay = (query, results) => {
         if (!lookupOverlay) return;
         if (lookupSearchQuery) lookupSearchQuery.textContent = `Search: "${query}"`;
+        lookupActiveIndex = -1;
 
         if (lookupResults) {
             lookupResults.innerHTML = '';
+            // Reset scroll position — otherwise a second search reopens the
+            // overlay still scrolled from wherever the previous search left it.
+            lookupResults.scrollTop = 0;
             if (results.length === 0) {
                 lookupResults.innerHTML = '<div class="lookup-overlay__empty">No employees found</div>';
             } else {
@@ -1026,10 +1133,10 @@ ${destination}` : message;
         lookupOverlay.classList.add('lookup-overlay--visible');
         lookupOverlay.setAttribute('aria-hidden', 'false');
 
-        // Focus Record Scan button only when exactly one result (Enter to confirm)
-        if (results.length === 1) {
-            const firstBtn = lookupResults?.querySelector('.lookup-overlay__result-btn');
-            if (firstBtn) firstBtn.focus();
+        // Focus the first result so Up/Down/Enter work immediately without
+        // requiring a mouse click first.
+        if (results.length > 0) {
+            setLookupActiveIndex(0);
         }
     };
 
@@ -1037,8 +1144,27 @@ ${destination}` : message;
         if (!lookupOverlay) return;
         lookupOverlay.classList.remove('lookup-overlay--visible');
         lookupOverlay.setAttribute('aria-hidden', 'true');
+        lookupActiveIndex = -1;
         returnFocusToInput();
     };
+
+    const isLookupOverlayOpen = () =>
+        Boolean(lookupOverlay && lookupOverlay.classList.contains('lookup-overlay--visible'));
+
+    // Up/Down move the highlighted result; Enter activates whatever button
+    // currently has focus (native <button> behavior — no extra handling
+    // needed here beyond keeping focus in sync with lookupActiveIndex).
+    if (lookupResults) {
+        lookupResults.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                setLookupActiveIndex(lookupActiveIndex + 1);
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                setLookupActiveIndex(lookupActiveIndex - 1);
+            }
+        });
+    }
 
     const handleManualScan = (originalQuery, legacyId) => {
         hideLookupOverlay();
@@ -1474,13 +1600,52 @@ ${destination}` : message;
         });
     }
 
+    const resetSyncNowButton = () => {
+        syncNowBtn.disabled = false;
+        syncNowBtn.innerHTML = '<i class="material-icons">sync</i>';
+        syncNowBtn.title = 'Sync Now';
+    };
+
+    const showSyncNowMessage = (message, success) => {
+        if (!syncStatusMessage) {
+            return;
+        }
+        syncStatusMessage.textContent = message;
+        syncStatusMessage.style.color = success ? '#00A3E0' : 'red';  // Blue for success, red for error
+        window.setTimeout(() => {
+            syncStatusMessage.textContent = '';
+        }, 5000);
+    };
+
+    // Called from the sync_now_completed signal (bound once at QWebChannel init,
+    // see bindSyncNowCompletedSignal). sync_now() itself only returns an
+    // immediate {accepted, requestId, message} acknowledgement — the real
+    // synced/failed/pending result arrives later via this signal, on whatever
+    // schedule the coordinator's background worker actually finishes on.
+    const handleSyncNowCompleted = (payload) => {
+        if (!payload || payload.requestId !== pendingSyncNowRequestId) {
+            // Either a malformed payload, or this result belongs to an older
+            // request that's since been superseded — ignore it so the UI never
+            // regresses to show a stale outcome after a newer sync started.
+            console.debug('[SyncNow] Ignoring stale/unmatched completion', payload, 'expected', pendingSyncNowRequestId);
+            return;
+        }
+        pendingSyncNowRequestId = null;
+        resetSyncNowButton();
+
+        const success = Boolean(payload.ok);
+        showSyncNowMessage(payload.message || (success ? 'Sync complete!' : 'Sync failed'), success);
+
+        // Update sync statistics (with small delay to ensure DB is updated)
+        setTimeout(updateSyncStatus, 100);
+        refreshConnectionStatus();
+        returnFocusToInput();
+    };
+
     const handleSyncNow = () => {
         queueOrRun((bridge) => {
             if (!bridge.sync_now) {
-                if (syncStatusMessage) {
-                    syncStatusMessage.textContent = 'Sync service not available';
-                    syncStatusMessage.style.color = 'red';
-                }
+                showSyncNowMessage('Sync service not available', false);
                 return;
             }
 
@@ -1488,30 +1653,28 @@ ${destination}` : message;
             syncNowBtn.innerHTML = '<i class="material-icons sync-spinning">sync</i>';
             syncNowBtn.title = 'Syncing...';
             if (syncStatusMessage) {
-                syncStatusMessage.textContent = 'Testing connection...';
+                syncStatusMessage.textContent = 'Starting sync...';
                 syncStatusMessage.style.color = '#00A3E0';  // Match sync button color
             }
 
-            bridge.sync_now((result) => {
-                syncNowBtn.disabled = false;
-                syncNowBtn.innerHTML = '<i class="material-icons">sync</i>';
-                syncNowBtn.title = 'Sync Now';
-
-                const success = Boolean(result && result.ok);
-                if (syncStatusMessage) {
-                    syncStatusMessage.textContent = result?.message || (success ? 'Sync complete!' : 'Sync failed');
-                    syncStatusMessage.style.color = success ? '#00A3E0' : 'red';  // Blue for success, red for error
-
-                    // Clear message after 5 seconds
-                    window.setTimeout(() => {
-                        syncStatusMessage.textContent = '';
-                    }, 5000);
+            // sync_now() returns immediately with just an acceptance ack — it
+            // does not carry the final result. The button/spinner stays in the
+            // "syncing" state until handleSyncNowCompleted() runs, driven by the
+            // sync_now_completed signal.
+            bridge.sync_now((ack) => {
+                if (!ack || !ack.accepted) {
+                    // Rejected (already syncing, no service configured, or the
+                    // coordinator couldn't accept the job) — nothing is running,
+                    // so restore the button immediately instead of waiting for a
+                    // completion signal that will never arrive for this call.
+                    resetSyncNowButton();
+                    showSyncNowMessage((ack && ack.message) || 'Sync failed to start', false);
+                    returnFocusToInput();
+                    return;
                 }
-
-                // Update sync statistics (with small delay to ensure DB is updated)
-                setTimeout(updateSyncStatus, 100);
-                refreshConnectionStatus();
-                returnFocusToInput();
+                pendingSyncNowRequestId = ack.requestId;
+                // Button stays disabled/spinning; handleSyncNowCompleted() will
+                // restore it once the matching sync_now_completed signal fires.
             });
         });
     };
@@ -2665,12 +2828,13 @@ ${destination}` : message;
 
     document.addEventListener('click', (event) => {
         if (event.target !== barcodeInput) {
-            // Don't steal focus from admin overlay, dashboard, or debug panel
+            // Don't steal focus from admin overlay, dashboard, lookup overlay, or debug panel
             const inAdmin = adminOverlay && adminOverlay.contains(event.target);
             const inDashboard = dashboardOverlay && dashboardOverlay.contains(event.target);
+            const inLookup = lookupOverlay && lookupOverlay.contains(event.target);
             const debugEl = document.getElementById('debug-console');
             const inDebug = debugEl && debugEl.contains(event.target);
-            if (!inAdmin && !inDashboard && !inDebug) {
+            if (!inAdmin && !inDashboard && !inLookup && !inDebug) {
                 returnFocusToInput();
             }
         }
@@ -2688,12 +2852,25 @@ ${destination}` : message;
                 hideDashboardOverlay();
                 return;
             }
+            // Then employee lookup overlay
+            if (isLookupOverlayOpen()) {
+                hideLookupOverlay();
+                return;
+            }
+            // Then the duplicate/failure alert overlay — lets testing skip the
+            // configured auto-dismiss wait without affecting normal scanning
+            // (a no-op for anyone not pressing Escape).
+            if (isDuplicateOverlayOpen()) {
+                dismissDuplicateOverlay();
+                return;
+            }
             queueOrRun((bridge) => bridge.close_window());
             return;
         }
-        // Don't steal focus from admin/dashboard overlay inputs
+        // Don't steal focus from admin/dashboard/lookup overlay inputs
         const inOverlay = (adminOverlay && adminOverlay.contains(event.target))
-            || (dashboardOverlay && dashboardOverlay.contains(event.target));
+            || (dashboardOverlay && dashboardOverlay.contains(event.target))
+            || (lookupOverlay && lookupOverlay.contains(event.target));
         if (!inOverlay && event.target !== barcodeInput && event.key.length === 1) {
             returnFocusToInput();
         }

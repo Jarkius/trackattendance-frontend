@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import itertools
 import json
 import logging
+import queue
 import requests
+import threading
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 
 from database import DatabaseManager, ScanRecord
@@ -32,6 +35,131 @@ def _is_retryable_error(exception: Exception) -> bool:
     if isinstance(exception, requests.exceptions.ConnectionError):
         return True
     return False
+
+
+class BackgroundSyncCoordinator:
+    """Bounded FIFO coordinator that runs network-only jobs on one reused worker thread.
+
+    A job is any no-argument callable. Jobs must never touch SQLite — this class has
+    no database access itself, and the reused worker thread is the only thread that
+    ever executes a job, so callers must not pass in work that opens or uses a
+    DatabaseManager/sqlite3 connection. Result/error callbacks are invoked on that
+    same worker thread; callers that need to touch SQLite or Qt state from a callback
+    must marshal it back to their own owning thread themselves (e.g. via Qt's queued
+    signal/invokeMethod) — that marshalling is intentionally out of scope here.
+
+    Generation/barrier semantics: pause_barrier() stops new submissions, discards any
+    jobs still sitting in the queue, and bumps an internal generation counter. A job's
+    callback only fires if its generation still matches the coordinator's current
+    generation at the moment the job finishes — this also invalidates a job that was
+    already in flight (dequeued, mid-run) when the barrier was raised, so a stale
+    result can never be delivered after a barrier. resume() re-opens submission.
+    """
+
+    def __init__(self, max_queue_size: int = 8):
+        self._queue: "queue.Queue[tuple]" = queue.Queue(maxsize=max_queue_size)
+        self._lock = threading.Lock()
+        self._generation = 0
+        self._paused = False
+        self._shutdown = False
+        self._stop_event = threading.Event()
+        self._job_counter = itertools.count(1)
+        self._worker = threading.Thread(
+            target=self._run, name="sync-coordinator", daemon=True
+        )
+        self._worker.start()
+
+    def submit(
+        self,
+        job: Callable[[], Any],
+        on_result: Optional[Callable[[int, Any], None]] = None,
+        on_error: Optional[Callable[[int, Exception], None]] = None,
+    ) -> Optional[int]:
+        """Enqueue a network-only job. Never blocks the calling thread.
+
+        Returns the job_id on success, or None if the job was rejected because the
+        coordinator is shut down, paused (mid-barrier), or the bounded queue is full.
+        A None return means the caller's underlying work item (e.g. a pending scan
+        row) was not claimed and remains eligible for a normal retry/batch path.
+        """
+        with self._lock:
+            if self._shutdown or self._paused:
+                return None
+            generation = self._generation
+        job_id = next(self._job_counter)
+        try:
+            self._queue.put_nowait((job_id, generation, job, on_result, on_error))
+        except queue.Full:
+            return None
+        return job_id
+
+    def pause_barrier(self) -> int:
+        """Stop accepting new jobs, drop everything still queued, and advance the
+        generation so any already-dequeued (in-flight) job's callback is skipped
+        when it finishes. Returns the new generation number.
+
+        Does not block waiting for an in-flight job to finish — callers that need
+        that guarantee must poll/wait using their own mechanism so this method never
+        blocks a Qt UI thread.
+        """
+        with self._lock:
+            self._paused = True
+            self._generation += 1
+            new_generation = self._generation
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        return new_generation
+
+    def resume(self) -> None:
+        """Re-open the coordinator for new submissions after a barrier."""
+        with self._lock:
+            self._paused = False
+
+    def shutdown(self, timeout: Optional[float] = None) -> None:
+        """Stop accepting new work and join the worker thread deterministically.
+
+        Any job still queued when shutdown() is called is left unrun (its row, if
+        any, remains pending for the normal batch path). A job already popped and
+        executing when shutdown() is called is allowed to finish; join(timeout=...)
+        bounds how long this call waits for that.
+        """
+        with self._lock:
+            if self._shutdown:
+                return
+            self._shutdown = True
+            self._stop_event.set()
+        self._worker.join(timeout=timeout)
+
+    def is_shutdown(self) -> bool:
+        return self._shutdown
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                job_id, generation, job, on_result, on_error = self._queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                result = job()
+            except Exception as exc:  # noqa: BLE001 - report to caller, don't crash worker
+                if on_error and self._is_current_generation(generation):
+                    try:
+                        on_error(job_id, exc)
+                    except Exception:
+                        LOGGER.exception("sync coordinator on_error callback raised")
+                continue
+            if on_result and self._is_current_generation(generation):
+                try:
+                    on_result(job_id, result)
+                except Exception:
+                    LOGGER.exception("sync coordinator on_result callback raised")
+
+    def _is_current_generation(self, generation: int) -> bool:
+        with self._lock:
+            return generation == self._generation
 
 
 class SyncService:
@@ -264,6 +392,59 @@ class SyncService:
             "batches": batch_count,
         }
 
+    @staticmethod
+    def _build_idempotency_key(station_name: str, badge_id: str, local_id: int) -> str:
+        """Pure key-format helper, shared by _generate_idempotency_key (main-thread
+        path, resolves station_name from self.db) and sync_scan_batch_network_only
+        (network-only path, given an already-resolved station_name so it never
+        touches self.db). Format: {station}-{badge_id}-{local_id}.
+        """
+        safe_station = (station_name or "UnknownStation").replace(" ", "").replace("-", "")
+        return f"{safe_station}-{badge_id}-{local_id}"
+
+    def _get_cached_station_name(self) -> str:
+        """Resolve and cache the station name from self.db.
+
+        Touches SQLite — only call this from the thread that owns self.db
+        (the main thread). Never call from a network-only background job.
+        """
+        if not hasattr(self, '_cached_station_name'):
+            self._cached_station_name = self.db.get_station_name() or "UnknownStation"
+        return self._cached_station_name
+
+    def _build_batch_events(self, scans: List[ScanRecord], station_name: str) -> List[dict]:
+        """Build the /v1/scans/batch event payload for a list of scans.
+
+        Pure — no I/O. station_name is passed in explicitly (rather than read from
+        self.db) so this can be called from a network-only background job. Shared by
+        _sync_one_batch (main-thread path) and sync_scan_batch_network_only.
+        """
+        events = []
+        for scan in scans:
+            # Ensure timestamp has Z suffix for UTC format
+            scanned_at = scan.scanned_at
+            if not scanned_at.endswith('Z'):
+                # Handle timezone offset format (e.g., "2025-11-05T08:39:24+00:00")
+                if '+00:00' in scanned_at:
+                    scanned_at = scanned_at.replace('+00:00', 'Z')
+                else:
+                    scanned_at = scanned_at + 'Z'
+
+            events.append({
+                "idempotency_key": self._build_idempotency_key(station_name, scan.badge_id, scan.id),
+                "badge_id": scan.badge_id,
+                "station_name": scan.station_name,
+                "scanned_at": scanned_at,
+                "business_unit": scan.sl_l1_desc or None,
+                "scan_source": scan.scan_source or "manual",
+                "meta": {
+                    "matched": scan.legacy_id is not None,
+                    "legacy_id": scan.legacy_id,
+                    "local_id": scan.id,
+                },
+            })
+        return events
+
     def _sync_one_batch(self) -> Dict[str, int]:
         """
         Internal method: Upload ONE BATCH of pending scans to cloud API with retry logic.
@@ -283,30 +464,7 @@ class SyncService:
         LOGGER.info(f"Attempting to sync {len(pending_scans)} scans")
 
         # Build batch payload (reusable for retries)
-        events = []
-        for scan in pending_scans:
-            # Ensure timestamp has Z suffix for UTC format
-            scanned_at = scan.scanned_at
-            if not scanned_at.endswith('Z'):
-                # Handle timezone offset format (e.g., "2025-11-05T08:39:24+00:00")
-                if '+00:00' in scanned_at:
-                    scanned_at = scanned_at.replace('+00:00', 'Z')
-                else:
-                    scanned_at = scanned_at + 'Z'
-
-            events.append({
-                "idempotency_key": self._generate_idempotency_key(scan),
-                "badge_id": scan.badge_id,
-                "station_name": scan.station_name,
-                "scanned_at": scanned_at,
-                "business_unit": scan.sl_l1_desc or None,
-                "scan_source": scan.scan_source or "manual",
-                "meta": {
-                    "matched": scan.legacy_id is not None,
-                    "legacy_id": scan.legacy_id,
-                    "local_id": scan.id,
-                },
-            })
+        events = self._build_batch_events(pending_scans, self._get_cached_station_name())
 
         # Upload to cloud API with retry logic
         from config import SYNC_RETRY_ENABLED, SYNC_RETRY_MAX_ATTEMPTS, SYNC_RETRY_BACKOFF_SECONDS
@@ -452,15 +610,179 @@ class SyncService:
 
         Format: {station_name}-{badge_id}-{local_id}
         Example: MainGate-101117-1234
-        """
-        # Get station name dynamically from database (cached for performance)
-        if not hasattr(self, '_cached_station_name'):
-            self._cached_station_name = self.db.get_station_name() or "UnknownStation"
-        station = self._cached_station_name
-        # Sanitize station name (remove spaces and special chars)
-        safe_station = station.replace(" ", "").replace("-", "")
-        return f"{safe_station}-{scan.badge_id}-{scan.id}"
 
+        Touches SQLite (via _get_cached_station_name -> self.db.get_station_name())
+        on first call — only call this from the thread that owns self.db.
+        """
+        return self._build_idempotency_key(
+            self._get_cached_station_name(), scan.badge_id, scan.id
+        )
+
+    def sync_scan_batch_network_only(
+        self,
+        scans: List[ScanRecord],
+        station_name: str,
+    ) -> Dict[str, Any]:
+        """Upload a caller-supplied snapshot of scans to the cloud API. No SQLite access.
+
+        This is the network-only counterpart to _sync_one_batch(): it performs the
+        exact same request-building, idempotency-key format, and retry/backoff
+        classification, but never reads or writes self.db — the caller (the Qt/main
+        thread) is responsible for snapshotting pending ScanRecord rows beforehand
+        and applying mark_scans_as_synced()/mark_scans_as_failed() afterward, based
+        on the id lists returned here. Safe to call from a background worker thread
+        (e.g. via BackgroundSyncCoordinator), since sqlite3 connections are not
+        thread-safe across threads.
+
+        Args:
+            scans: Snapshot of ScanRecord rows to upload (already fetched by the
+                   caller from the main thread — this method does not fetch anything).
+            station_name: Pre-resolved station name (the caller must resolve this via
+                          self.db.get_station_name() on the main thread beforehand;
+                          this method must not call it here).
+
+        Returns:
+            {
+                "ok": bool,                 # False only for a genuine transport-level
+                                             # failure (e.g. malformed response); see below
+                "synced_ids": List[int],    # scan.id values the cloud accepted
+                "failed_ids": List[int],    # scan.id values that permanently failed
+                                             # (4xx other than 401/429) — caller should
+                                             # mark_scans_as_failed() for these
+                "pending_ids": List[int],   # scan.id values still unresolved (retries
+                                             # exhausted, or a 401) — caller should leave
+                                             # these as pending, matching _sync_one_batch's
+                                             # existing "keep as pending" behavior
+                "synced_count": int,
+                "error": Optional[str],
+            }
+
+        Read-only mode: returns everything as pending_ids without uploading, matching
+        sync_pending_scans()'s CLOUD_READ_ONLY short-circuit.
+        """
+        from config import CLOUD_READ_ONLY
+
+        all_ids = [scan.id for scan in scans]
+
+        if CLOUD_READ_ONLY:
+            LOGGER.debug("Scan batch sync skipped (read-only mode)")
+            return {
+                "ok": True, "synced_ids": [], "failed_ids": [], "pending_ids": all_ids,
+                "synced_count": 0, "error": None,
+            }
+
+        if not scans:
+            return {
+                "ok": True, "synced_ids": [], "failed_ids": [], "pending_ids": [],
+                "synced_count": 0, "error": None,
+            }
+
+        LOGGER.info(f"[NetworkOnly] Attempting to sync {len(scans)} scans")
+        events = self._build_batch_events(scans, station_name)
+
+        from config import SYNC_RETRY_ENABLED, SYNC_RETRY_MAX_ATTEMPTS, SYNC_RETRY_BACKOFF_SECONDS
+
+        max_attempts = SYNC_RETRY_MAX_ATTEMPTS if SYNC_RETRY_ENABLED else 1
+        backoff_seconds = SYNC_RETRY_BACKOFF_SECONDS if SYNC_RETRY_ENABLED else 0
+        last_error = None
+
+        for attempt in range(max_attempts):
+            try:
+                LOGGER.info(
+                    f"[NetworkOnly] Syncing {len(events)} scans to cloud API "
+                    f"(attempt {attempt + 1}/{max_attempts})..."
+                )
+                response = requests.post(
+                    f"{self.api_url}/v1/scans/batch",
+                    json={"events": events},
+                    headers={
+                        "Content-Type": "application/json; charset=utf-8",
+                        "Authorization": f"Bearer {self.api_key}",
+                    },
+                    timeout=10,
+                )
+                response.encoding = 'utf-8'
+                LOGGER.info(f"[NetworkOnly] Cloud API response received in {response.elapsed.total_seconds():.2f}s")
+
+                if response.status_code == 200:
+                    try:
+                        result = response.json()
+                    except (json.JSONDecodeError, ValueError) as e:
+                        LOGGER.error(f"[NetworkOnly] Invalid JSON response (status {response.status_code}): {response.text[:200]}")
+                        error_msg = f"Invalid server response: {e}"
+                        return {
+                            "ok": False, "synced_ids": [], "failed_ids": all_ids,
+                            "pending_ids": [], "synced_count": 0, "error": error_msg,
+                        }
+                    synced_count = result.get("saved", 0) + result.get("duplicates", 0)
+                    LOGGER.info(
+                        f"[NetworkOnly] Successfully synced {synced_count} scans "
+                        f"(saved: {result.get('saved')}, duplicates: {result.get('duplicates')})"
+                    )
+                    return {
+                        "ok": True, "synced_ids": all_ids, "failed_ids": [],
+                        "pending_ids": [], "synced_count": synced_count, "error": None,
+                    }
+                else:
+                    if response.status_code == 401:
+                        error_msg = "API error: 401 (Unauthorized - check API key)"
+                        LOGGER.error(f"[NetworkOnly] {error_msg}")
+                        return {
+                            "ok": False, "synced_ids": [], "failed_ids": [],
+                            "pending_ids": all_ids, "synced_count": 0, "error": error_msg,
+                        }
+                    elif 400 <= response.status_code < 500 and response.status_code != 429:
+                        error_msg = f"API error: {response.status_code} (non-retryable)"
+                        LOGGER.error(f"[NetworkOnly] Sync failed: {error_msg}")
+                        return {
+                            "ok": False, "synced_ids": [], "failed_ids": all_ids,
+                            "pending_ids": [], "synced_count": 0, "error": error_msg,
+                        }
+                    else:
+                        error_msg = f"API error: {response.status_code}"
+                        last_error = error_msg
+                        if attempt < max_attempts - 1:
+                            wait_time = backoff_seconds * (2 ** attempt)
+                            LOGGER.warning(f"[NetworkOnly] {error_msg}, retrying in {wait_time}s...")
+                            time.sleep(wait_time)
+                        continue
+
+            except requests.exceptions.Timeout as e:
+                error_msg = f"Connection timeout: {str(e)}"
+                last_error = error_msg
+                if attempt < max_attempts - 1:
+                    wait_time = backoff_seconds * (2 ** attempt)
+                    LOGGER.warning(f"[NetworkOnly] {error_msg}, retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    LOGGER.error(f"[NetworkOnly] Sync failed after {max_attempts} attempts: {error_msg}")
+
+            except requests.exceptions.ConnectionError as e:
+                error_msg = f"Connection error: {str(e)}"
+                last_error = error_msg
+                if attempt < max_attempts - 1:
+                    wait_time = backoff_seconds * (2 ** attempt)
+                    LOGGER.warning(f"[NetworkOnly] {error_msg}, retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    LOGGER.error(f"[NetworkOnly] Sync failed after {max_attempts} attempts: {error_msg}")
+
+            except requests.exceptions.RequestException as e:
+                error_msg = f"Network error: {str(e)}"
+                LOGGER.error(f"[NetworkOnly] Sync failed: {error_msg}")
+                return {
+                    "ok": False, "synced_ids": [], "failed_ids": all_ids,
+                    "pending_ids": [], "synced_count": 0, "error": error_msg,
+                }
+
+        # All retries exhausted with no success - keep as pending for future retry
+        if last_error:
+            error_msg = f"Network error (after {max_attempts} attempts): {last_error}"
+            LOGGER.warning("[NetworkOnly] %s — scans kept as pending for future retry", error_msg)
+        return {
+            "ok": last_error is None, "synced_ids": [], "failed_ids": [], "pending_ids": all_ids,
+            "synced_count": 0, "error": last_error,
+        }
 
     def check_duplicate_cloud(
         self,
@@ -492,13 +814,18 @@ class SyncService:
             LOGGER.warning("Cloud dup check failed (fail-open): %s", e)
             return {"duplicate": False, "error": str(e)}
 
-    def sync_single_scan(self, scan: ScanRecord) -> dict:
-        """Immediately sync a single scan to cloud. Fire-and-forget safe."""
+    def sync_single_scan(self, scan: ScanRecord, station_name: str) -> dict:
+        """Immediately sync a single scan to cloud. Fire-and-forget safe.
+
+        Network-only — never touches self.db. station_name must be resolved by
+        the caller on the thread that owns self.db (the main thread) beforehand;
+        this matches the pattern established by sync_scan_batch_network_only().
+        """
         from config import CLOUD_READ_ONLY
         if CLOUD_READ_ONLY:
             return {"ok": False, "skipped": True}
         try:
-            key = self._generate_idempotency_key(scan)
+            key = self._build_idempotency_key(station_name, scan.badge_id, scan.id)
             payload = {
                 "events": [{
                     "idempotency_key": key,
