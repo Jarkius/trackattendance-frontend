@@ -2,6 +2,20 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## 2026-08-24
+
+### Fixed
+
+- **Shutdown-sync race with the coordinator barrier.** `_handle_close_event`'s direct `sync_service.sync_pending_scans(sync_all=True)` call was the one remaining SQLite mutation outside the coordinator's snapshot/network-only/apply pattern from the #65–#69 fixes. Wrapped in the same pause/reset/resume barrier sequence used at the other three barrier sites.
+- **Search ranking tiers 3/4 had the same insertion-order starvation bug as tier 1.** The "contains anywhere" tier now ranks by match position; the "all words present, any order" tier now ranks by word adjacency. Confirmed against reconstructed starvation scenarios.
+- **Corrupt roster file could crash the app at startup.** A malformed `employee.xlsx` with `ROSTER_STRICT_VALIDATION=False` or `ROSTER_VALIDATION_ENABLED=False` fell through to an unguarded `load_workbook()` call and crashed instead of degrading gracefully via the existing `_roster_error` path.
+
+### Chore
+
+- Documented the `.venv` interpreter requirement for PyQt6-dependent commands in `CLAUDE.md`.
+- Bumped `actions/checkout`/`actions/setup-python` past the deprecated Node.js 20 runtime in CI.
+- **Untracked `logs/trackattendance.log` and stray screenshots from git.** These had been committed since before `.gitignore`'s `logs/*.log` rule existed, so the rule never took effect retroactively — the log file contained real scan data (badge IDs, station names, timestamps) going back to Dec 2025. Removed from tracking going forward (`git rm --cached`); files remain on disk. Note: this does not remove the data from past commits' history — a separate history-rewrite would be needed for that, and hasn't been done.
+
 ## 2026-08-21
 
 ### Fixed

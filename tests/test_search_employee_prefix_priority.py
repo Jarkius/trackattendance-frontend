@@ -108,6 +108,43 @@ class TestSearchEmployeePrefixPriority(unittest.TestCase):
             f"Expected first-name prefix match first, got order: {names}",
         )
 
+    def test_tier3_contains_match_ranked_by_position_not_insertion_order(self):
+        """Regression: within the 'contains anywhere' tier, a match that
+        starts earlier in the name (e.g. 'Artemis Lee' — match at position 0)
+        must not be starved out or outranked by matches deeper in the name
+        (e.g. 'Xylophone... Bart' — match at position ~11) just because the
+        deeper matches happened to be inserted first."""
+        employees = [FakeEmployee(f"E{i}", f"Xylophone{i} Bart") for i in range(10)]
+        employees.append(FakeEmployee("E_TARGET", "Artemis Lee"))
+        svc = _make_service(employees)
+
+        results = svc.search_employee("art")
+        names = [r["full_name"] for r in results]
+
+        self.assertEqual(
+            names[0], "Artemis Lee",
+            f"Expected earliest-position match first, got order: {names}",
+        )
+
+    def test_tier4_word_match_ranked_by_adjacency_not_insertion_order(self):
+        """Regression: within the 'all words present, any order' tier, a
+        match where the query words are adjacent in the name (e.g. 'Kumar
+        Raj' for query 'raj kumar') must not be starved out by matches where
+        the same words appear scattered far apart."""
+        employees = [
+            FakeEmployee(f"E{i}", f"Raj Middle{i} Extra{i} Kumar") for i in range(12)
+        ]
+        employees.append(FakeEmployee("E_TARGET", "Kumar Raj"))
+        svc = _make_service(employees)
+
+        results = svc.search_employee("raj kumar")
+        names = [r["full_name"] for r in results]
+
+        self.assertEqual(
+            names[0], "Kumar Raj",
+            f"Expected adjacent word match first, got order: {names}",
+        )
+
 
 def main():
     print("=" * 70)

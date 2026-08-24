@@ -12,6 +12,16 @@ TrackAttendance Frontend — offline-first desktop kiosk app for badge/QR attend
 
 ## Commands
 
+**Always activate `.venv` first** (`.venv\Scripts\activate` on Windows, or
+call `.venv\Scripts\python.exe` / `.venv/Scripts/python.exe` explicitly).
+`main.py` and every test file that imports `attendance.py`/`sync.py`/`database.py`
+require PyQt6 — the bare `python`/`python3` on PATH on a given machine may
+resolve to an interpreter without it, producing a misleading
+`ModuleNotFoundError: No module named 'PyQt6'` instead of an obviously
+environment-related error. If that happens, first check which interpreter
+actually ran (`.venv\Scripts\python.exe` vs a system Python) rather than
+assuming the dependency itself is missing.
+
 ```bash
 # Setup
 python -m venv .venv

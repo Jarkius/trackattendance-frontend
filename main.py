@@ -2640,6 +2640,24 @@ def main() -> None:
 
         # === SYNC PHASE ===
         if sync_service:
+            # Raise the coordinator barrier before the direct sync_pending_scans()
+            # call below — this is the one remaining place SQLite is mutated
+            # outside the coordinator's snapshot/network-only/apply pattern. An
+            # auto-sync or manual sync_now() job already in flight when the
+            # window closes could otherwise race this direct call: its stale
+            # completion callback (once the barrier drops it) can no longer
+            # apply mark_scans_as_synced/failed against rows this shutdown sync
+            # has already reclassified. Same pattern as the three clear-barrier
+            # sites fixed in issue #65.
+            new_generation = None
+            if sync_coordinator:
+                new_generation = sync_coordinator.pause_barrier()
+                LOGGER.info("[Shutdown] Coordinator paused for shutdown-sync barrier (generation=%s)", new_generation)
+                if auto_sync_manager:
+                    auto_sync_manager.stop()
+                    auto_sync_manager.reset_after_barrier()
+                if isinstance(api_object, Api):
+                    api_object._reset_manual_sync_state()
             try:
                 # Check if there are pending scans
                 stats = sync_service.db.get_sync_statistics()
@@ -2726,6 +2744,13 @@ def main() -> None:
                 payload_js = json.dumps(error_payload)
                 view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
                 time.sleep(0.5)
+            finally:
+                # Resume the coordinator regardless of sync outcome — the app is
+                # about to close, but resuming keeps state consistent in the rare
+                # case export/close is cancelled downstream and the window stays open.
+                if sync_coordinator:
+                    sync_coordinator.resume()
+                    LOGGER.info("[Shutdown] Coordinator resumed after shutdown-sync barrier")
 
         # === EXPORT PHASE ===
         # Check if there are any scans to export
