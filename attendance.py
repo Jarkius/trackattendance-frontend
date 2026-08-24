@@ -151,7 +151,20 @@ class AttendanceService:
             else:
                 LOGGER.warning("Roster validation skipped (disabled): %s", validation_msg)
 
-        workbook = load_workbook(self._employee_workbook_path, read_only=True)
+        # A corrupt/malformed .xlsx (bad zip, truncated file, wrong format
+        # despite the extension) raises here — e.g. BadZipFile, KeyError,
+        # openpyxl's InvalidFileException — none of which are ValueError, so
+        # without this they'd bypass __init__'s `except ValueError` and crash
+        # the whole app at startup instead of degrading gracefully like the
+        # duplicate-Legacy-ID case below already does.
+        try:
+            workbook = load_workbook(self._employee_workbook_path, read_only=True)
+        except Exception as e:
+            LOGGER.error("Roster: failed to open workbook %s: %s", self._employee_workbook_path, e)
+            raise ValueError(
+                f"Could not open roster file {self._employee_workbook_path.name}: {e}. "
+                f"Fix or replace employee.xlsx and restart the application."
+            ) from e
         try:
             sheet = workbook.active
             header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
@@ -378,9 +391,20 @@ class AttendanceService:
            query, matching how people expect name search to behave
         3. Substring match anywhere in the full name (lower priority than
            #1/#2 so a short query like "c" doesn't get filled up with
-           mid-name hits like "Marcus" before prefix matches are considered)
-        4. All individual query words must appear in the name (any order)
+           mid-name hits like "Marcus" before prefix matches are considered).
+           Within this tier, ranked by match position — a match earlier in
+           the name is a better hit than one buried deep in it.
+        4. All individual query words must appear in the name (any order).
+           Within this tier, ranked by adjacency — words appearing next to
+           each other in the name (in either order) rank above the same
+           words scattered apart, since an adjacent match is a closer fit
+           to a two-word query like "first last".
         5. Fuzzy fallback — tolerate typos using word-level similarity
+
+        Within tiers 3 and 4, cache iteration order previously decided which
+        matches filled the 10-result cap — meaning a worse but earlier-seen
+        match could starve out a better one. Explicit secondary sort keys
+        below fix that the same way tier 1's first-name-vs-surname split did.
         """
         # Normalize whitespace: collapse multiple spaces into one
         query = " ".join(query.split()).lower()
@@ -390,8 +414,8 @@ class AttendanceService:
         query_words = query.split()
         first_name_prefix_results = []
         other_prefix_results = []
-        contains_results = []
-        word_match_results = []
+        contains_results = []  # (match_position, employee_dict)
+        word_match_results = []  # (adjacency_rank, employee_dict)
         fuzzy_results = []  # (similarity_score, employee_dict)
 
         for emp in self._employee_cache.values():
@@ -419,15 +443,20 @@ class AttendanceService:
                 other_prefix_results.append(emp_dict)
                 continue
 
-            # Tier 3: substring match anywhere in the name
-            if query in name_lower:
-                contains_results.append(emp_dict)
+            # Tier 3: substring match anywhere in the name, ranked by how
+            # early the match starts.
+            match_pos = name_lower.find(query)
+            if match_pos != -1:
+                contains_results.append((match_pos, emp_dict))
                 continue
 
-            # Tier 4: all query words appear somewhere in the name (any order)
-            # e.g. "smith john" matches "John Smith"
+            # Tier 4: all query words appear somewhere in the name (any
+            # order), ranked by adjacency — e.g. "smith john" matches "John
+            # Smith" (rank 0, adjacent) ahead of "John Middle Smith" (rank 1).
             if len(query_words) > 1 and all(w in name_lower for w in query_words):
-                word_match_results.append(emp_dict)
+                positions = sorted(name_words.index(w) for w in query_words if w in name_words)
+                adjacency_rank = positions[-1] - positions[0] if positions else 0
+                word_match_results.append((adjacency_rank, emp_dict))
                 continue
 
             # Tier 5: fuzzy match — each query word must closely match a name word
@@ -437,12 +466,14 @@ class AttendanceService:
                 if score >= 0.75:
                     fuzzy_results.append((score, emp_dict))
 
+        contains_results.sort(key=lambda x: x[0])
         combined_prefix = first_name_prefix_results + other_prefix_results
         if combined_prefix or contains_results:
-            return (combined_prefix + contains_results)[:10]
+            return (combined_prefix + [r[1] for r in contains_results])[:10]
 
+        word_match_results.sort(key=lambda x: x[0])
         if word_match_results:
-            return word_match_results[:10]
+            return [r[1] for r in word_match_results][:10]
 
         # Sort fuzzy results by score descending, return top matches
         if fuzzy_results:
