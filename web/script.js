@@ -1847,6 +1847,85 @@ ${destination}` : message;
         if (adminStatusPollId) { clearInterval(adminStatusPollId); adminStatusPollId = null; }
     };
 
+    // Which of the six admin sub-views is currently visible, or null if the
+    // overlay itself is hidden.
+    const getVisibleAdminView = () => {
+        if (!adminOverlay || !adminOverlay.classList.contains('admin-overlay--visible')) return null;
+        return ADMIN_VIEWS.find((id) => {
+            const el = document.getElementById(id);
+            return el && el.style.display !== 'none';
+        }) || null;
+    };
+
+    // Escape steps back one level for views with an obvious "back"/"cancel"
+    // destination (settings -> actions, confirm -> actions) instead of
+    // closing the whole overlay outright — matches the existing back-arrow/
+    // cancel-button behavior for those views. Other views (pin, actions,
+    // result, status) have no "back" to step to, so Escape closes fully,
+    // same as their own Cancel/Close buttons.
+    // Tab/Shift+Tab focus trap: keeps keyboard focus cycling within the
+    // currently-visible admin sub-view instead of escaping to the page
+    // behind the modal. Hidden sibling views use display:none, so a plain
+    // querySelectorAll over the whole overlay + an offsetParent visibility
+    // check is enough to scope this to just the active view without needing
+    // per-view element lists.
+    const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const getAdminFocusable = () => {
+        if (!adminOverlay) return [];
+        return Array.from(adminOverlay.querySelectorAll(FOCUSABLE_SELECTOR))
+            .filter((el) => el.offsetParent !== null);
+    };
+    const trapAdminTab = (event) => {
+        const focusable = getAdminFocusable();
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey) {
+            if (document.activeElement === first || !focusable.includes(document.activeElement)) {
+                event.preventDefault();
+                last.focus();
+            }
+        } else {
+            if (document.activeElement === last || !focusable.includes(document.activeElement)) {
+                event.preventDefault();
+                first.focus();
+            }
+        }
+    };
+
+    // Up/Down move focus between focusable elements in the current admin
+    // view, same as Tab/Shift+Tab — matches the employee lookup overlay's
+    // arrow-key navigation. Skipped while a range slider or <select> has
+    // focus, since those elements already use Up/Down natively to change
+    // their own value (same as Left/Right for a horizontal slider) —
+    // hijacking the key there would break value adjustment instead of
+    // helping navigation.
+    const trapAdminArrows = (event) => {
+        const active = document.activeElement;
+        const tag = active && active.tagName;
+        const isRange = tag === 'INPUT' && active.type === 'range';
+        if (tag === 'SELECT' || isRange) return;
+
+        const focusable = getAdminFocusable();
+        if (focusable.length === 0) return;
+        const currentIndex = focusable.indexOf(active);
+        const delta = event.key === 'ArrowDown' ? 1 : -1;
+        const nextIndex = currentIndex === -1
+            ? 0
+            : (currentIndex + delta + focusable.length) % focusable.length;
+        event.preventDefault();
+        focusable[nextIndex].focus();
+    };
+
+    const handleAdminEscape = () => {
+        const view = getVisibleAdminView();
+        if (view === 'admin-settings-view' || view === 'admin-confirm-view') {
+            showAdminView('admin-actions-view');
+        } else {
+            hideAdminOverlay();
+        }
+    };
+
     const handlePinSubmit = () => {
         const pin = adminPinInput ? adminPinInput.value.trim() : '';
         if (!pin) { if (adminPinError) adminPinError.textContent = 'Please enter a PIN'; return; }
@@ -1997,6 +2076,11 @@ ${destination}` : message;
     if (adminConfirmCancelBtn) adminConfirmCancelBtn.addEventListener('click', (e) => { e.preventDefault(); showAdminView('admin-actions-view'); });
     const adminConfirmDeleteBtn = document.getElementById('admin-confirm-delete');
     if (adminConfirmDeleteBtn) adminConfirmDeleteBtn.addEventListener('click', (e) => { e.preventDefault(); handleConfirmDelete(); });
+    if (adminConfirmCodeInput) {
+        adminConfirmCodeInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter' && adminConfirmDeleteBtn && !adminConfirmDeleteBtn.disabled) handleConfirmDelete();
+        });
+    }
     const adminResultCloseBtn = document.getElementById('admin-result-close');
     if (adminResultCloseBtn) adminResultCloseBtn.addEventListener('click', (e) => { e.preventDefault(); hideAdminOverlay(); });
     const adminStatusCloseBtn = document.getElementById('admin-status-close');
@@ -2841,10 +2925,21 @@ ${destination}` : message;
     });
 
     document.addEventListener('keydown', (event) => {
+        const adminIsVisible = adminOverlay && adminOverlay.classList.contains('admin-overlay--visible');
+        // Trap Tab/Shift+Tab within the admin overlay while it's open, so
+        // focus never escapes to the page behind the modal.
+        if (event.key === 'Tab' && adminIsVisible) {
+            trapAdminTab(event);
+        }
+        // Up/Down move focus between admin-overlay elements, same as Tab —
+        // matches the employee lookup overlay's arrow-key navigation.
+        if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && adminIsVisible) {
+            trapAdminArrows(event);
+        }
         if (event.key === 'Escape') {
             // First check if admin overlay is open
             if (adminOverlay && adminOverlay.classList.contains('admin-overlay--visible')) {
-                hideAdminOverlay();
+                handleAdminEscape();
                 return;
             }
             // Then dashboard overlay
@@ -2871,6 +2966,17 @@ ${destination}` : message;
         const inOverlay = (adminOverlay && adminOverlay.contains(event.target))
             || (dashboardOverlay && dashboardOverlay.contains(event.target))
             || (lookupOverlay && lookupOverlay.contains(event.target));
+        // On the plain scan screen (no overlay open), Tab has nothing to
+        // move to — the header icons aren't natively tabbable — so the
+        // browser just blurs the barcode input with nothing catching the
+        // refocus. This fires when the input ALREADY has focus (target IS
+        // barcodeInput), unlike the stray-focus case below which only
+        // refocuses when target is something else.
+        if (!inOverlay && event.key === 'Tab') {
+            event.preventDefault();
+            returnFocusToInput();
+            return;
+        }
         if (!inOverlay && event.target !== barcodeInput && event.key.length === 1) {
             returnFocusToInput();
         }
