@@ -1512,6 +1512,7 @@ class Api(QObject):
             "duplicate_window": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
             "duplicate_action": config.DUPLICATE_BADGE_ACTION,
             "duplicate_alert_ms": config.DUPLICATE_BADGE_ALERT_DURATION_MS,
+            "confetti_enabled": config.CONFETTI_ENABLED,
             "voice_enabled": self._voice_player.enabled if self._voice_player else False,
             "voice_volume": self._voice_player._volume if self._voice_player else 1.0,
             "camera_enabled": self._proximity_manager is not None,
@@ -1571,6 +1572,14 @@ class Api(QObject):
         LOGGER.info("[Admin] Duplicate detection %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
 
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_confetti_enabled(self, enabled: bool) -> dict:
+        """Enable/disable the confetti burst on a successful scan. Persisted across restarts."""
+        config.CONFETTI_ENABLED = enabled
+        self._save_setting("confetti_enabled", str(enabled))
+        LOGGER.info("[Admin] Confetti %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
+
     @pyqtSlot(int, result="QVariant")
     def admin_set_duplicate_alert_duration(self, ms: int) -> dict:
         """Set duplicate alert display duration in ms. Persisted across restarts."""
@@ -1624,6 +1633,10 @@ class Api(QObject):
         v = db.get_meta("setting:duplicate_detection_enabled")
         if v is not None:
             config.DUPLICATE_BADGE_DETECTION_ENABLED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:confetti_enabled")
+        if v is not None:
+            config.CONFETTI_ENABLED = v.lower() in ("true", "1")
             count += 1
         v = db.get_meta("setting:duplicate_window")
         if v is not None:
