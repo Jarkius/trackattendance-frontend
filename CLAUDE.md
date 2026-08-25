@@ -52,6 +52,11 @@ python scripts/migrate_sync_schema.py
 python scripts/debug_sync_performance.py
 python scripts/check_timestamp_format.py
 python scripts/create_test_scan.py
+
+# Sync shared bugfixes to the trackattendance-saas fork (see "Related repos" below)
+bash scripts/sync-to-saas.sh                 # report which shared files differ
+bash scripts/sync-to-saas.sh --apply <file>  # port one file (+ reapply rebranding)
+bash scripts/sync-to-saas.sh --apply-all     # port every differing file
 ```
 
 ## Architecture
@@ -119,6 +124,17 @@ Syncs to `trackattendance-api` (separate repo: `Jarkius/trackattendance-api`)
 - `POST /v1/scans/batch` — batch upload with Bearer auth and idempotency keys
 - `GET /v1/dashboard/stats` — aggregated statistics
 - `GET /v1/dashboard/export` — paginated scan export
+
+## Related repos
+
+- `Jarkius/trackattendance-saas` — commercial fork (fresh history, no GitHub fork lineage,
+  intentionally diverged). Shares a lot of the same `attendance.py`/`main.py`/`sync.py`/`web/`
+  code but is rebranded (`--brand-*` CSS variables, `#2563eb` accent instead of Deloitte green)
+  and carries its own licensing/billing/multi-tenant work on top (see its `docs/COMMERCIALIZE.md`).
+  Bugfixes to shared code found here are worth porting there — use
+  `scripts/sync-to-saas.sh` (see Commands above) rather than re-deriving the process each time.
+  Requires the saas repo checked out as a sibling directory (default:
+  `../trackattendance-saas`; override with `TRACKATTENDANCE_SAAS_DIR`).
 
 ## Notes
 
