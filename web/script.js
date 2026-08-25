@@ -165,6 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Duplicate badge alert configuration
     let duplicateBadgeAlertDurationMs = 3000;  // Default: 3 seconds
     let scanFeedbackDurationMs = 2000;  // Default: 2 seconds
+    let confettiEnabled = false;  // Default: off, matches config.CONFETTI_ENABLED
 
     // Connection status polling with hysteresis to prevent flicker and reduce API calls
     const DEFAULT_CONNECTION_CHECK_INTERVAL_MS = 60000;  // 60 seconds (not 10!) to reduce API cost
@@ -785,6 +786,112 @@ ${destination}` : message;
         welcomeHeading.style.textShadow = 'none';
     };
 
+    // ── Confetti (optional, admin-toggleable) ──────────────────────────
+    // A self-contained canvas particle burst on a successful, non-duplicate
+    // scan. Deliberately not a library: this is a one-shot decorative effect,
+    // not something that needs physics/collision/sprite support.
+    let confettiCanvas = null;
+    let confettiCtx = null;
+    let confettiAnimationId = null;
+    const CONFETTI_COLORS = ['#86bc25', '#f0960a', '#2196f3', '#e91e63', '#ffc107'];
+
+    const ensureConfettiCanvas = () => {
+        if (confettiCanvas) return confettiCanvas;
+        const canvas = document.createElement('canvas');
+        canvas.id = 'confetti-canvas';
+        // Sits above the main content but must never intercept clicks/taps —
+        // a kiosk can't have a decorative effect block the next scan.
+        canvas.style.position = 'fixed';
+        canvas.style.inset = '0';
+        canvas.style.width = '100vw';
+        canvas.style.height = '100vh';
+        canvas.style.zIndex = '9500';
+        canvas.style.pointerEvents = 'none';
+        document.body.appendChild(canvas);
+        confettiCanvas = canvas;
+        confettiCtx = canvas.getContext('2d');
+        return canvas;
+    };
+
+    const CONFETTI_PARTICLE_COUNT = 200;  // tune for more/less confetti per burst
+
+    const triggerConfetti = () => {
+        if (!confettiEnabled) return;
+        const canvas = ensureConfettiCanvas();
+        const ctx = confettiCtx;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Origin: the badge input's on-screen center — ties the burst to the
+        // actual scan-entry area the user is looking at, rather than a fixed
+        // screen position that would drift if the layout changes.
+        let originX = window.innerWidth / 2;
+        let originY = window.innerHeight * 0.35;
+        if (barcodeInput) {
+            const rect = barcodeInput.getBoundingClientRect();
+            originX = rect.left + rect.width / 2;
+            originY = rect.top + rect.height / 2;
+        }
+
+        const particles = Array.from({ length: CONFETTI_PARTICLE_COUNT }, () => ({
+            x: originX + (Math.random() - 0.5) * 200,
+            y: originY,
+            vx: (Math.random() - 0.5) * 12,
+            vy: Math.random() * -10 - 4,
+            size: Math.random() * 6 + 4,
+            color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+            rotation: Math.random() * 360,
+            rotationSpeed: (Math.random() - 0.5) * 12,
+            gravity: 0.35 + Math.random() * 0.15,
+        }));
+
+        const startTime = Date.now();
+        const durationMs = 2200;
+
+        // Cancel any still-running burst from a rapid double-scan so bursts
+        // don't stack indefinitely and leak animation frames.
+        if (confettiAnimationId) {
+            cancelAnimationFrame(confettiAnimationId);
+            confettiAnimationId = null;
+        }
+
+        const step = () => {
+            const elapsed = Date.now() - startTime;
+            ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+            if (elapsed >= durationMs) {
+                confettiAnimationId = null;
+                ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+                return;
+            }
+
+            const fadeStart = durationMs * 0.7;
+            const opacity = elapsed > fadeStart
+                ? Math.max(0, 1 - (elapsed - fadeStart) / (durationMs - fadeStart))
+                : 1;
+
+            particles.forEach((p) => {
+                p.vy += p.gravity;
+                p.x += p.vx;
+                p.y += p.vy;
+                p.rotation += p.rotationSpeed;
+
+                ctx.save();
+                ctx.globalAlpha = opacity;
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+                ctx.restore();
+            });
+
+            confettiAnimationId = requestAnimationFrame(step);
+        };
+        confettiAnimationId = requestAnimationFrame(step);
+    };
+
     function adjustFeedbackSizing(content) {
         const message = typeof content === 'string' ? content : '';
         liveFeedbackName.style.fontSize = '';
@@ -964,6 +1071,7 @@ ${destination}` : message;
                 console.info('[Config] Duplicate badge alert duration:', duplicateBadgeAlertDurationMs, 'ms');
                 scanFeedbackDurationMs = Math.max(0, Number(payload?.scanFeedbackDurationMs) || 2000);
                 console.info('[Config] Scan feedback duration:', scanFeedbackDurationMs, 'ms');
+                confettiEnabled = Boolean(payload?.confettiEnabled);
                 // Signal binding already done in QWebChannel setup, don't rebind here
                 state.totalEmployees = payload?.totalEmployees ?? 0;
                 state.totalScansToday = payload?.totalScansToday ?? 0;
@@ -1217,6 +1325,14 @@ ${destination}` : message;
         // Animate welcome heading on successful matched scan
         if (found) {
             animateWelcomeSuccess();
+        }
+
+        // Confetti burst — only for a genuinely new successful match, same
+        // "matched and not a duplicate" condition the voice greeting uses on
+        // the Python side (main.py submit_scan). Firing this for a duplicate
+        // would celebrate a scan that didn't actually register as new.
+        if (found && !response?.is_duplicate) {
+            triggerConfetti();
         }
 
         // Show duplicate badge alert if this is a duplicate scan (warn mode - accepted but flagged)
@@ -2126,6 +2242,7 @@ ${destination}` : message;
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
     const adminDupAlertSlider = document.getElementById('admin-dup-alert-slider');
     const adminDupAlertValue = document.getElementById('admin-dup-alert-value');
+    const adminConfettiToggle = document.getElementById('admin-confetti-toggle');
     const adminVoiceToggle = document.getElementById('admin-voice-toggle');
     const adminVolumeSlider = document.getElementById('admin-volume-slider');
     const adminVolumeValue = document.getElementById('admin-volume-value');
@@ -2255,6 +2372,14 @@ ${destination}` : message;
                     const dupEnabled = result.duplicate_detection_enabled !== false;
                     if (adminDupDetectionToggle) {
                         adminDupDetectionToggle.classList.toggle('active', dupEnabled);
+                    }
+                    // Confetti toggle — defaults to off, unlike most other toggles here.
+                    // Assigns the outer `confettiEnabled` (not a new local) so the
+                    // persisted SQLite value takes effect immediately, not just the
+                    // toggle's visual state.
+                    confettiEnabled = result.confetti_enabled === true;
+                    if (adminConfettiToggle) {
+                        adminConfettiToggle.classList.toggle('active', confettiEnabled);
                     }
                     // Duplicate alert duration
                     const dupAlertSec = Math.round((result.duplicate_alert_ms || 3000) / 1000);
@@ -2562,6 +2687,21 @@ ${destination}` : message;
             queueOrRun((bridge) => {
                 if (bridge.admin_set_duplicate_detection_enabled) {
                     bridge.admin_set_duplicate_detection_enabled(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Confetti toggle
+    if (adminConfettiToggle) {
+        adminConfettiToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminConfettiToggle.classList.contains('active');
+            adminConfettiToggle.classList.toggle('active', newState);
+            confettiEnabled = newState;
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_confetti_enabled) {
+                    bridge.admin_set_confetti_enabled(newState, () => {});
                 }
             });
         });

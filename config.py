@@ -249,6 +249,10 @@ ENABLE_FADE_ANIMATION = os.getenv("ENABLE_FADE_ANIMATION", "True").lower() in ("
 # Party/Event background image
 SHOW_PARTY_BACKGROUND = os.getenv("SHOW_PARTY_BACKGROUND", "True").lower() in ("true", "1", "yes")
 
+# Confetti burst on a successful (matched, non-duplicate) scan. Off by default
+# so the new visual doesn't surprise anyone until explicitly enabled.
+CONFETTI_ENABLED = os.getenv("CONFETTI_ENABLED", "False").lower() in ("true", "1", "yes")
+
 # Export behavior
 AUTO_EXPORT_ON_SHUTDOWN = os.getenv("AUTO_EXPORT_ON_SHUTDOWN", "True").lower() in ("true", "1", "yes")
 

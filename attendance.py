@@ -375,6 +375,7 @@ class AttendanceService:
             "connectionCheckInitialDelayMs": max(0, int(config.CONNECTION_CHECK_INITIAL_DELAY_MS)),
             "duplicateBadgeAlertDurationMs": max(0, int(config.DUPLICATE_BADGE_ALERT_DURATION_MS)),
             "scanFeedbackDurationMs": max(0, int(config.SCAN_FEEDBACK_DURATION_MS)),
+            "confettiEnabled": bool(config.CONFETTI_ENABLED),
             "debugMode": os.getenv("DEBUG", "False").lower() == "true"
                 or getattr(config, '_DEBUG_PANEL_ACTIVE', False),
         }
