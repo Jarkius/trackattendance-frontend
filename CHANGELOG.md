@@ -2,6 +2,15 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.0 (2026-08-26)
+
+### Added
+
+- **Admin/settings panel keyboard support** (Enter, Escape, Tab, arrow keys). Enter confirms PIN/rename/delete-confirmation inputs. Escape steps back one level in nested admin views (settings → actions, confirm → actions) instead of always fully closing. Tab/Shift+Tab trap focus within the open admin view, wrapping at the first/last focusable element. Arrow Up/Down move focus the same as Tab, skipped on range sliders/`<select>` since those use the arrow keys natively for their own value. Fixed a regression where Tab on the plain scan screen blurred the barcode input with nothing catching the refocus. Focus indicator is a soft blurred glow instead of a hard outline.
+- **Confetti burst on successful scans**, admin-toggleable (off by default via `config.CONFETTI_ENABLED`). Fires only on a genuinely new match (matched and not a duplicate) — the same condition the existing voice-greeting logic uses. Non-interactive canvas overlay, origin anchored to the barcode input's on-screen position, persisted across restarts.
+
+This release also bundles everything from the 2026-08-24 entries below (sync coordinator bugfixes, search ranking, corrupt-roster crash fix). Tagged as `v2.1.0`.
+
 ## 2026-08-24
 
 ### Fixed
