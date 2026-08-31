@@ -80,6 +80,30 @@ class TestDashboardDataFetching(unittest.TestCase):
         self.assertEqual(len(result["stations"]), 2)
         self.assertIsNone(result["error"])
 
+    def test_local_snapshot_returns_registered_count_with_no_network_call(self):
+        """get_local_snapshot() must return the registered count instantly,
+        without touching requests.get at all -- it's meant to populate the
+        dashboard the moment it opens, ahead of the cloud fetch."""
+        with patch('dashboard.requests.get') as mock_get:
+            result = self.service.get_local_snapshot()
+            mock_get.assert_not_called()
+        self.assertEqual(result["registered"], 3)
+        self.assertIsNone(result["error"])
+        self.assertIn("last_updated", result)
+
+    def test_local_snapshot_reports_error_on_db_failure(self):
+        """A SQLite failure must be caught and reported, not raised --
+        get_local_snapshot() runs before/independently of the cloud fetch
+        and shouldn't be able to crash the dashboard open."""
+        broken_db = Mock()
+        broken_db.count_employees.side_effect = Exception("db exploded")
+        service = DashboardService(broken_db, "http://test.example.com", "test-api-key")
+
+        result = service.get_local_snapshot()
+
+        self.assertEqual(result["registered"], 0)
+        self.assertIn("db exploded", result["error"])
+
     @patch('dashboard.requests.get')
     def test_api_connection_error(self, mock_get):
         """Test handling of connection error."""
