@@ -2,6 +2,21 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.2 (2026-09-01)
+
+### Fixed
+
+- **Dashboard showed registered count as 0, logging a silent `ERROR`** ("SQLite objects created in a thread can only be used in that same thread") every time Dashboard was opened — a regression from v2.1.1's freeze fix, which wrapped the entire `DashboardService.get_dashboard_data()`/`export_to_excel()` call in `call_without_freezing_ui()`, moving their local SQLite reads onto a worker thread along with the network call. Fixed by injecting `run_network_call` into `DashboardService` so only the actual `requests.get()` calls run off-thread; SQLite reads stay on the calling thread. Found via the v2.1.1 live 2-laptop test.
+- **A duplicate badge scan slipped through during live testing.** Root cause: `check_duplicate_cloud()`'s success path logged nothing (only errors), so the actual slow event left no trace. Live-measured the cloud endpoint: warm requests are 140–235ms, but a cold-path (cold TLS/cold Cloud Run instance) request took 2.44s — over the old `LIVE_SYNC_TIMEOUT_SECONDS` default of 2.0s. The client fails open on timeout (treats it as "not a duplicate"), matching the observed symptom exactly. Raised the default to 4.0s and added elapsed-time + outcome logging (client-side, and a matching connect/query timing split on the cloud API's `check-duplicate` endpoint) so future slowness is measurable instead of guessed at.
+
+### Added
+
+- **Dashboard shows the registered-employee count instantly on open**, with the cloud-sourced fields (scanned count, stations, BU breakdown) filling in asynchronously in the background exactly as before — no reason to make the user wait on a cloud round-trip just to see a number that's already in the local database.
+
+### Docs
+
+- Documented Live Sync (`LIVE_SYNC_*` env vars, the duplicate-check + immediate-upload flow, fail-open behavior) and cloud API rate limiting, which had no prior documentation despite existing since #54.
+
 ## v2.1.1 (2026-08-31)
 
 ### Fixed
