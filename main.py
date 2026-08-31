@@ -49,6 +49,7 @@ from attendance import AttendanceService
 from audio import VoicePlayer
 from sync import SyncService, BackgroundSyncCoordinator
 from dashboard import DashboardService
+from qt_bridge import call_without_freezing_ui
 import config
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
@@ -1085,7 +1086,8 @@ class Api(QObject):
                 "last_updated": "",
                 "error": "Dashboard service not configured",
             }
-        return self._dashboard_service.get_dashboard_data()
+        dashboard_service = self._dashboard_service
+        return call_without_freezing_ui(dashboard_service.get_dashboard_data)
 
     @pyqtSlot(result="QVariant")
     def export_dashboard_excel(self) -> dict:
@@ -1097,7 +1099,8 @@ class Api(QObject):
                 "file_path": "",
                 "fileName": "",
             }
-        return self._dashboard_service.export_to_excel()
+        dashboard_service = self._dashboard_service
+        return call_without_freezing_ui(dashboard_service.export_to_excel)
 
     @pyqtSlot(result="QVariant")
     def get_camera_status(self) -> dict:
@@ -1304,7 +1307,8 @@ class Api(QObject):
         """Get count of scans in cloud database (for confirmation dialog)."""
         if not self._sync_service:
             return {"ok": False, "count": 0, "message": "Sync service not configured"}
-        ok, count, message = self._sync_service.get_cloud_scan_count()
+        sync_service = self._sync_service
+        ok, count, message = call_without_freezing_ui(sync_service.get_cloud_scan_count)
         return {"ok": ok, "count": count, "message": message}
 
     @pyqtSlot(str, result="QVariant")
@@ -1327,7 +1331,8 @@ class Api(QObject):
 
         # Clear cloud data (scans + roster + set clear_epoch)
         if self._sync_service:
-            cloud_result = self._sync_service.clear_cloud_scans()
+            sync_service = self._sync_service
+            cloud_result = call_without_freezing_ui(sync_service.clear_cloud_scans)
             if not cloud_result["ok"]:
                 return {"ok": False, "message": f"Cloud clear failed: {cloud_result['message']}"}
             cloud_deleted = cloud_result.get("deleted", 0)
@@ -1365,7 +1370,8 @@ class Api(QObject):
             self._service._db.set_meta("last_clear_epoch", clear_epoch)
             if self._sync_service:
                 station = self._service._db.get_station_name() or "Unknown"
-                self._sync_service.send_heartbeat(station, clear_epoch, 0)
+                sync_service = self._sync_service
+                call_without_freezing_ui(lambda: sync_service.send_heartbeat(station, clear_epoch, 0))
                 # Schedule follow-up heartbeats to prevent going offline
                 # (the clear truncates station_heartbeat; if periodic heartbeats
                 # fail silently, the station goes stale after 120s)
@@ -1414,7 +1420,8 @@ class Api(QObject):
         # Delete this station's scans from cloud
         cloud_deleted = 0
         if self._sync_service:
-            cloud_result = self._sync_service.clear_station_scans(station)
+            sync_service = self._sync_service
+            cloud_result = call_without_freezing_ui(lambda: sync_service.clear_station_scans(station))
             if not cloud_result.get("ok"):
                 return {"ok": False, "message": f"Cloud clear failed: {cloud_result.get('message', 'unknown')}"}
             cloud_deleted = cloud_result.get("deleted", 0)
@@ -1457,7 +1464,8 @@ class Api(QObject):
         """Get all station statuses for the admin panel live view."""
         if not self._sync_service:
             return {"error": "Sync service not configured"}
-        return self._sync_service.get_station_status()
+        sync_service = self._sync_service
+        return call_without_freezing_ui(sync_service.get_station_status)
 
     @pyqtSlot(result="QVariant")
     def admin_get_local_scan_count(self) -> dict:
@@ -1473,7 +1481,8 @@ class Api(QObject):
         """Get current dashboard refresh interval from cloud."""
         if not self._sync_service:
             return {"ok": False, "interval": 60, "message": "Sync not configured"}
-        ok, interval, message = self._sync_service.get_dashboard_refresh()
+        sync_service = self._sync_service
+        ok, interval, message = call_without_freezing_ui(sync_service.get_dashboard_refresh)
         return {"ok": ok, "interval": interval, "message": message}
 
     @pyqtSlot(int, result="QVariant")
@@ -1481,7 +1490,8 @@ class Api(QObject):
         """Set dashboard refresh interval on cloud."""
         if not self._sync_service:
             return {"ok": False, "message": "Sync not configured"}
-        ok, message = self._sync_service.set_dashboard_refresh(interval)
+        sync_service = self._sync_service
+        ok, message = call_without_freezing_ui(lambda: sync_service.set_dashboard_refresh(interval))
         return {"ok": ok, "message": message}
 
     @pyqtSlot(result="QVariant")
