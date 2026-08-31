@@ -54,6 +54,20 @@ class TestCheckDuplicateCloud:
             assert call_kwargs[1]["params"]["badge_id"] == "BADGE001"
             assert call_kwargs[1]["params"]["exclude_station"] == "Station-A"
 
+    def test_logs_elapsed_time_on_success(self, caplog):
+        """The success path used to log nothing at all -- confirmed missing
+        during the v2.1.1 live test, when a slow-but-successful dup check
+        left no trace of why a duplicate slipped through. Must log elapsed
+        time and outcome on every call, not just failures."""
+        import logging
+        svc, _ = _make_service()
+        mock_resp = MagicMock(status_code=200)
+        mock_resp.json.return_value = {"duplicate": False}
+        with patch("sync.requests.get", return_value=mock_resp):
+            with caplog.at_level(logging.INFO, logger="sync"):
+                svc.check_duplicate_cloud("BADGE001", "Station-A")
+        assert any("Dup check for badge=BADGE001" in r.message for r in caplog.records)
+
     def test_returns_no_duplicate(self):
         svc, _ = _make_service()
         mock_resp = MagicMock(status_code=200)

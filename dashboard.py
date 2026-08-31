@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 import requests
 
@@ -36,6 +36,7 @@ class DashboardService:
         api_url: str,
         api_key: str,
         export_directory: Optional[Path] = None,
+        run_network_call: Optional[Callable[[Callable[[], Any]], Any]] = None,
     ) -> None:
         """Initialize the dashboard service.
 
@@ -44,6 +45,15 @@ class DashboardService:
             api_url: Cloud API base URL
             api_key: Cloud API authentication key
             export_directory: Directory where Excel exports will be saved
+            run_network_call: Wraps each blocking HTTP call (e.g.
+                qt_bridge.call_without_freezing_ui, injected by main.py) so it
+                can run off the Qt main thread without freezing the UI.
+                Defaults to a plain synchronous call — this module has no
+                PyQt6 dependency and must stay that way (see
+                tests/test_dashboard.py, which imports/tests it without
+                PyQt6 installed). Only the network calls are wrapped, never
+                the SQLite reads around them — SQLite connections are
+                thread-affine, so those must stay on the calling thread.
         """
         self._db_manager = db_manager
         self._api_url = api_url.rstrip("/")
@@ -52,6 +62,7 @@ class DashboardService:
         self._timeout = 15  # seconds
         self._employee_cache = None
         self._employee_cache_loaded = False
+        self._run_network_call = run_network_call or (lambda fn: fn())
 
     def _get_employee_cache(self):
         """Get employee cache, loading once per session."""
@@ -104,11 +115,11 @@ class DashboardService:
         # Get cloud scan data from API
         cloud_bus = []  # BU data from cloud (all stations combined)
         try:
-            response = requests.get(
+            response = self._run_network_call(lambda: requests.get(
                 f"{self._api_url}/v1/dashboard/stats",
                 headers=self._get_headers(),
                 timeout=self._timeout,
-            )
+            ))
 
             if response.status_code == 200:
                 data = response.json()
@@ -257,11 +268,11 @@ class DashboardService:
 
         # Fetch export data from API
         try:
-            response = requests.get(
+            response = self._run_network_call(lambda: requests.get(
                 f"{self._api_url}/v1/dashboard/export",
                 headers=self._get_headers(),
                 timeout=60,  # Longer timeout for export
-            )
+            ))
 
             if response.status_code != 200:
                 result["message"] = f"API error: {response.status_code}"

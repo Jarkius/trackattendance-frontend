@@ -200,7 +200,7 @@ Authorization: Bearer <API_KEY>
 
 **Client behavior on error/timeout/rate-limit**: the client fails open — treats the response as "not a duplicate" rather than blocking the scan. A Live Sync outage degrades cross-station duplicate detection; it never stops scanning.
 
-**Timeout**: `LIVE_SYNC_TIMEOUT_SECONDS` (client default: 2 seconds)
+**Timeout**: `LIVE_SYNC_TIMEOUT_SECONDS` (client default: 4 seconds — raised from 2 in v2.1.2 after live testing showed a cold-path request take ~2.4s, which exceeded the old timeout and caused the client to fail open, silently missing a real cross-station duplicate)
 
 ---
 

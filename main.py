@@ -1086,8 +1086,10 @@ class Api(QObject):
                 "last_updated": "",
                 "error": "Dashboard service not configured",
             }
-        dashboard_service = self._dashboard_service
-        return call_without_freezing_ui(dashboard_service.get_dashboard_data)
+        # DashboardService wraps only its own network calls in
+        # call_without_freezing_ui (injected at construction) — it also
+        # reads local SQLite, which must stay on this (main) thread.
+        return self._dashboard_service.get_dashboard_data()
 
     @pyqtSlot(result="QVariant")
     def export_dashboard_excel(self) -> dict:
@@ -1099,8 +1101,10 @@ class Api(QObject):
                 "file_path": "",
                 "fileName": "",
             }
-        dashboard_service = self._dashboard_service
-        return call_without_freezing_ui(dashboard_service.export_to_excel)
+        # See get_dashboard_data() above — DashboardService wraps its own
+        # network calls; export_to_excel() also reads local SQLite (employee
+        # cache) which must run on this (main) thread.
+        return self._dashboard_service.export_to_excel()
 
     @pyqtSlot(result="QVariant")
     def get_camera_status(self) -> dict:
@@ -2486,6 +2490,7 @@ def main() -> None:
             api_url=config.CLOUD_API_URL,
             api_key=config.CLOUD_API_KEY,
             export_directory=EXPORT_DIRECTORY,
+            run_network_call=call_without_freezing_ui,
         )
         LOGGER.info("Dashboard service initialized with Cloud API and export directory")
     else:
