@@ -121,6 +121,16 @@ The proximity detection plugin uses a 4-layer detection chain, evaluated in orde
 - **Voice overlap prevention**: The proximity manager sets a time-based guard *before* playing greeting audio, and checks both the time guard and `VoicePlayer.is_playing()` to prevent greeting/scan voice overlap.
 - **Thread safety**: Camera runs on a daemon thread; all Qt UI updates (overlay, greeting audio) are dispatched to the main thread via `QMetaObject.invokeMethod` with `QueuedConnection`.
 
+## 5.5 Threading Model — Keeping the Qt Main Thread Unblocked
+
+`Api` (the `QWebChannel` bridge object registered in `main.py`) is never moved off the Qt main/GUI thread, so any code that runs inside one of its `@pyqtSlot` methods **blocks the entire event loop** — no repaint, no keyboard input via `QWebEngineView` (including barcode scanner input, which is keystroke emulation), no other queued `QWebChannel` call — for as long as that code takes to return.
+
+This matters because several slots make network calls to the cloud API: Dashboard data fetch/export, admin scan-count/clear-cloud/clear-station/station-status, dashboard-refresh get/set, and (the highest-frequency case) Live Sync's cross-station duplicate check on every scan (see [SYNC.md](SYNC.md#live-sync-real-time-cross-station-duplicate-check)). A slow or degraded network turns any of these into a full app freeze; for Live Sync specifically, since every station hits the same shared backend, a single slow response can freeze multiple stations at once.
+
+**Fix (v2.1.1):** `qt_bridge.call_without_freezing_ui(fn)` runs `fn()` on a worker thread while pumping the *calling* thread's Qt event loop via a nested `QEventLoop`, so the caller still gets a synchronous return value (block-mode duplicate rejection, for example, still gates the scan before it's recorded) without freezing rendering/input while it waits. It falls back to calling `fn()` directly when no `QApplication`/`QCoreApplication` instance exists (e.g. under `pytest`, which never constructs one) — a nested `QEventLoop.exec()` never returns without one, so every existing test's behavior is unchanged.
+
+This is a different pattern from `BackgroundSyncCoordinator` (`sync.py`), which is used for genuinely fire-and-forget work (auto-sync batches, Live Sync's immediate upload) where the caller does not need to wait for a result. `qt_bridge.call_without_freezing_ui()` is for call sites where the caller does need the result before continuing, but shouldn't freeze the UI to get it.
+
 ## 6. Error Handling & Resilience
 
 - **UI Load Failure:** If `web/index.html` cannot be loaded, the `QWebEngineView` will render a static `FALLBACK_ERROR_HTML` page to notify the user of the misconfiguration.
