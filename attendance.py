@@ -540,12 +540,15 @@ class AttendanceService:
         cross_station_info = None
         if (config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
                 and not is_duplicate and self._sync_service):
-            cloud_result = self._sync_service.check_duplicate_cloud(
+            from qt_bridge import call_without_freezing_ui
+            sync_service = self._sync_service
+            station_name = self.station_name
+            cloud_result = call_without_freezing_ui(lambda: sync_service.check_duplicate_cloud(
                 badge_id=sanitized,
-                station_name=self.station_name,
+                station_name=station_name,
                 window_minutes=config.LIVE_SYNC_DUP_WINDOW_MINUTES,
                 timeout=config.LIVE_SYNC_TIMEOUT_SECONDS,
-            )
+            ))
             if cloud_result.get("duplicate"):
                 cross_station_dup = True
                 cross_station_info = cloud_result
