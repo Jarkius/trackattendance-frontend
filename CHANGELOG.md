@@ -2,6 +2,12 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.1 (2026-08-31)
+
+### Fixed
+
+- **App-wide freeze when opening Dashboard/Settings, worse (cross-station hangs) with Live Sync enabled.** Several `@pyqtSlot` methods (Dashboard data fetch/export, admin scan-count/clear-cloud/clear-station/station-status, dashboard-refresh get/set) and `AttendanceService.register_scan()`'s Live Sync cross-station duplicate check called `requests.*()` directly on the Qt main thread, blocking the entire event loop — including barcode-scanner keyboard input — for however long the network call took. Live Sync's check was the worst offender since it fires on every scan and every station hits the same shared backend, so backend slowness froze every station in lockstep. Added `qt_bridge.call_without_freezing_ui()`, which runs the call on a worker thread while pumping the calling thread's Qt event loop, preserving the existing synchronous return-value contract (e.g. block-mode duplicate rejection still gates before the scan is recorded) without freezing the UI. Falls back to a direct call when no `QApplication` exists, so no test behavior changes. New `tests/test_qt_bridge.py` proves the event loop stays pumped during the wait.
+
 ## v2.1.0 (2026-08-26)
 
 ### Added
