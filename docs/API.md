@@ -160,6 +160,58 @@ curl -X POST https://trackattendance-api-969370105809.asia-southeast1.run.app/v1
 
 ---
 
+### 5. Check Cross-Station Duplicate (Live Sync)
+
+**Endpoint**: `GET /v1/scans/check-duplicate`
+
+**Purpose**: Check whether a badge was scanned at a *different* station within a recent time window. Used by the desktop client's Live Sync feature (`LIVE_SYNC_ENABLED=True`) to catch duplicate scans across stations in real time, in addition to the local (same-station) duplicate check. See [SYNC.md](../docs/SYNC.md#live-sync-real-time-cross-station-duplicate-check) for the full client-side flow.
+
+**Authentication**: Required (Bearer token)
+
+**Request Headers**:
+```
+Authorization: Bearer <API_KEY>
+```
+
+**Query Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `badge_id` | string | Badge ID to check |
+| `station_name` | string | Station making the request (excluded from the match so a station never flags its own scan) |
+| `window_minutes` | integer | How far back to check, in minutes (client default: `LIVE_SYNC_DUP_WINDOW_MINUTES`, 5) |
+
+**Response** (Success - HTTP 200):
+```json
+{
+  "duplicate": true,
+  "station_name": "Main Gate",
+  "scanned_at": "2025-12-15T08:30:00Z"
+}
+```
+
+**Response Fields**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `duplicate` | boolean | Whether a matching scan was found at another station within the window |
+| `station_name` | string | Which other station the duplicate was found at (only present if `duplicate: true`) |
+| `scanned_at` | string (ISO 8601) | When the duplicate scan occurred (only present if `duplicate: true`) |
+
+**Client behavior on error/timeout/rate-limit**: the client fails open — treats the response as "not a duplicate" rather than blocking the scan. A Live Sync outage degrades cross-station duplicate detection; it never stops scanning.
+
+**Timeout**: `LIVE_SYNC_TIMEOUT_SECONDS` (client default: 2 seconds)
+
+---
+
+## Rate Limiting
+
+All endpoints are rate-limited per client IP (`RATE_LIMIT_MAX`, default **60 requests/minute**, configured on the cloud API's own environment — not in the desktop client's `config.py`). Exceeding the limit returns `429 Too Many Requests`.
+
+This matters most when several kiosk stations share one office egress IP: with `LIVE_SYNC_ENABLED=True`, **each scan is 2 API calls** (the duplicate check plus the immediate upload), on top of periodic connection-health-check/heartbeat traffic (~1 request/minute/station). At a busy multi-station event this can exceed the default limit quickly — e.g. 10 stations scanning once every 10 seconds is already 120 calls/minute. Raise `RATE_LIMIT_MAX` on the cloud API ahead of a high-traffic event rather than during one. A 429 on the duplicate-check call fails open (see above) rather than freezing the client.
+
+---
+
 ## Data Sync Flow
 
 The desktop client (`sync.py`) orchestrates the following flow:

@@ -55,3 +55,6 @@ plugins/camera/greetings/__pycache__/
 
 # macOS
 .DS_Store
+
+# Throwaway check files — see ~/.claude/CLAUDE.md scratch/throwaway convention
+.scratchpad/

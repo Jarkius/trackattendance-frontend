@@ -154,9 +154,10 @@ python tests/create_test_scan.py             # Insert test scan record
 main.py              PyQt6 window, QWebEngineView, AutoSyncManager
 attendance.py        Roster import, scan recording, duplicate detection, export
 database.py          SQLite schema, queries, sync_status tracking
-sync.py              Cloud sync client (batch upload, idempotency, retry)
+sync.py              Cloud sync client (batch upload, idempotency, retry, Live Sync)
 dashboard.py         Local dashboard with Excel export, BU breakdown
 config.py            All configuration with .env override
+qt_bridge.py         Runs blocking calls off the Qt main thread without freezing the UI
 web/                 Embedded kiosk UI (HTML/CSS/JS)
 plugins/camera/      Proximity detection plugin (opt-in, disabled by default)
 scripts/             Utility scripts (migration, debug, reset)
@@ -204,6 +205,9 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `CLOUD_API_KEY` | *(required)* | Bearer token for API auth |
 | `CLOUD_SYNC_BATCH_SIZE` | 100 | Scans per sync batch |
 | `AUTO_SYNC_IDLE_SECONDS` | 30 | Idle time before auto-sync triggers |
+| `LIVE_SYNC_ENABLED` | `False` | Real-time cross-station duplicate check + immediate upload per scan — see [SYNC.md](docs/SYNC.md#live-sync-real-time-cross-station-duplicate-check). Adds 2 API calls per scan; counts against the cloud API's per-IP rate limit — raise `RATE_LIMIT_MAX` on the cloud API before a high-traffic multi-station event |
+| `LIVE_SYNC_TIMEOUT_SECONDS` | `2.0` | Timeout for the Live Sync duplicate-check call (`0.5`–`10.0`) |
+| `LIVE_SYNC_DUP_WINDOW_MINUTES` | `5` | How far back to check for a cross-station duplicate (`1`–`1440`) |
 | `DUPLICATE_BADGE_ACTION` | `warn` | `warn` / `block` / `silent` |
 | `SHOW_FULL_SCREEN` | `True` | Fullscreen kiosk mode |
 | `SHOW_PARTY_BACKGROUND` | `True` | Festive background image |
