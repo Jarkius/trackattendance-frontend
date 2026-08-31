@@ -97,7 +97,7 @@ if CLOUD_READ_ONLY:
 # Live Sync: immediate cloud sync + cross-station duplicate check after each scan
 # Disabled automatically when CLOUD_READ_ONLY=true
 LIVE_SYNC_ENABLED = os.getenv("LIVE_SYNC_ENABLED", "False").lower() in ("true", "1", "yes")
-LIVE_SYNC_TIMEOUT_SECONDS = _safe_float("LIVE_SYNC_TIMEOUT_SECONDS", 2.0, min_val=0.5, max_val=10.0)
+LIVE_SYNC_TIMEOUT_SECONDS = _safe_float("LIVE_SYNC_TIMEOUT_SECONDS", 4.0, min_val=0.5, max_val=10.0)
 LIVE_SYNC_DUP_WINDOW_MINUTES = _safe_int("LIVE_SYNC_DUP_WINDOW_MINUTES", 5, min_val=1, max_val=1440)
 
 # Number of scans to sync in each batch

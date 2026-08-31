@@ -789,12 +789,19 @@ class SyncService:
         badge_id: str,
         station_name: str,
         window_minutes: int = 5,
-        timeout: float = 2.0,
+        timeout: float = 4.0,
     ) -> dict:
-        """Check cloud for cross-station duplicate scan. Fail-open on any error."""
+        """Check cloud for cross-station duplicate scan. Fail-open on any error.
+
+        Logs elapsed time on every outcome (not just errors) — a slow-but-
+        successful response is exactly what causes a duplicate to slip
+        through if it creeps close to `timeout`, and that case previously
+        left no trace in the logs at all.
+        """
         from config import CLOUD_READ_ONLY
         if CLOUD_READ_ONLY:
             return {"duplicate": False, "skipped": True}
+        start = time.monotonic()
         try:
             response = requests.get(
                 f"{self.api_url}/v1/scans/check-duplicate",
@@ -806,12 +813,26 @@ class SyncService:
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 timeout=timeout,
             )
+            elapsed = time.monotonic() - start
             if response.status_code == 200:
-                return response.json()
-            LOGGER.warning("Cloud dup check returned %d", response.status_code)
+                result = response.json()
+                log = LOGGER.warning if elapsed >= timeout * 0.5 else LOGGER.info
+                log(
+                    "[LiveSync] Dup check for badge=%s: %.2fs (timeout=%.1fs), duplicate=%s",
+                    badge_id, elapsed, timeout, result.get("duplicate", False),
+                )
+                return result
+            LOGGER.warning(
+                "[LiveSync] Dup check for badge=%s returned HTTP %d after %.2fs",
+                badge_id, response.status_code, elapsed,
+            )
             return {"duplicate": False, "error": f"HTTP {response.status_code}"}
         except Exception as e:
-            LOGGER.warning("Cloud dup check failed (fail-open): %s", e)
+            elapsed = time.monotonic() - start
+            LOGGER.warning(
+                "[LiveSync] Dup check for badge=%s failed after %.2fs (fail-open): %s",
+                badge_id, elapsed, e,
+            )
             return {"duplicate": False, "error": str(e)}
 
     def sync_single_scan(self, scan: ScanRecord, station_name: str) -> dict:

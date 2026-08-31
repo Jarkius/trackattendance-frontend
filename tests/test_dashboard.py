@@ -162,6 +162,69 @@ class TestDashboardDataFetching(unittest.TestCase):
         self.assertEqual(result["registered"], 0)
 
 
+class TestDashboardRunNetworkCallInjection(unittest.TestCase):
+    """Regression test for the v2.1.1 freeze-fix bug: wrapping the entire
+    get_dashboard_data()/export_to_excel() call in a worker-thread runner
+    (as main.py's Api slots did before this fix) breaks the local SQLite
+    reads inside those methods, since SQLite connections are thread-affine.
+    The fix injects run_network_call so ONLY the requests.get() calls run
+    through it — SQLite reads always stay on the calling thread."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.db_path = Path(self.temp_dir) / "test.db"
+        self.db = DatabaseManager(self.db_path)
+        self.db.set_station_name("TestStation")
+        self.db.bulk_insert_employees([
+            EmployeeRecord("TEST001", "Alice Smith", "IT", "Engineer"),
+        ])
+
+    def tearDown(self):
+        self.db.close()
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    @patch('dashboard.requests.get')
+    def test_only_network_call_goes_through_run_network_call(self, mock_get):
+        """run_network_call must be invoked exactly once (for the HTTP call)
+        and never wrap the SQLite reads — proven by making run_network_call
+        itself raise if handed anything other than the expected request."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"total_scans": 1, "unique_badges": 1, "stations": []}
+        mock_get.return_value = mock_response
+
+        calls = []
+
+        def tracking_runner(fn):
+            calls.append(fn)
+            return fn()
+
+        service = DashboardService(
+            self.db, "http://test.example.com", "test-key",
+            run_network_call=tracking_runner,
+        )
+        result = service.get_dashboard_data()
+
+        self.assertEqual(len(calls), 1, "run_network_call should wrap exactly one call (the HTTP request)")
+        self.assertEqual(result["registered"], 1, "SQLite read (count_employees) must succeed regardless of run_network_call")
+
+    @patch('dashboard.requests.get')
+    def test_default_run_network_call_is_synchronous_passthrough(self, mock_get):
+        """No run_network_call supplied (the tests-without-PyQt6 case, and
+        the pre-v2.1.1 behavior) must still work exactly as before."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"total_scans": 1, "unique_badges": 1, "stations": []}
+        mock_get.return_value = mock_response
+
+        service = DashboardService(self.db, "http://test.example.com", "test-key")
+        result = service.get_dashboard_data()
+
+        self.assertEqual(result["registered"], 1)
+        self.assertIsNone(result["error"])
+
+
 class TestDashboardFormatTime(unittest.TestCase):
     """Test _format_time() helper method."""
 
@@ -405,6 +468,7 @@ def main():
     suite = unittest.TestSuite()
 
     suite.addTests(loader.loadTestsFromTestCase(TestDashboardDataFetching))
+    suite.addTests(loader.loadTestsFromTestCase(TestDashboardRunNetworkCallInjection))
     suite.addTests(loader.loadTestsFromTestCase(TestDashboardFormatTime))
     suite.addTests(loader.loadTestsFromTestCase(TestDashboardBusinessUnits))
     suite.addTests(loader.loadTestsFromTestCase(TestDashboardExport))

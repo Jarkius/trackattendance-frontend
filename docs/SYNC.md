@@ -85,7 +85,7 @@ Live Sync is a separate mechanism from batch/auto-sync above — it runs **synch
 **Configuration**:
 ```ini
 LIVE_SYNC_ENABLED=False           # off by default
-LIVE_SYNC_TIMEOUT_SECONDS=2.0     # 0.5-10.0
+LIVE_SYNC_TIMEOUT_SECONDS=4.0     # 0.5-10.0
 LIVE_SYNC_DUP_WINDOW_MINUTES=5    # 1-1440
 ```
 
