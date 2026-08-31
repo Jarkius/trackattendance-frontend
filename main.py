@@ -1074,6 +1074,15 @@ class Api(QObject):
 
     # Dashboard methods (Issue #27)
     @pyqtSlot(result="QVariant")
+    def get_dashboard_local_snapshot(self) -> dict:
+        """Instant, local-only subset of dashboard data (registered count)
+        — no network call. Lets the UI show something the moment the
+        overlay opens, ahead of get_dashboard_data()'s cloud fetch."""
+        if not self._dashboard_service:
+            return {"registered": 0, "last_updated": "", "error": "Dashboard service not configured"}
+        return self._dashboard_service.get_local_snapshot()
+
+    @pyqtSlot(result="QVariant")
     def get_dashboard_data(self) -> dict:
         """Fetch multi-station dashboard data from cloud and local database."""
         if not self._dashboard_service:

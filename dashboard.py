@@ -79,6 +79,28 @@ class DashboardService:
             "Content-Type": "application/json",
         }
 
+    def get_local_snapshot(self) -> Dict[str, Any]:
+        """Local-only, instant subset of dashboard data — no network call.
+
+        Used to populate the dashboard the moment it opens (registered
+        employee count is a single indexed SQLite query, effectively
+        instant) while get_dashboard_data() fetches the cloud-sourced
+        fields (scanned count, stations, BU breakdown) in the background.
+        Avoids making the user wait on a cloud round-trip just to see a
+        number that was already sitting in the local database.
+        """
+        result = {
+            "registered": 0,
+            "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "error": None,
+        }
+        try:
+            result["registered"] = self._db_manager.count_employees()
+        except Exception as e:
+            logger.error(f"Dashboard: Failed to get employee count (local snapshot): {e}")
+            result["error"] = f"Failed to get employee count: {e}"
+        return result
+
     def get_dashboard_data(self) -> Dict[str, Any]:
         """Fetch all dashboard data.
 

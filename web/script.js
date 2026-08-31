@@ -1506,7 +1506,20 @@ ${destination}` : message;
             dashboardUpdated.innerHTML = '<i class="material-icons sync-spinning" style="font-size: 14px; vertical-align: middle;">sync</i> Loading...';
         }
 
-        // Check admin availability and fetch data
+        // Show the local (instant, no network) registered count immediately
+        // — no reason to make the user wait on the cloud fetch below just to
+        // see a number that's already sitting in the local database.
+        queueOrRun((bridge) => {
+            if (!bridge.get_dashboard_local_snapshot) return;
+            bridge.get_dashboard_local_snapshot((snapshot) => {
+                if (dashboardRegistered && snapshot?.registered != null) {
+                    dashboardRegistered.textContent = Number(snapshot.registered).toLocaleString();
+                }
+            });
+        });
+
+        // Check admin availability and fetch the cloud-sourced fields
+        // (scanned count, stations, BU breakdown) in the background.
         checkAdminEnabled();
         fetchDashboardData();
     };
