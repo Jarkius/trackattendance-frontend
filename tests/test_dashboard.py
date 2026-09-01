@@ -397,6 +397,38 @@ class TestDashboardExport(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     @patch('dashboard.requests.get')
+    def test_not_yet_scanned_uses_legacy_id_not_badge_id(self, mock_get):
+        """Regression: an employee scanned via a badge_id that differs from
+        their actual legacy_id (manual lookup, or a reprinted-badge suffix)
+        must NOT show up on the "Not Yet Scanned" sheet -- they scanned, just
+        under a badge_id that isn't their legacy_id. The bug compared
+        emp.legacy_id against a set of raw badge_ids instead of legacy_ids."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "scans": [
+                {
+                    "badge_id": "105193T",  # raw scanned value != legacy_id
+                    "legacy_id": "TEST001",  # employee's actual ID
+                    "station_name": "TestStation",
+                    "scanned_at": "2026-01-01T08:00:00Z",
+                    "matched": True,
+                    "scan_source": "badge",
+                },
+            ],
+        }
+        mock_get.return_value = mock_response
+
+        result = self.service.export_to_excel()
+        self.assertTrue(result["ok"], result.get("message"))
+
+        from openpyxl import load_workbook
+        wb = load_workbook(result["file_path"])
+        ws = wb["Not Yet Scanned"]
+        not_scanned_ids = [row[0] for row in ws.iter_rows(min_row=2, max_row=ws.max_row - 1, values_only=True)]
+        self.assertNotIn("TEST001", not_scanned_ids)
+
+    @patch('dashboard.requests.get')
     def test_export_connection_error(self, mock_get):
         """Test export handles connection error."""
         import requests

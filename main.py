@@ -2701,8 +2701,9 @@ def main() -> None:
                 pending_count = stats.get('pending', 0)
 
                 if pending_count > 0:
-                    # Check authentication before attempting sync (fail fast)
-                    auth_ok, auth_msg = sync_service.test_authentication()
+                    # Check authentication before attempting sync (fail fast).
+                    # Network-only call — safe to run off the Qt main thread.
+                    auth_ok, auth_msg = call_without_freezing_ui(sync_service.test_authentication)
                     if not auth_ok:
                         # Auth failed - show error but proceed with export
                         auth_error_payload = {
@@ -2731,13 +2732,45 @@ def main() -> None:
                         payload_js = json.dumps(sync_payload)
                         view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
 
-                        # Perform sync - sync ALL pending scans before closing
-                        # Use sync_all=True to ensure all batches are uploaded (not just first 100)
-                        sync_result = sync_service.sync_pending_scans(sync_all=True)
+                        # Perform sync - sync ALL pending scans before closing.
+                        # Manually replicates sync_pending_scans(sync_all=True)'s
+                        # batch loop, but via the network-only/snapshot-then-apply
+                        # pattern (same one AutoSyncManager.trigger_auto_sync()
+                        # uses) instead of calling sync_pending_scans() directly:
+                        # that method interleaves SQLite reads/writes with the
+                        # network call inside a single call, so wrapping the
+                        # whole thing in call_without_freezing_ui would move
+                        # those SQLite operations onto a worker thread too —
+                        # unsafe, since sqlite3 connections are thread-affine.
+                        # Only sync_scan_batch_network_only() (network-only, no
+                        # self.db access) is wrapped; SQLite snapshot/apply stay
+                        # on this (main) thread before/after each wrapped call.
+                        total_synced = 0
+                        total_failed = 0
+                        while True:
+                            batch_scans = sync_service.db.fetch_pending_scans(limit=sync_service.batch_size)
+                            if not batch_scans:
+                                break
+                            station_name = sync_service.db.get_station_name() or "UnknownStation"
+                            batch_result = call_without_freezing_ui(
+                                lambda: sync_service.sync_scan_batch_network_only(batch_scans, station_name)
+                            )
+                            synced_ids = batch_result.get('synced_ids', [])
+                            failed_ids = batch_result.get('failed_ids', [])
+                            if synced_ids:
+                                sync_service.db.mark_scans_as_synced(synced_ids)
+                            if failed_ids:
+                                sync_service.db.mark_scans_as_failed(failed_ids, batch_result.get('error') or 'Sync failed')
+                            total_synced += len(synced_ids)
+                            total_failed += len(failed_ids)
+                            if not synced_ids and not failed_ids:
+                                # No progress this batch (all pending_ids, e.g.
+                                # a 401/retry-exhaustion) — stop rather than
+                                # loop forever on the same unresolved scans.
+                                break
 
-                        # Determine sync outcome message
-                        synced_count = sync_result.get('synced', 0)
-                        failed_count = sync_result.get('failed', 0)
+                        synced_count = total_synced
+                        failed_count = total_failed
 
                         if synced_count > 0 and failed_count == 0:
                             sync_msg = f'Synced {synced_count} scan(s) successfully. Proceeding with export...'
