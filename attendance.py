@@ -536,10 +536,17 @@ class AttendanceService:
                     "fullName": employee.full_name if employee else "Unknown",
                 }
         # Cross-station duplicate check via cloud (Live Sync, #54)
+        # Skipped when there's no employee match: the check exists to catch
+        # the same EMPLOYEE scanning at two stations, so with no employee
+        # there's no real identity to check, and `sanitized` may just be
+        # partial name text from a dead-end manual lookup rather than an
+        # actual badge/legacy ID -- sending that to the cloud is both
+        # meaningless and an avoidable network round-trip delaying the
+        # "not matched" response back to the user.
         cross_station_dup = False
         cross_station_info = None
         if (config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
-                and not is_duplicate and self._sync_service):
+                and not is_duplicate and self._sync_service and employee):
             from qt_bridge import call_without_freezing_ui
             sync_service = self._sync_service
             station_name = self.station_name

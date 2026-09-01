@@ -273,6 +273,36 @@ class TestLiveSyncEnqueue(unittest.TestCase):
         'LIVE_SYNC_ENABLED': 'True', 'CLOUD_READ_ONLY': 'False',
         'DUPLICATE_BADGE_ACTION': 'block', 'DUPLICATE_BADGE_DETECTION_ENABLED': 'False',
     })
+    def test_unmatched_manual_entry_skips_cloud_dup_check(self):
+        """A manually-typed name/lastname with no employee match must NOT
+        trigger the Live Sync cloud round-trip -- there's no real identity
+        to cross-check, and `sanitized` is just dead-end search text, not a
+        real badge/legacy ID. Reported by the user as a delay on unmatched
+        manual entries; root cause was this check firing unconditionally."""
+        import importlib
+        import config
+        importlib.reload(config)
+        config.LIVE_SYNC_ENABLED = True
+        config.LIVE_SYNC_TIMEOUT_SECONDS = 2.0
+
+        service = _create_service(self.db_path, self.employee_path, self.export_dir)
+        sync_service = self._make_sync_service()
+        sync_service.check_duplicate_cloud = MagicMock(return_value={"duplicate": False})
+        coordinator = RecordingCoordinator()
+        service.set_sync_service(sync_service, coordinator=coordinator)
+
+        try:
+            result = service.register_scan("Nonexistent Person", scan_source="manual")
+            sync_service.check_duplicate_cloud.assert_not_called()
+            self.assertTrue(result["ok"])
+            self.assertFalse(result.get("matched"))
+        finally:
+            service.close()
+
+    @patch.dict(os.environ, {
+        'LIVE_SYNC_ENABLED': 'True', 'CLOUD_READ_ONLY': 'False',
+        'DUPLICATE_BADGE_ACTION': 'block', 'DUPLICATE_BADGE_DETECTION_ENABLED': 'False',
+    })
     def test_check_duplicate_cloud_still_synchronous_and_unaffected(self):
         """The separate, synchronous cross-station duplicate check
         (check_duplicate_cloud) must remain untouched by the live-sync
