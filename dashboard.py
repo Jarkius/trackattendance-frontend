@@ -495,11 +495,20 @@ class DashboardService:
                     max_length = max(len(str(cell.value or "")) for cell in col)
                     ws_bu.column_dimensions[col[0].column_letter].width = max_length + 2
 
-            # Add "Not Yet Scanned" sheet - employees who haven't scanned
-            scanned_badge_ids = {scan.get("badge_id") if isinstance(scan, dict) else scan[0] for scan in scans}
+            # Add "Not Yet Scanned" sheet - employees who haven't scanned.
+            # Must key off each scan's resolved legacy_id (falling back to
+            # badge_id only when legacy_id is absent, matching the enrichment
+            # lookup above) rather than badge_id alone -- a manual-lookup or
+            # reprinted-badge scan can have badge_id != the employee's actual
+            # legacy_id, which previously caused employees who HAD scanned to
+            # still show up here as "not yet scanned".
+            scanned_legacy_ids = {
+                (scan.get("legacy_id") or scan.get("badge_id")) if isinstance(scan, dict) else scan[0]
+                for scan in scans
+            }
             not_scanned = [
                 emp for emp in employee_cache.values()
-                if emp.legacy_id not in scanned_badge_ids
+                if emp.legacy_id not in scanned_legacy_ids
             ]
             not_scanned.sort(key=lambda e: (e.sl_l1_desc or "", e.full_name or ""))
 
