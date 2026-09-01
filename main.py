@@ -2128,6 +2128,85 @@ class Api(QObject):
         LOGGER.info("[Admin] Camera settings reset to defaults")
         return {"ok": True}
 
+    @pyqtSlot(result="QVariant")
+    def admin_export_env(self) -> dict:
+        """Write the current live settings (config.* + SQLite overrides) out to
+        the .env file next to the exe, so this station's tuned configuration
+        can be copied to other stations instead of re-entering it by hand.
+
+        Any existing .env is backed up first (.env.bak-<timestamp>), never
+        overwritten silently. CLOUD_API_KEY is intentionally omitted --
+        distributing a shared API key via a copied .env is a deliberate
+        admin decision, not a side effect of a settings export.
+        """
+        env_path = EXEC_ROOT / ".env"
+        lines = [
+            "# Exported from TrackAttendance admin panel — reflects this station's",
+            "# live settings (env + any in-app overrides) at export time.",
+            f"# Exported: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            "",
+            "# Cloud API Configuration",
+            f"CLOUD_API_URL={config.CLOUD_API_URL}",
+            "# CLOUD_API_KEY intentionally not exported — set it per station",
+            "# (Admin Panel > License Key, or paste it into this file manually).",
+            "",
+            f"CLOUD_READ_ONLY={config.CLOUD_READ_ONLY}",
+            f"LIVE_SYNC_ENABLED={config.LIVE_SYNC_ENABLED}",
+            f"LIVE_SYNC_TIMEOUT_SECONDS={config.LIVE_SYNC_TIMEOUT_SECONDS}",
+            f"LIVE_SYNC_DUP_WINDOW_MINUTES={config.LIVE_SYNC_DUP_WINDOW_MINUTES}",
+            f"CLOUD_SYNC_BATCH_SIZE={config.CLOUD_SYNC_BATCH_SIZE}",
+            "",
+            f"CONNECTION_CHECK_INTERVAL_SECONDS={config.CONNECTION_CHECK_INTERVAL_MS / 1000}",
+            f"CONNECTION_CHECK_TIMEOUT_SECONDS={config.CONNECTION_CHECK_TIMEOUT_SECONDS}",
+            "",
+            f"AUTO_SYNC_ENABLED={config.AUTO_SYNC_ENABLED}",
+            f"AUTO_SYNC_IDLE_SECONDS={config.AUTO_SYNC_IDLE_SECONDS}",
+            f"AUTO_SYNC_CHECK_INTERVAL_SECONDS={config.AUTO_SYNC_CHECK_INTERVAL_SECONDS}",
+            f"AUTO_SYNC_MIN_PENDING_SCANS={config.AUTO_SYNC_MIN_PENDING_SCANS}",
+            "",
+            f"SHOW_FULL_SCREEN={config.SHOW_FULL_SCREEN}",
+            f"ENABLE_FADE_ANIMATION={config.ENABLE_FADE_ANIMATION}",
+            f"SHOW_PARTY_BACKGROUND={config.SHOW_PARTY_BACKGROUND}",
+            f"CONFETTI_ENABLED={config.CONFETTI_ENABLED}",
+            f"AUTO_EXPORT_ON_SHUTDOWN={config.AUTO_EXPORT_ON_SHUTDOWN}",
+            "",
+            f"DUPLICATE_BADGE_DETECTION_ENABLED={config.DUPLICATE_BADGE_DETECTION_ENABLED}",
+            f"DUPLICATE_BADGE_TIME_WINDOW_SECONDS={config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS}",
+            f"DUPLICATE_BADGE_ACTION={config.DUPLICATE_BADGE_ACTION}",
+            f"DUPLICATE_BADGE_ALERT_DURATION_MS={config.DUPLICATE_BADGE_ALERT_DURATION_MS}",
+            f"SCAN_FEEDBACK_DURATION_MS={config.SCAN_FEEDBACK_DURATION_MS}",
+            "",
+            f"VOICE_ENABLED={self._voice_player.enabled if self._voice_player else config.VOICE_ENABLED}",
+            f"VOICE_VOLUME={self._voice_player._volume if self._voice_player else config.VOICE_VOLUME}",
+            "",
+            f"ENABLE_CAMERA_DETECTION={config.ENABLE_CAMERA_DETECTION}",
+            f"CAMERA_DEVICE_ID={config.CAMERA_DEVICE_ID}",
+            f"CAMERA_SHOW_OVERLAY={config.CAMERA_SHOW_OVERLAY}",
+            f"CAMERA_GREETING_COOLDOWN_SECONDS={config.CAMERA_GREETING_COOLDOWN_SECONDS}",
+            f"CAMERA_SCAN_BUSY_SECONDS={config.CAMERA_SCAN_BUSY_SECONDS}",
+            f"CAMERA_MIN_SIZE_PCT={config.CAMERA_MIN_SIZE_PCT}",
+            f"CAMERA_ABSENCE_THRESHOLD_SECONDS={config.CAMERA_ABSENCE_THRESHOLD_SECONDS}",
+            f"CAMERA_CONFIRM_FRAMES={config.CAMERA_CONFIRM_FRAMES}",
+            f"CAMERA_HAAR_MIN_NEIGHBORS={config.CAMERA_HAAR_MIN_NEIGHBORS}",
+            f"CAMERA_RESOLUTION_WIDTH={config.CAMERA_RESOLUTION_WIDTH}",
+            f"CAMERA_RESOLUTION_HEIGHT={config.CAMERA_RESOLUTION_HEIGHT}",
+            "",
+            f"LOGGING_LEVEL={config.LOGGING_LEVEL}",
+            f"LOGGING_CONSOLE={config.LOGGING_CONSOLE}",
+            "",
+            f"ADMIN_PIN={config.ADMIN_PIN}",
+        ]
+        try:
+            if env_path.exists():
+                backup_path = env_path.with_name(f".env.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+                backup_path.write_text(env_path.read_text(encoding="utf-8"), encoding="utf-8")
+            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            LOGGER.info("[Admin] Exported live settings to %s", env_path)
+            return {"ok": True, "path": str(env_path)}
+        except Exception as exc:
+            LOGGER.warning("[Admin] Failed to export .env: %s", exc)
+            return {"ok": False, "message": str(exc)}
+
     @pyqtSlot()
     def _handle_clear_epoch_and_heartbeat_slot(self) -> None:
         """Check clear_epoch and send heartbeat. Runs on MAIN thread (SQLite safe)."""

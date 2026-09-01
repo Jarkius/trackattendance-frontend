@@ -2892,6 +2892,33 @@ ${destination}` : message;
         });
     }
 
+    // Export current live settings to .env (for copying to other stations)
+    const adminExportEnvBtn = document.getElementById('admin-export-env-btn');
+    const adminExportEnvStatus = document.getElementById('admin-export-env-status');
+    if (adminExportEnvBtn) {
+        adminExportEnvBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            adminExportEnvBtn.textContent = 'Saving...';
+            adminExportEnvBtn.disabled = true;
+            queueOrRun((bridge) => {
+                if (!bridge.admin_export_env) return;
+                bridge.admin_export_env((result) => {
+                    adminExportEnvBtn.textContent = 'Save Current Settings to .env';
+                    adminExportEnvBtn.disabled = false;
+                    if (adminExportEnvStatus) {
+                        if (result?.ok) {
+                            adminExportEnvStatus.textContent = `Saved to ${result.path}`;
+                            adminExportEnvStatus.style.color = '#86bc25';
+                        } else {
+                            adminExportEnvStatus.textContent = result?.message || 'Failed to save .env';
+                            adminExportEnvStatus.style.color = '#ff5252';
+                        }
+                    }
+                });
+            });
+        });
+    }
+
     // Camera detection toggle — also controls overlay visibility
     if (adminCameraDetectionToggle) {
         adminCameraDetectionToggle.addEventListener('click', (e) => {
