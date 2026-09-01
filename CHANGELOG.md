@@ -2,6 +2,14 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.3 (2026-09-01)
+
+### Fixed
+
+- **Manual name/lastname entry with no employee match was delayed by the Live Sync cross-station cloud check.** `register_scan()`'s duplicate-check call fired unconditionally whenever `LIVE_SYNC_ENABLED`, with no check for whether an employee was actually matched — so an unmatched manual lookup paid the full cloud round-trip (up to `LIVE_SYNC_TIMEOUT_SECONDS`) before returning "not matched". The check exists to catch the same *employee* scanning at two stations; with no matched employee there's no real identity to check, and the scan value is often just dead-end search text rather than a real badge/legacy ID. Now skipped when there's no employee match. Live Sync being off was already unaffected.
+- **Dashboard export's "Not Yet Scanned" sheet could list employees who had already scanned.** It compared each employee's `legacy_id` against a set of raw `badge_id` values instead of the scans' resolved `legacy_id`. A manual-lookup entry or a reprinted-badge scan can have `badge_id != legacy_id`, causing that employee to incorrectly show up as "not yet scanned". Fixed to key off the resolved `legacy_id` (falling back to `badge_id` only when absent, matching the "All Scans" sheet's existing lookup logic). Verified against real exported data (zero false positives across 443 employees) and a targeted unit test.
+- **Shutdown-sync still froze the UI on app close.** `_handle_close_event`'s final "sync all pending scans before closing" call was the one remaining network call not routed through `qt_bridge.call_without_freezing_ui()` from the v2.1.1 fix. Replaced with a manual batch loop using the same network-only/snapshot-then-apply pattern already used safely by auto-sync, so SQLite reads/writes stay on the main thread while the network call runs off it. Verified via a real close-with-pending-scans app run (log shows the new `[NetworkOnly]` code path executing cleanly, no freeze).
+
 ## v2.1.2 (2026-09-01)
 
 ### Fixed
