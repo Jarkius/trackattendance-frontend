@@ -2,6 +2,12 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.7 (2026-09-02)
+
+### Fixed
+
+- **Local duplicate-window "Always" preset (and every other preset) could show as unselected after a fresh app start.** `config.py` clamped `DUPLICATE_BADGE_TIME_WINDOW_SECONDS` from `.env` to a max of 3600s (1h), but the admin panel's "Always" preset (and every clamp in `main.py`) uses 86400s (24h) — no preset button corresponds to 3600s at all. On a fresh station with no SQLite override yet (every laptop right after `deploy.bat`, which starts with no `database.db`), `.env`'s `86400` value was silently downgraded to `3600` by `config.py`'s own loader, landing on a value with no matching preset — so "Always" appeared unselected. Found live while rolling out to laptops for the 2026-09-03 event. Raised the max to 86400 to match the rest of the app.
+
 ## v2.1.6 (2026-09-02)
 
 ### Fixed
