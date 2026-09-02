@@ -180,6 +180,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.1.7** — Fixed local duplicate-window "Always" preset showing as unselected on a fresh station (config.py clamped `.env` values to 3600s max while the admin panel's "Always" preset uses 86400s, so no preset button matched after the silent downgrade)
 - **v2.1.6** — Fixed "Save Current Settings to .env" wiping all comments and dropping unlisted settings from a hand-tuned `.env`; now edits values in place instead of regenerating the whole file from a template
 - **v2.1.5** — Fixed a race where clearing station/cloud data could be resurrected by an in-flight auto-sync upload landing after the delete; the sync coordinator barrier is now raised before the cloud delete call, not after
 - **v2.1.4** — Added "Save Current Settings to .env" button in Admin Panel → Settings, writing this station's live settings (env + SQLite overrides) back to `.env` so a tuned station's config can be copied to other stations instead of re-entering values by hand; backs up any existing `.env` first, excludes `CLOUD_API_KEY` by design
