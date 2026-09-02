@@ -1332,6 +1332,24 @@ class Api(QObject):
         if pin != config.ADMIN_PIN:
             return {"ok": False, "message": "Incorrect PIN"}
 
+        # Raise the coordinator barrier FIRST, before the cloud delete call —
+        # not just before the local clear. An auto-sync (or Live Sync) batch
+        # upload runs on this same shared coordinator; if the barrier were
+        # raised only after the cloud delete (as it originally was), a batch
+        # job already queued/in-flight during the delete's own network
+        # round-trip could land on the server afterward, resurrecting rows
+        # this call just reported as cleared. Raising it here closes that
+        # window down to the same narrow "already dequeued and executing"
+        # edge case pause_barrier() itself documents as unavoidable —
+        # matching the protection the local clear_all_scans() call below
+        # already had.
+        if self._sync_coordinator:
+            new_generation = self._sync_coordinator.pause_barrier()
+            LOGGER.info("[Admin] Coordinator paused for cloud-clear barrier (generation=%s)", new_generation)
+            if self._auto_sync_manager:
+                self._auto_sync_manager.reset_after_barrier()
+            self._reset_manual_sync_state()
+
         # Auto-export backup before clearing
         backup_path = ""
         try:
@@ -1347,23 +1365,15 @@ class Api(QObject):
             sync_service = self._sync_service
             cloud_result = call_without_freezing_ui(sync_service.clear_cloud_scans)
             if not cloud_result["ok"]:
+                if self._sync_coordinator:
+                    self._sync_coordinator.resume()
+                    LOGGER.info("[Admin] Coordinator resumed after cloud-clear failure")
                 return {"ok": False, "message": f"Cloud clear failed: {cloud_result['message']}"}
             cloud_deleted = cloud_result.get("deleted", 0)
             clear_epoch = cloud_result.get("clear_epoch", "")
         else:
             cloud_deleted = 0
             clear_epoch = ""
-
-        # Raise the coordinator barrier before the local clear — same race as
-        # the remote-clear-detection path in _handle_clear_epoch_and_heartbeat_slot:
-        # a queued/in-flight sync job must not apply a stale result after
-        # clear_all_scans() runs below.
-        if self._sync_coordinator:
-            new_generation = self._sync_coordinator.pause_barrier()
-            LOGGER.info("[Admin] Coordinator paused for cloud-clear barrier (generation=%s)", new_generation)
-            if self._auto_sync_manager:
-                self._auto_sync_manager.reset_after_barrier()
-            self._reset_manual_sync_state()
 
         # Clear local scans
         try:
@@ -1421,6 +1431,17 @@ class Api(QObject):
 
         station = self._service._db.get_station_name() or "Unknown"
 
+        # Raise the coordinator barrier FIRST, before the cloud delete call —
+        # see admin_clear_cloud_data() for why this must happen before the
+        # cloud delete's own network round-trip, not just before the local
+        # clear_all_scans() call below.
+        if self._sync_coordinator:
+            new_generation = self._sync_coordinator.pause_barrier()
+            LOGGER.info("[Admin] Coordinator paused for station-clear barrier (generation=%s)", new_generation)
+            if self._auto_sync_manager:
+                self._auto_sync_manager.reset_after_barrier()
+            self._reset_manual_sync_state()
+
         # Auto-export backup
         backup_path = ""
         try:
@@ -1436,17 +1457,11 @@ class Api(QObject):
             sync_service = self._sync_service
             cloud_result = call_without_freezing_ui(lambda: sync_service.clear_station_scans(station))
             if not cloud_result.get("ok"):
+                if self._sync_coordinator:
+                    self._sync_coordinator.resume()
+                    LOGGER.info("[Admin] Coordinator resumed after station-clear failure")
                 return {"ok": False, "message": f"Cloud clear failed: {cloud_result.get('message', 'unknown')}"}
             cloud_deleted = cloud_result.get("deleted", 0)
-
-        # Raise the coordinator barrier before the local clear — see
-        # admin_clear_cloud_data() for why this must happen before clear_all_scans().
-        if self._sync_coordinator:
-            new_generation = self._sync_coordinator.pause_barrier()
-            LOGGER.info("[Admin] Coordinator paused for station-clear barrier (generation=%s)", new_generation)
-            if self._auto_sync_manager:
-                self._auto_sync_manager.reset_after_barrier()
-            self._reset_manual_sync_state()
 
         # Clear local scans
         try:
