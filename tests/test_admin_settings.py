@@ -207,7 +207,7 @@ def _load_saved_settings_logic(db):
     v = db.get_meta("setting:duplicate_window")
     if v is not None:
         try:
-            config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = max(1, min(3600, int(v)))
+            config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS = max(1, min(86400, int(v)))
         except ValueError:
             pass
     v = db.get_meta("setting:duplicate_action")
