@@ -2,6 +2,12 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.6 (2026-09-02)
+
+### Fixed
+
+- **"Save Current Settings to .env" wiped every comment and dropped unlisted settings.** The v2.1.4 export regenerated the whole `.env` from a fixed template, silently stripping all documentation comments (section headers, per-setting explanations, tuning ranges) and dropping any setting the template didn't know about (`DEBUG`, `AUTO_SYNC_MESSAGE_DURATION_MS`, `CONNECTION_CHECK_INITIAL_DELAY_SECONDS`, etc. — left to fall back to `config.py` defaults instead of the tuned value). Found during 2026-09-02 event prep when a hand-tuned, well-commented `.env` was reduced to 55 bare lines after a single click. Now edits matching `KEY=value` lines in place, preserving every comment, blank line, and unrecognized setting — only a brand-new `.env` with no prior content falls back to a fresh minimal write.
+
 ## v2.1.5 (2026-09-02)
 
 ### Fixed

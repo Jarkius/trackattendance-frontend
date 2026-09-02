@@ -180,6 +180,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.1.6** — Fixed "Save Current Settings to .env" wiping all comments and dropping unlisted settings from a hand-tuned `.env`; now edits values in place instead of regenerating the whole file from a template
 - **v2.1.5** — Fixed a race where clearing station/cloud data could be resurrected by an in-flight auto-sync upload landing after the delete; the sync coordinator barrier is now raised before the cloud delete call, not after
 - **v2.1.4** — Added "Save Current Settings to .env" button in Admin Panel → Settings, writing this station's live settings (env + SQLite overrides) back to `.env` so a tuned station's config can be copied to other stations instead of re-entering values by hand; backs up any existing `.env` first, excludes `CLOUD_API_KEY` by design
 - **v2.1.3** — Skipped the Live Sync cloud duplicate-check for unmatched manual name entries (was delaying "not matched" responses for no reason), fixed Dashboard export's "Not Yet Scanned" sheet incorrectly listing employees who had already scanned (badge_id vs legacy_id mismatch), fixed the last remaining main-thread-blocking network call during app shutdown
