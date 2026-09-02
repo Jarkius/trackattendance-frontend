@@ -2,6 +2,12 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.5 (2026-09-02)
+
+### Fixed
+
+- **Clearing station/cloud data raced with in-flight auto-sync uploads.** `admin_clear_station_data()`/`admin_clear_cloud_data()` raised the sync coordinator's barrier only before the *local* clear, after the cloud delete's own network round-trip had already run. Auto-sync (always on) and Live Sync (when enabled) submit uploads through that same shared coordinator, so a batch job already queued/in-flight during that round-trip could land on the server afterward, resurrecting rows the admin panel just reported as cleared. Found during pre-event review; fixed by raising the barrier at the top of each method, before the cloud delete call. Added `tests/test_admin_clear_barrier_ordering.py` since neither existing clear-data test file called these methods directly.
+
 ## v2.1.4 (2026-09-02)
 
 ### Added
