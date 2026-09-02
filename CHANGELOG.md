@@ -2,6 +2,12 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.4 (2026-09-02)
+
+### Added
+
+- **"Save Current Settings to .env" button in Admin Panel → Settings.** Tuning a station's settings via the admin panel persists them to SQLite, but the `.env` file itself was never updated to reflect that — so there was no way to hand another station a working copy of a tuned config without re-entering every value by hand. The new button writes the station's current live settings (env defaults plus any in-app/SQLite overrides) back to `.env`, backing up any existing file first (`.env.bak-<timestamp>`), so a tuned station's `.env` can be copied straight to the other laptops ahead of the Sep 3 event. `CLOUD_API_KEY` is intentionally excluded from the export — sharing a key across stations is a deliberate per-station decision, not a side effect of a settings export.
+
 ## v2.1.3 (2026-09-01)
 
 ### Fixed
