@@ -267,7 +267,12 @@ DUPLICATE_BADGE_DETECTION_ENABLED = os.getenv("DUPLICATE_BADGE_DETECTION_ENABLED
 
 # Time window in seconds to consider scans as duplicates
 # Example: If set to 60, scanning same badge within 60s is considered duplicate
-DUPLICATE_BADGE_TIME_WINDOW_SECONDS = _safe_int("DUPLICATE_BADGE_TIME_WINDOW_SECONDS", 60, min_val=1, max_val=3600)
+# max_val=86400 matches the admin panel's "Always" preset (24h) — must stay
+# in sync with the clamps in main.py's admin_set_duplicate_window()/
+# load_saved_settings(), or "Always" silently downgrades to 3600s (1h) on
+# every fresh install with no SQLite override yet (e.g. right after
+# deploy.bat, which starts each station with no database.db).
+DUPLICATE_BADGE_TIME_WINDOW_SECONDS = _safe_int("DUPLICATE_BADGE_TIME_WINDOW_SECONDS", 60, min_val=1, max_val=86400)
 
 # Action to take when duplicate badge is detected
 # 'warn': Accept scan + show yellow warning alert (default)

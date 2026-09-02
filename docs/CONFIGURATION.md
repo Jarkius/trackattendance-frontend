@@ -67,7 +67,7 @@ Required Excel columns: `Legacy ID`, `Full Name`, `SL L1 Desc`, `Position Desc`.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DUPLICATE_BADGE_DETECTION_ENABLED` | `True` | Enable duplicate scan detection |
-| `DUPLICATE_BADGE_TIME_WINDOW_SECONDS` | `60` | Time window to consider scans as duplicates (1-3600) |
+| `DUPLICATE_BADGE_TIME_WINDOW_SECONDS` | `60` | Time window to consider scans as duplicates (1-86400; the admin panel's "Always" preset uses 86400 = 24h) |
 | `DUPLICATE_BADGE_ACTION` | `warn` | `warn` (yellow alert, scan accepted), `block` (red alert, scan rejected), `silent` (no alert, scan accepted) |
 | `DUPLICATE_BADGE_ALERT_DURATION_MS` | `3000` | Alert auto-dismiss duration (500-30000 ms) |
 | `SCAN_FEEDBACK_DURATION_MS` | `2000` | "THANK YOU" display duration after scan (500-30000 ms) |

@@ -254,7 +254,7 @@ class TestConfigurationValues(unittest.TestCase):
             importlib.reload(config)
 
             self.assertGreaterEqual(config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS, 1)
-            self.assertLessEqual(config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS, 3600)
+            self.assertLessEqual(config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS, 86400)
 
 
 class TestDuplicateActionConfig(unittest.TestCase):
