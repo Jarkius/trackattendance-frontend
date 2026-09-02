@@ -180,6 +180,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.1.5** — Fixed a race where clearing station/cloud data could be resurrected by an in-flight auto-sync upload landing after the delete; the sync coordinator barrier is now raised before the cloud delete call, not after
 - **v2.1.4** — Added "Save Current Settings to .env" button in Admin Panel → Settings, writing this station's live settings (env + SQLite overrides) back to `.env` so a tuned station's config can be copied to other stations instead of re-entering values by hand; backs up any existing `.env` first, excludes `CLOUD_API_KEY` by design
 - **v2.1.3** — Skipped the Live Sync cloud duplicate-check for unmatched manual name entries (was delaying "not matched" responses for no reason), fixed Dashboard export's "Not Yet Scanned" sheet incorrectly listing employees who had already scanned (badge_id vs legacy_id mismatch), fixed the last remaining main-thread-blocking network call during app shutdown
 - **v2.1.2** — Fixed Dashboard showing registered count as 0 (a v2.1.1 regression — cross-thread SQLite crash), raised Live Sync's duplicate-check timeout from 2.0s to 4.0s after live testing showed a cold-path request exceed it (client fails open on timeout, letting a duplicate through), added timing/outcome logging to the duplicate check on both client and cloud API, Dashboard now shows the registered count instantly on open with cloud-sourced fields filling in asynchronously
