@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import json
+import re
 import time
 import itertools
 import logging
@@ -2145,78 +2146,93 @@ class Api(QObject):
 
     @pyqtSlot(result="QVariant")
     def admin_export_env(self) -> dict:
-        """Write the current live settings (config.* + SQLite overrides) out to
+        """Update the current live settings (config.* + SQLite overrides) in
         the .env file next to the exe, so this station's tuned configuration
         can be copied to other stations instead of re-entering it by hand.
 
+        Edits KEY=value lines in place, preserving every comment, blank
+        line, and any setting this export doesn't know about — the first
+        version of this method regenerated the whole file from a fixed
+        template, which silently stripped all documentation comments and
+        dropped settings absent from that template (found during
+        2026-09-02 event prep when a real, hand-tuned .env's comments
+        vanished after a single click). Only falls back to writing a
+        fresh minimal file when .env doesn't exist yet at all.
+
         Any existing .env is backed up first (.env.bak-<timestamp>), never
-        overwritten silently. CLOUD_API_KEY is intentionally omitted --
-        distributing a shared API key via a copied .env is a deliberate
-        admin decision, not a side effect of a settings export.
+        overwritten silently. CLOUD_API_KEY is intentionally left
+        untouched — distributing a shared API key via a copied .env is a
+        deliberate admin decision, not a side effect of a settings export.
         """
         env_path = EXEC_ROOT / ".env"
-        lines = [
-            "# Exported from TrackAttendance admin panel — reflects this station's",
-            "# live settings (env + any in-app overrides) at export time.",
-            f"# Exported: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            "",
-            "# Cloud API Configuration",
-            f"CLOUD_API_URL={config.CLOUD_API_URL}",
-            "# CLOUD_API_KEY intentionally not exported — set it per station",
-            "# (Admin Panel > License Key, or paste it into this file manually).",
-            "",
-            f"CLOUD_READ_ONLY={config.CLOUD_READ_ONLY}",
-            f"LIVE_SYNC_ENABLED={config.LIVE_SYNC_ENABLED}",
-            f"LIVE_SYNC_TIMEOUT_SECONDS={config.LIVE_SYNC_TIMEOUT_SECONDS}",
-            f"LIVE_SYNC_DUP_WINDOW_MINUTES={config.LIVE_SYNC_DUP_WINDOW_MINUTES}",
-            f"CLOUD_SYNC_BATCH_SIZE={config.CLOUD_SYNC_BATCH_SIZE}",
-            "",
-            f"CONNECTION_CHECK_INTERVAL_SECONDS={config.CONNECTION_CHECK_INTERVAL_MS / 1000}",
-            f"CONNECTION_CHECK_TIMEOUT_SECONDS={config.CONNECTION_CHECK_TIMEOUT_SECONDS}",
-            "",
-            f"AUTO_SYNC_ENABLED={config.AUTO_SYNC_ENABLED}",
-            f"AUTO_SYNC_IDLE_SECONDS={config.AUTO_SYNC_IDLE_SECONDS}",
-            f"AUTO_SYNC_CHECK_INTERVAL_SECONDS={config.AUTO_SYNC_CHECK_INTERVAL_SECONDS}",
-            f"AUTO_SYNC_MIN_PENDING_SCANS={config.AUTO_SYNC_MIN_PENDING_SCANS}",
-            "",
-            f"SHOW_FULL_SCREEN={config.SHOW_FULL_SCREEN}",
-            f"ENABLE_FADE_ANIMATION={config.ENABLE_FADE_ANIMATION}",
-            f"SHOW_PARTY_BACKGROUND={config.SHOW_PARTY_BACKGROUND}",
-            f"CONFETTI_ENABLED={config.CONFETTI_ENABLED}",
-            f"AUTO_EXPORT_ON_SHUTDOWN={config.AUTO_EXPORT_ON_SHUTDOWN}",
-            "",
-            f"DUPLICATE_BADGE_DETECTION_ENABLED={config.DUPLICATE_BADGE_DETECTION_ENABLED}",
-            f"DUPLICATE_BADGE_TIME_WINDOW_SECONDS={config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS}",
-            f"DUPLICATE_BADGE_ACTION={config.DUPLICATE_BADGE_ACTION}",
-            f"DUPLICATE_BADGE_ALERT_DURATION_MS={config.DUPLICATE_BADGE_ALERT_DURATION_MS}",
-            f"SCAN_FEEDBACK_DURATION_MS={config.SCAN_FEEDBACK_DURATION_MS}",
-            "",
-            f"VOICE_ENABLED={self._voice_player.enabled if self._voice_player else config.VOICE_ENABLED}",
-            f"VOICE_VOLUME={self._voice_player._volume if self._voice_player else config.VOICE_VOLUME}",
-            "",
-            f"ENABLE_CAMERA_DETECTION={config.ENABLE_CAMERA_DETECTION}",
-            f"CAMERA_DEVICE_ID={config.CAMERA_DEVICE_ID}",
-            f"CAMERA_SHOW_OVERLAY={config.CAMERA_SHOW_OVERLAY}",
-            f"CAMERA_GREETING_COOLDOWN_SECONDS={config.CAMERA_GREETING_COOLDOWN_SECONDS}",
-            f"CAMERA_SCAN_BUSY_SECONDS={config.CAMERA_SCAN_BUSY_SECONDS}",
-            f"CAMERA_MIN_SIZE_PCT={config.CAMERA_MIN_SIZE_PCT}",
-            f"CAMERA_ABSENCE_THRESHOLD_SECONDS={config.CAMERA_ABSENCE_THRESHOLD_SECONDS}",
-            f"CAMERA_CONFIRM_FRAMES={config.CAMERA_CONFIRM_FRAMES}",
-            f"CAMERA_HAAR_MIN_NEIGHBORS={config.CAMERA_HAAR_MIN_NEIGHBORS}",
-            f"CAMERA_RESOLUTION_WIDTH={config.CAMERA_RESOLUTION_WIDTH}",
-            f"CAMERA_RESOLUTION_HEIGHT={config.CAMERA_RESOLUTION_HEIGHT}",
-            "",
-            f"LOGGING_LEVEL={config.LOGGING_LEVEL}",
-            f"LOGGING_CONSOLE={config.LOGGING_CONSOLE}",
-            "",
-            f"ADMIN_PIN={config.ADMIN_PIN}",
-        ]
+        values = {
+            "CLOUD_API_URL": config.CLOUD_API_URL,
+            "CLOUD_READ_ONLY": config.CLOUD_READ_ONLY,
+            "LIVE_SYNC_ENABLED": config.LIVE_SYNC_ENABLED,
+            "LIVE_SYNC_TIMEOUT_SECONDS": config.LIVE_SYNC_TIMEOUT_SECONDS,
+            "LIVE_SYNC_DUP_WINDOW_MINUTES": config.LIVE_SYNC_DUP_WINDOW_MINUTES,
+            "CLOUD_SYNC_BATCH_SIZE": config.CLOUD_SYNC_BATCH_SIZE,
+            "CONNECTION_CHECK_INTERVAL_SECONDS": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
+            "CONNECTION_CHECK_TIMEOUT_SECONDS": config.CONNECTION_CHECK_TIMEOUT_SECONDS,
+            "AUTO_SYNC_ENABLED": config.AUTO_SYNC_ENABLED,
+            "AUTO_SYNC_IDLE_SECONDS": config.AUTO_SYNC_IDLE_SECONDS,
+            "AUTO_SYNC_CHECK_INTERVAL_SECONDS": config.AUTO_SYNC_CHECK_INTERVAL_SECONDS,
+            "AUTO_SYNC_MIN_PENDING_SCANS": config.AUTO_SYNC_MIN_PENDING_SCANS,
+            "SHOW_FULL_SCREEN": config.SHOW_FULL_SCREEN,
+            "ENABLE_FADE_ANIMATION": config.ENABLE_FADE_ANIMATION,
+            "SHOW_PARTY_BACKGROUND": config.SHOW_PARTY_BACKGROUND,
+            "CONFETTI_ENABLED": config.CONFETTI_ENABLED,
+            "AUTO_EXPORT_ON_SHUTDOWN": config.AUTO_EXPORT_ON_SHUTDOWN,
+            "DUPLICATE_BADGE_DETECTION_ENABLED": config.DUPLICATE_BADGE_DETECTION_ENABLED,
+            "DUPLICATE_BADGE_TIME_WINDOW_SECONDS": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
+            "DUPLICATE_BADGE_ACTION": config.DUPLICATE_BADGE_ACTION,
+            "DUPLICATE_BADGE_ALERT_DURATION_MS": config.DUPLICATE_BADGE_ALERT_DURATION_MS,
+            "SCAN_FEEDBACK_DURATION_MS": config.SCAN_FEEDBACK_DURATION_MS,
+            "VOICE_ENABLED": self._voice_player.enabled if self._voice_player else config.VOICE_ENABLED,
+            "VOICE_VOLUME": self._voice_player._volume if self._voice_player else config.VOICE_VOLUME,
+            "ENABLE_CAMERA_DETECTION": config.ENABLE_CAMERA_DETECTION,
+            "CAMERA_DEVICE_ID": config.CAMERA_DEVICE_ID,
+            "CAMERA_SHOW_OVERLAY": config.CAMERA_SHOW_OVERLAY,
+            "CAMERA_GREETING_COOLDOWN_SECONDS": config.CAMERA_GREETING_COOLDOWN_SECONDS,
+            "CAMERA_SCAN_BUSY_SECONDS": config.CAMERA_SCAN_BUSY_SECONDS,
+            "CAMERA_MIN_SIZE_PCT": config.CAMERA_MIN_SIZE_PCT,
+            "CAMERA_ABSENCE_THRESHOLD_SECONDS": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
+            "CAMERA_CONFIRM_FRAMES": config.CAMERA_CONFIRM_FRAMES,
+            "CAMERA_HAAR_MIN_NEIGHBORS": config.CAMERA_HAAR_MIN_NEIGHBORS,
+            "CAMERA_RESOLUTION_WIDTH": config.CAMERA_RESOLUTION_WIDTH,
+            "CAMERA_RESOLUTION_HEIGHT": config.CAMERA_RESOLUTION_HEIGHT,
+            "LOGGING_LEVEL": config.LOGGING_LEVEL,
+            "LOGGING_CONSOLE": config.LOGGING_CONSOLE,
+            "ADMIN_PIN": config.ADMIN_PIN,
+        }
         try:
             if env_path.exists():
+                original = env_path.read_text(encoding="utf-8")
                 backup_path = env_path.with_name(f".env.bak-{time.strftime('%Y%m%d-%H%M%S')}")
-                backup_path.write_text(env_path.read_text(encoding="utf-8"), encoding="utf-8")
-            env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            LOGGER.info("[Admin] Exported live settings to %s", env_path)
+                backup_path.write_text(original, encoding="utf-8")
+
+                remaining = dict(values)
+                out_lines = []
+                for line in original.splitlines():
+                    m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)=", line)
+                    if m and m.group(1) in remaining:
+                        key = m.group(1)
+                        out_lines.append(f"{key}={remaining.pop(key)}")
+                    else:
+                        out_lines.append(line)
+                # Any known setting not already present in the file (e.g. a
+                # freshly created .env missing a key) is appended once,
+                # rather than silently dropped.
+                if remaining:
+                    out_lines.append("")
+                    out_lines.extend(f"{key}={val}" for key, val in remaining.items())
+                env_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+            else:
+                # No .env exists yet — write a minimal one. This is the
+                # only path with no prior comments/layout to preserve.
+                lines = [f"{key}={val}" for key, val in values.items()]
+                env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            LOGGER.info("[Admin] Updated live settings in %s", env_path)
             return {"ok": True, "path": str(env_path)}
         except Exception as exc:
             LOGGER.warning("[Admin] Failed to export .env: %s", exc)
