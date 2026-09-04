@@ -2,6 +2,20 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.8 (2026-09-04)
+
+### Fixed
+
+- **Barcode scanner double-fires corrupted badge values into concatenated garbage** (e.g. `108670108670`, a real 6-digit badge scanned twice back-to-back). `submitScan()` only cleared the barcode input field after the Python bridge call's callback fired; when that call took noticeably longer than usual (Live Sync's cross-station check, since retired below), a second scanner trigger during the wait landed on the still-full field and appended instead of starting fresh. Found via post-event report review: ~30 scans across 2 of 10 stations at the 2026-09-03 event were affected (all recovered cleanly — each had an already-correctly-recorded twin scan, so no attendee was actually missed). Fixed by clearing the field immediately on Enter, before the bridge call.
+
+### Removed
+
+- **Live Sync's real-time cross-station duplicate check and immediate per-scan upload.** This ran a synchronous cloud round-trip inside `register_scan()`'s hot path, gating the scan before it was recorded — violating offline-first (the local write should never wait on network reachability), and the direct cause of the barcode double-fire corruption above when the round-trip was slow. Removed the check, the fire-and-forget immediate upload, the admin-panel toggle, and all associated `LIVE_SYNC_*` config/settings. Local same-station duplicate detection (SQLite-only, no network) is unaffected.
+
+### Added
+
+- **"Deduplicated Attendance" sheet in the Excel export**, replacing what Live Sync's real-time block used to catch. First-scan-wins per employee, with every cross-station duplicate flagged and its full station history shown — built from the same data "Not Yet Scanned" uses, so the two sheets can't drift on what counts as "scanned". Cross-station duplicates were rare at the 2026-09-03 event (10 out of ~1,500 scans) and are now caught cleanly after the fact instead of blocking every scan on a network call to catch them a few seconds sooner.
+
 ## v2.1.7 (2026-09-02)
 
 ### Fixed
