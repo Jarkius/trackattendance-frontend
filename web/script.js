@@ -2254,6 +2254,8 @@ ${destination}` : message;
     const adminVoiceToggle = document.getElementById('admin-voice-toggle');
     const adminVolumeSlider = document.getElementById('admin-volume-slider');
     const adminVolumeValue = document.getElementById('admin-volume-value');
+    const adminVolumeStatus = document.getElementById('admin-volume-status');
+    const adminVolumeStatusDefaultText = adminVolumeStatus ? adminVolumeStatus.textContent : '';
     const adminCameraSection = document.getElementById('admin-camera-section');
     const adminCameraSelect = document.getElementById('admin-camera-select');
     const adminCameraRefreshBtn = document.getElementById('admin-camera-refresh-btn');
@@ -2664,7 +2666,16 @@ ${destination}` : message;
             updateSliderDefaultState(adminVolumeSlider);
             queueOrRun((bridge) => {
                 if (bridge.admin_set_voice_volume) {
-                    bridge.admin_set_voice_volume(pct / 100.0, () => {});
+                    bridge.admin_set_voice_volume(pct / 100.0, (result) => {
+                        if (!adminVolumeStatus) return;
+                        if (result?.system_volume_ok === false) {
+                            adminVolumeStatus.textContent = 'App volume set, but could not adjust Windows system volume';
+                            adminVolumeStatus.style.color = '#ff9800';
+                        } else {
+                            adminVolumeStatus.textContent = adminVolumeStatusDefaultText;
+                            adminVolumeStatus.style.color = '#999';
+                        }
+                    });
                 }
             });
         });
@@ -2821,35 +2832,6 @@ ${destination}` : message;
                         } else {
                             adminExportEnvStatus.textContent = result?.message || 'Failed to save .env';
                             adminExportEnvStatus.style.color = '#ff5252';
-                        }
-                    }
-                });
-            });
-        });
-    }
-
-    // Max the Windows system (master speaker) volume — a different knob
-    // from the app's own Volume slider above, which can never exceed it
-    const adminMaxSystemVolumeBtn = document.getElementById('admin-max-system-volume-btn');
-    const adminMaxSystemVolumeStatus = document.getElementById('admin-max-system-volume-status');
-    if (adminMaxSystemVolumeBtn) {
-        adminMaxSystemVolumeBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            adminMaxSystemVolumeBtn.textContent = 'Setting...';
-            adminMaxSystemVolumeBtn.disabled = true;
-            queueOrRun((bridge) => {
-                if (!bridge.admin_max_system_volume) return;
-                bridge.admin_max_system_volume((result) => {
-                    adminMaxSystemVolumeBtn.textContent = 'Max System Volume';
-                    adminMaxSystemVolumeBtn.disabled = false;
-                    if (adminMaxSystemVolumeStatus) {
-                        if (result?.ok) {
-                            const prevPct = Math.round((result.previous_volume ?? 1) * 100);
-                            adminMaxSystemVolumeStatus.textContent = `Done — was ${prevPct}%, now 100%`;
-                            adminMaxSystemVolumeStatus.style.color = '#86bc25';
-                        } else {
-                            adminMaxSystemVolumeStatus.textContent = result?.message || 'Failed to set system volume';
-                            adminMaxSystemVolumeStatus.style.color = '#ff5252';
                         }
                     }
                 });

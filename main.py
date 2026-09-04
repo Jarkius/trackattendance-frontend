@@ -1638,7 +1638,16 @@ class Api(QObject):
 
     @pyqtSlot(float, result="QVariant")
     def admin_set_voice_volume(self, volume: float) -> dict:
-        """Set voice volume 0.0-1.0. Persisted across restarts."""
+        """Set voice volume 0.0-1.0. Persisted across restarts.
+
+        Drives BOTH this app's own gain (QAudioOutput.setVolume(), 0.0-1.0
+        of whatever the OS currently allows) AND the Windows system volume
+        directly (system_volume.set_system_volume_scalar()). The app-level
+        gain alone used to be silently capped by whatever the OS volume
+        happened to be left at -- found live: a station's Windows volume
+        was sitting at 36%, so the slider's 100% still sounded quiet. The
+        slider is now the single real "how loud is this station" control.
+        """
         if not self._voice_player:
             return {"ok": False, "message": "Voice not configured"}
         volume = max(0.0, min(1.0, volume))
@@ -1651,23 +1660,14 @@ class Api(QObject):
                 gp._volume = volume
                 gp._audio_output.setVolume(volume)
         self._save_setting("voice_volume", str(round(volume, 2)))
-        LOGGER.info("[Admin] Voice volume set to %.0f%%", volume * 100)
-        return {"ok": True, "volume": volume}
 
-    @pyqtSlot(result="QVariant")
-    def admin_max_system_volume(self) -> dict:
-        """Set Windows' master speaker volume to 100% and unmute it.
-
-        Different knob from admin_set_voice_volume() above: that one is this
-        app's own relative gain (0.0-1.0 of whatever the OS allows) via
-        QAudioOutput.setVolume() -- it can never exceed the Windows system
-        volume. If a station's Windows volume was left low (found: one
-        station shipped at 36%), our app's own 100% still sounds quiet no
-        matter what the slider says. This raises the OS-level ceiling
-        itself so the app's slider actually has full range to work with.
-        """
         import system_volume
-        return system_volume.set_system_volume_max()
+        system_result = system_volume.set_system_volume_scalar(volume)
+        if not system_result.get("ok"):
+            LOGGER.warning("[Admin] System volume not updated: %s", system_result.get("message"))
+
+        LOGGER.info("[Admin] Voice volume set to %.0f%%", volume * 100)
+        return {"ok": True, "volume": volume, "system_volume_ok": system_result.get("ok", False)}
 
     def _save_setting(self, key: str, value: str) -> None:
         """Persist a setting to the local SQLite key-value store."""
@@ -1719,6 +1719,13 @@ class Api(QObject):
                 vol = max(0.0, min(1.0, float(v)))
                 self._voice_player._volume = vol
                 self._voice_player._audio_output.setVolume(vol)
+                # Restore the OS system volume to match on startup too --
+                # see admin_set_voice_volume() for why the slider drives
+                # both. Without this, a fresh launch would apply the
+                # persisted gain on top of whatever the OS volume happens
+                # to currently be, not what the slider was last set to.
+                import system_volume
+                system_volume.set_system_volume_scalar(vol)
                 count += 1
             except ValueError:
                 pass
