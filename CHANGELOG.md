@@ -2,6 +2,12 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.9 (2026-09-04)
+
+### Added
+
+- **"Max System Volume" button in Admin Panel → Settings.** Reported: at 100% on the app's own Volume slider, a station was still too quiet — had to raise it manually. Root cause: the app's slider is a relative gain (`QAudioOutput.setVolume()`, 0.0-1.0 of whatever the OS currently allows) — it can never exceed Windows' own master volume, and that station's Windows volume was sitting at 36%. The new button sets Windows' own master speaker volume to 100% and unmutes it (via `pycaw`/Core Audio) so the app's slider has full range to actually work with.
+
 ## v2.1.8 (2026-09-04)
 
 ### Fixed
