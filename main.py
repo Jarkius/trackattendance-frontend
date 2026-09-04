@@ -1654,6 +1654,21 @@ class Api(QObject):
         LOGGER.info("[Admin] Voice volume set to %.0f%%", volume * 100)
         return {"ok": True, "volume": volume}
 
+    @pyqtSlot(result="QVariant")
+    def admin_max_system_volume(self) -> dict:
+        """Set Windows' master speaker volume to 100% and unmute it.
+
+        Different knob from admin_set_voice_volume() above: that one is this
+        app's own relative gain (0.0-1.0 of whatever the OS allows) via
+        QAudioOutput.setVolume() -- it can never exceed the Windows system
+        volume. If a station's Windows volume was left low (found: one
+        station shipped at 36%), our app's own 100% still sounds quiet no
+        matter what the slider says. This raises the OS-level ceiling
+        itself so the app's slider actually has full range to work with.
+        """
+        import system_volume
+        return system_volume.set_system_volume_max()
+
     def _save_setting(self, key: str, value: str) -> None:
         """Persist a setting to the local SQLite key-value store."""
         try:
