@@ -78,31 +78,35 @@ result = sync_service.sync_pending_scans()
 result = sync_service.sync_pending_scans(sync_all=True, max_batches=50)
 ```
 
-## Live Sync (Real-Time Cross-Station Duplicate Check)
+## Live Sync — Retired
 
-Live Sync is a separate mechanism from batch/auto-sync above — it runs **synchronously, per scan**, not on the idle-triggered batch schedule.
+Live Sync (real-time cross-station duplicate check + immediate per-scan
+upload) was removed after the 2026-09-03 event. It ran the cross-station
+duplicate check **synchronously**, gating `register_scan()` on a cloud
+round-trip before the scan was recorded — offline-first means the local
+write should never wait on network reachability, and this was the one
+place it did.
 
-**Configuration**:
-```ini
-LIVE_SYNC_ENABLED=False           # off by default
-LIVE_SYNC_TIMEOUT_SECONDS=4.0     # 0.5-10.0
-LIVE_SYNC_DUP_WINDOW_MINUTES=5    # 1-1440
-```
+At the event, 2 of 10 stations had it enabled. When the cloud round-trip
+was slow, a barcode scanner double-fire during that wait landed on the
+not-yet-cleared input field and concatenated into garbage badge values
+(e.g. `108670108670`, a real badge scanned twice back-to-back). ~30 scans
+across those two stations were affected; all were recovered from the
+already-correctly-recorded twin scan, so no attendee was actually missed
+— but the blocking wait was the direct cause of the corruption, for a
+duplicate-catch rate that was low to begin with (10 real cross-station
+duplicates out of ~1,500 scans that event, all cleanly resolved after the
+fact).
 
-When enabled (and `CLOUD_READ_ONLY=False`), every `register_scan()` call with a **matched employee** does two things:
-
-1. **Duplicate check (blocking, gates the scan)** — `GET /v1/scans/check-duplicate` asks the cloud API whether this badge was scanned at a *different* station within `LIVE_SYNC_DUP_WINDOW_MINUTES`. If `DUPLICATE_BADGE_ACTION=block`, a hit rejects the scan before it's recorded locally. This call runs off the Qt main thread via `qt_bridge.call_without_freezing_ui()` (see [ARCHITECTURE.md](ARCHITECTURE.md)) so the UI doesn't freeze while waiting, but the app still waits for the result before continuing — this is a deliberate design choice; see the alternative considered below. **Skipped entirely when there's no employee match** (e.g. a manually-typed name/lastname that doesn't exist in the roster) — with no matched employee there's no real identity to cross-check, and the scan value may just be dead-end search text rather than a real badge/legacy ID, so sending it to the cloud is both meaningless and an avoidable delay before the "not matched" response reaches the user.
-2. **Immediate upload (fire-and-forget, does not block)** — after the scan is written to local SQLite, it's handed to the shared `BackgroundSyncCoordinator`'s worker thread for an immediate `POST /v1/scans/batch` upload. This is **not** queued for idle time — the coordinator's worker thread is already running continuously in the background, so the upload fires within moments of the scan, not after `AUTO_SYNC_IDLE_SECONDS` like the batch path above. If the coordinator's bounded queue (max 8 jobs) is full, the enqueue is skipped and the scan simply falls back to the normal idle-triggered batch sync — no scan is ever lost, only its real-time visibility is delayed.
-
-**Fail-open**: if the duplicate-check call errors (timeout, network error, HTTP error, rate limit) it returns "not a duplicate" rather than blocking the scan — a Live Sync outage degrades cross-station duplicate detection, it never stops scanning.
-
-### Traffic and rate-limit impact
-
-Both calls above count against the cloud API's per-IP rate limiter (`RATE_LIMIT_MAX`, default 60 requests/minute — see `trackattendance-api`'s `.env`). With Live Sync on, **each scan is 2 API calls**, on top of periodic connection-health-check/heartbeat traffic (~1 request/minute/station). At multi-station events where all stations share one office egress IP, this adds up fast — e.g. 10 stations scanning once every 10 seconds is already 120 calls/minute, double the default limit. Consider raising `RATE_LIMIT_MAX` on the cloud API before a high-traffic multi-station event; a 429 fails open (see above) rather than freezing the app, but it does mean cross-station duplicate catching becomes less reliable exactly when traffic is highest.
-
-### Alternative considered: fully-async duplicate check
-
-An alternative design would accept the scan immediately and only retroactively flag a cross-station duplicate after the check comes back, removing all per-scan wait time. This was considered and rejected for the current implementation: it would mean `DUPLICATE_BADGE_ACTION=block` could no longer truly block a cross-station duplicate before it's recorded — it would become closer to `warn`-after-the-fact for the cross-station case specifically. The current implementation keeps today's blocking semantics and instead moves the *wait* off the UI thread (see [ARCHITECTURE.md § Threading Model](ARCHITECTURE.md#55-threading-model--keeping-the-qt-main-thread-unblocked)), rather than changing what gets blocked.
+**Replacement**: cross-station duplicates are now caught entirely after
+the fact, in the Excel export's "Deduplicated Attendance" sheet (see
+`DashboardService.export_to_excel()` in `dashboard.py`) — first-scan-wins
+per employee, with every cross-station duplicate flagged and its full
+station history shown. No network call sits in the scan path anymore;
+local same-station duplicate detection (a plain SQLite query, no network)
+is unaffected and still runs synchronously. Batch/auto-sync above already
+gets every scan to the cloud on its normal cadence, so the data cross-
+station dedup needs was never blocking on Live Sync in the first place.
 
 ## Business Unit Sync
 

@@ -49,20 +49,6 @@ class AttendanceService:
         else:
             self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
-        self._sync_service = None  # Set via set_sync_service() for Live Sync
-        self._sync_coordinator = None  # Set via set_sync_service() for Live Sync
-
-    def set_sync_service(self, sync_service, coordinator=None) -> None:
-        """Attach SyncService for Live Sync cloud dup check + immediate sync.
-
-        coordinator: shared BackgroundSyncCoordinator (from main.py) used to
-        enqueue Live Sync's fire-and-forget upload instead of spawning a raw
-        thread per scan. If not supplied, Live Sync immediate-sync is disabled
-        (register_scan() checks for this) rather than falling back to the old
-        per-scan threading.Thread pattern.
-        """
-        self._sync_service = sync_service
-        self._sync_coordinator = coordinator
 
     def employees_loaded(self) -> bool:
         return self._db.employees_loaded()
@@ -535,76 +521,26 @@ class AttendanceService:
                     "badgeId": sanitized,
                     "fullName": employee.full_name if employee else "Unknown",
                 }
-        # Cross-station duplicate check via cloud (Live Sync, #54)
-        # Skipped when there's no employee match: the check exists to catch
-        # the same EMPLOYEE scanning at two stations, so with no employee
-        # there's no real identity to check, and `sanitized` may just be
-        # partial name text from a dead-end manual lookup rather than an
-        # actual badge/legacy ID -- sending that to the cloud is both
-        # meaningless and an avoidable network round-trip delaying the
-        # "not matched" response back to the user.
-        cross_station_dup = False
-        cross_station_info = None
-        if (config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
-                and not is_duplicate and self._sync_service and employee):
-            from qt_bridge import call_without_freezing_ui
-            sync_service = self._sync_service
-            station_name = self.station_name
-            cloud_result = call_without_freezing_ui(lambda: sync_service.check_duplicate_cloud(
-                badge_id=sanitized,
-                station_name=station_name,
-                window_minutes=config.LIVE_SYNC_DUP_WINDOW_MINUTES,
-                timeout=config.LIVE_SYNC_TIMEOUT_SECONDS,
-            ))
-            if cloud_result.get("duplicate"):
-                cross_station_dup = True
-                cross_station_info = cloud_result
-                if config.DUPLICATE_BADGE_ACTION == 'block':
-                    other_station = cloud_result.get("station_name", "another station")
-                    return {
-                        "ok": False,
-                        "status": "cross_station_duplicate_rejected",
-                        "message": f"Already scanned at {other_station}",
-                        "is_duplicate": True,
-                        "is_cross_station": True,
-                        "other_station": other_station,
-                        "badgeId": sanitized,
-                        "fullName": employee.full_name if employee else "Unknown",
-                    }
-
+        # Cross-station duplicates are intentionally NOT checked or blocked
+        # in real time here (removed after the 2026-09-03 event): the check
+        # required a synchronous cloud round-trip inside this offline-first
+        # hot path, and when the network was slow, a barcode double-fire
+        # during that wait landed on the not-yet-cleared input field and
+        # concatenated into garbage badge values (e.g. "108670108670").
+        # Blocking also provided little real benefit — cross-station
+        # duplicates were rare (10 out of ~1,500 scans at the event) and are
+        # already caught cleanly after the fact via the cross-station dedup
+        # sheet in DashboardService.export_to_excel(). Offline-first means
+        # the local write should never wait on network reachability; local
+        # same-station duplicate detection above (SQLite-only, no network)
+        # is unaffected and still runs synchronously.
         timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         self._db.record_scan(sanitized, self.station_name, employee, timestamp, scan_source=scan_source)
-
-        # Immediate sync to cloud (Live Sync) — fire-and-forget, via the shared
-        # BackgroundSyncCoordinator worker thread instead of a per-scan
-        # threading.Thread. record_scan() above has already committed the scan
-        # to SQLite (offline-first: the local write always happens first,
-        # regardless of whether this enqueue succeeds). sync_single_scan()
-        # itself performs network I/O only — it never touches self._db — so
-        # it's safe to run on the coordinator's worker thread. If the bounded
-        # queue is full or the coordinator is unavailable/paused, the scan
-        # simply stays 'pending' in SQLite and is picked up by the next normal
-        # batch sync — no scan is ever lost, only its immediate-sync latency.
-        if (config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
-                and self._sync_service and self._sync_coordinator):
-            scan_to_sync = self._db.fetch_last_pending_scan()
-            if scan_to_sync:
-                sync_service = self._sync_service
-                station = self.station_name  # resolved on the main thread, not the worker
-                job_id = self._sync_coordinator.submit(
-                    lambda: sync_service.sync_single_scan(scan_to_sync, station)
-                )
-                if job_id is None:
-                    LOGGER.warning(
-                        "Live Sync: coordinator rejected immediate-sync job for badge=%s "
-                        "(queue full/paused/shutdown) — will be picked up by next batch sync",
-                        scan_to_sync.badge_id,
-                    )
 
         history = self._db.get_recent_scans()
         # Only flag as duplicate for UI alert if action is 'warn' (not 'silent')
         # 'silent' mode accepts duplicates without any UI alert
-        show_duplicate_alert = (is_duplicate or cross_station_dup) and config.DUPLICATE_BADGE_ACTION == 'warn'
+        show_duplicate_alert = is_duplicate and config.DUPLICATE_BADGE_ACTION == 'warn'
 
         payload = {
             "ok": True,
@@ -616,8 +552,6 @@ class AttendanceService:
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
             "is_duplicate": show_duplicate_alert,  # Only true for 'warn' mode
-            "is_cross_station": cross_station_dup and config.DUPLICATE_BADGE_ACTION == 'warn',
-            "cross_station_info": cross_station_info if cross_station_dup else None,
         }
         return payload
 

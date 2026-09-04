@@ -160,11 +160,17 @@ curl -X POST https://trackattendance-api-969370105809.asia-southeast1.run.app/v1
 
 ---
 
-### 5. Check Cross-Station Duplicate (Live Sync)
+### 5. Check Cross-Station Duplicate (retired client-side, endpoint may still exist server-side)
 
 **Endpoint**: `GET /v1/scans/check-duplicate`
 
-**Purpose**: Check whether a badge was scanned at a *different* station within a recent time window. Used by the desktop client's Live Sync feature (`LIVE_SYNC_ENABLED=True`) to catch duplicate scans across stations in real time, in addition to the local (same-station) duplicate check. See [SYNC.md](../docs/SYNC.md#live-sync-real-time-cross-station-duplicate-check) for the full client-side flow.
+**Status**: the desktop client no longer calls this endpoint — Live Sync
+(the feature that used it) was retired after the 2026-09-03 event; see
+[SYNC.md § Live Sync — Retired](../docs/SYNC.md#live-sync--retired) for
+why. This section is kept for reference in case the endpoint is still
+live on `trackattendance-api` and another integration calls it directly.
+Cross-station duplicates are now caught after the fact via the export's
+"Deduplicated Attendance" sheet instead of a real-time, blocking check.
 
 **Authentication**: Required (Bearer token)
 
@@ -179,7 +185,7 @@ Authorization: Bearer <API_KEY>
 |-----------|------|-------------|
 | `badge_id` | string | Badge ID to check |
 | `station_name` | string | Station making the request (excluded from the match so a station never flags its own scan) |
-| `window_minutes` | integer | How far back to check, in minutes (client default: `LIVE_SYNC_DUP_WINDOW_MINUTES`, 5) |
+| `window_minutes` | integer | How far back to check, in minutes |
 
 **Response** (Success - HTTP 200):
 ```json
@@ -198,17 +204,13 @@ Authorization: Bearer <API_KEY>
 | `station_name` | string | Which other station the duplicate was found at (only present if `duplicate: true`) |
 | `scanned_at` | string (ISO 8601) | When the duplicate scan occurred (only present if `duplicate: true`) |
 
-**Client behavior on error/timeout/rate-limit**: the client fails open — treats the response as "not a duplicate" rather than blocking the scan. A Live Sync outage degrades cross-station duplicate detection; it never stops scanning.
-
-**Timeout**: `LIVE_SYNC_TIMEOUT_SECONDS` (client default: 4 seconds — raised from 2 in v2.1.2 after live testing showed a cold-path request take ~2.4s, which exceeded the old timeout and caused the client to fail open, silently missing a real cross-station duplicate)
-
 ---
 
 ## Rate Limiting
 
 All endpoints are rate-limited per client IP (`RATE_LIMIT_MAX`, default **60 requests/minute**, configured on the cloud API's own environment — not in the desktop client's `config.py`). Exceeding the limit returns `429 Too Many Requests`.
 
-This matters most when several kiosk stations share one office egress IP: with `LIVE_SYNC_ENABLED=True`, **each scan is 2 API calls** (the duplicate check plus the immediate upload), on top of periodic connection-health-check/heartbeat traffic (~1 request/minute/station). At a busy multi-station event this can exceed the default limit quickly — e.g. 10 stations scanning once every 10 seconds is already 120 calls/minute. Raise `RATE_LIMIT_MAX` on the cloud API ahead of a high-traffic event rather than during one. A 429 on the duplicate-check call fails open (see above) rather than freezing the client.
+This matters most when several kiosk stations share one office egress IP, since periodic connection-health-check/heartbeat traffic (~1 request/minute/station) plus normal batch-sync uploads add up across stations. Raise `RATE_LIMIT_MAX` on the cloud API ahead of a high-traffic event rather than during one.
 
 ---
 

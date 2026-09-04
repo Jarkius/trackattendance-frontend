@@ -380,6 +380,7 @@ class TestDashboardExport(unittest.TestCase):
 
         self.db.bulk_insert_employees([
             EmployeeRecord("TEST001", "Alice", "IT", "Engineer"),
+            EmployeeRecord("TEST002", "Bob", "Sales", "Associate"),
         ])
 
         self.export_dir = Path(self.temp_dir) / "exports"
@@ -427,6 +428,96 @@ class TestDashboardExport(unittest.TestCase):
         ws = wb["Not Yet Scanned"]
         not_scanned_ids = [row[0] for row in ws.iter_rows(min_row=2, max_row=ws.max_row - 1, values_only=True)]
         self.assertNotIn("TEST001", not_scanned_ids)
+
+    @patch('dashboard.requests.get')
+    def test_deduplicated_attendance_flags_cross_station_scans(self, mock_get):
+        """Regression coverage for the "Deduplicated Attendance" sheet added
+        after Live Sync's real-time cross-station block was retired
+        (2026-09-03 event): cross-station duplicates are now caught here,
+        after the fact, instead of blocking the scan in register_scan().
+
+        TEST001 scans at two different stations -- should appear ONCE, with
+        Cross-Station Duplicate=Yes and both stations listed. TEST002 scans
+        once -- should appear once with Cross-Station Duplicate=No."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "scans": [
+                {
+                    "badge_id": "TEST001", "legacy_id": "TEST001",
+                    "station_name": "StationA", "scanned_at": "2026-01-01T08:00:00Z",
+                    "matched": True, "scan_source": "badge",
+                },
+                {
+                    "badge_id": "TEST001", "legacy_id": "TEST001",
+                    "station_name": "StationB", "scanned_at": "2026-01-01T08:05:00Z",
+                    "matched": True, "scan_source": "badge",
+                },
+                {
+                    "badge_id": "TEST002", "legacy_id": "TEST002",
+                    "station_name": "StationA", "scanned_at": "2026-01-01T09:00:00Z",
+                    "matched": True, "scan_source": "badge",
+                },
+            ],
+        }
+        mock_get.return_value = mock_response
+
+        result = self.service.export_to_excel()
+        self.assertTrue(result["ok"], result.get("message"))
+
+        from openpyxl import load_workbook
+        wb = load_workbook(result["file_path"])
+        self.assertIn("Deduplicated Attendance", wb.sheetnames)
+        ws = wb["Deduplicated Attendance"]
+
+        headers = [c.value for c in ws[1]]
+        rows = {
+            row[headers.index("Legacy ID")]: dict(zip(headers, row))
+            for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True)
+            if row[headers.index("Legacy ID")] in ("TEST001", "TEST002")
+        }
+
+        self.assertEqual(len(rows), 2, "each employee should appear exactly once")
+
+        dup = rows["TEST001"]
+        self.assertEqual(dup["Cross-Station Duplicate"], "Yes")
+        self.assertEqual(dup["Total Scans (any station)"], 2)
+        self.assertEqual(dup["All Stations Scanned"], "StationA, StationB")
+        self.assertEqual(dup["First Station"], "StationA")  # earliest scan wins
+
+        not_dup = rows["TEST002"]
+        self.assertEqual(not_dup["Cross-Station Duplicate"], "No")
+        self.assertEqual(not_dup["Total Scans (any station)"], 1)
+
+    @patch('dashboard.requests.get')
+    def test_deduplicated_attendance_excludes_unmatched_scans(self, mock_get):
+        """A scan with no legacy_id match (garbled/unrecognized badge) must
+        not appear in the dedup sheet at all -- it's not a real attendee."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "scans": [
+                {
+                    "badge_id": "GARBLED123", "legacy_id": None,
+                    "station_name": "StationA", "scanned_at": "2026-01-01T08:00:00Z",
+                    "matched": False, "scan_source": "badge",
+                },
+            ],
+        }
+        mock_get.return_value = mock_response
+
+        result = self.service.export_to_excel()
+        self.assertTrue(result["ok"], result.get("message"))
+
+        from openpyxl import load_workbook
+        wb = load_workbook(result["file_path"])
+        ws = wb["Deduplicated Attendance"]
+        headers = [c.value for c in ws[1]]
+        data_rows = [
+            row for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True)
+            if row[headers.index("Legacy ID")] not in (None, "Unique Attendees:", "Cross-Station Duplicates:")
+        ]
+        self.assertEqual(len(data_rows), 0)
 
     @patch('dashboard.requests.get')
     def test_export_connection_error(self, mock_get):
