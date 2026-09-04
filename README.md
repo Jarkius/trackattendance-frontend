@@ -180,6 +180,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.1.9** — Added "Max System Volume" admin button — sets Windows' own master speaker volume to 100% and unmutes it, since the app's own Volume slider is a relative gain that can never exceed whatever the OS volume already allows
 - **v2.1.8** — Fixed barcode scanner double-fires corrupting badge values (input field now clears before the scan bridge call, not after); retired Live Sync's real-time cross-station blocking duplicate check (violated offline-first, was the direct cause of the corruption above); added a "Deduplicated Attendance" sheet to the Excel export to catch cross-station duplicates after the fact instead
 - **v2.1.7** — Fixed local duplicate-window "Always" preset showing as unselected on a fresh station (config.py clamped `.env` values to 3600s max while the admin panel's "Always" preset uses 86400s, so no preset button matched after the silent downgrade)
 - **v2.1.6** — Fixed "Save Current Settings to .env" wiping all comments and dropping unlisted settings from a hand-tuned `.env`; now edits values in place instead of regenerating the whole file from a template
