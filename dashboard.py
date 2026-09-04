@@ -259,6 +259,16 @@ class DashboardService:
         except Exception:
             return iso_timestamp  # Return raw value as fallback
 
+    def _parse_datetime_for_sort(self, formatted_datetime: str) -> datetime:
+        """Parse a `_format_datetime()`-produced string back into a sortable
+        datetime, for ranking a person's multiple scans by earliest-first.
+        Unparseable/placeholder values ("--", raw-ISO fallback) sort first
+        (datetime.min) rather than raising or silently misordering."""
+        try:
+            return datetime.strptime(formatted_datetime, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            return datetime.min
+
     def export_to_excel(self, dashboard_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Export dashboard data to Excel file.
 
@@ -539,6 +549,95 @@ class DashboardService:
                 ws_missing.column_dimensions[col[0].column_letter].width = max_length + 2
 
             logger.info(f"Dashboard export: {len(not_scanned)} employees not yet scanned")
+
+            # Add "Deduplicated Attendance" sheet — one row per employee who
+            # actually scanned, keeping their earliest scan as the canonical
+            # attendance record and flagging anyone who scanned at 2+
+            # distinct stations. Built from `enriched_scans` (the same
+            # employee-matched data "Not Yet Scanned" above is complementary
+            # to) so the two sheets can never drift apart on what counts as
+            # "scanned".
+            #
+            # Replaces the real-time Live Sync cross-station block that was
+            # retired after the 2026-09-03 event (see docs/SYNC.md) — that
+            # mechanism required a synchronous cloud round-trip inside the
+            # scan path itself, which caused barcode double-fires to
+            # concatenate into garbage badge values when the network was
+            # slow. Cross-station duplicates are rare enough (10 out of
+            # ~1,500 scans at that event) that catching them here, after the
+            # fact, is a better trade than blocking every scan on a network
+            # call to catch them a few seconds sooner.
+            matched_scans = [row for row in enriched_scans if row["Legacy ID"]]
+            for row in matched_scans:
+                row["_ScannedAtDt"] = self._parse_datetime_for_sort(row["Scanned At"])
+
+            by_legacy_id: Dict[str, List[dict]] = {}
+            for row in matched_scans:
+                by_legacy_id.setdefault(row["Legacy ID"], []).append(row)
+
+            dedup_rows = []
+            for legacy_id, rows in by_legacy_id.items():
+                rows_sorted = sorted(rows, key=lambda r: r["_ScannedAtDt"])
+                first = rows_sorted[0]
+                stations = sorted({str(r["Station"]) for r in rows})
+                dedup_rows.append({
+                    "Legacy ID": legacy_id,
+                    "Full Name": first["Full Name"],
+                    "SL L1 Desc": first["SL L1 Desc"],
+                    "Position Desc": first["Position Desc"],
+                    "Email": first["Email"],
+                    "First Station": first["Station"],
+                    "First Scanned At": first["Scanned At"],
+                    "Scan Source": first["Scan Source"],
+                    "Total Scans (any station)": len(rows),
+                    "All Stations Scanned": ", ".join(stations),
+                    "Cross-Station Duplicate": len(stations) > 1,
+                })
+            dedup_rows.sort(key=lambda r: r["Full Name"] or "")
+
+            ws_dedup = wb.create_sheet("Deduplicated Attendance")
+            dedup_headers = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Email",
+                             "First Station", "First Scanned At", "Scan Source",
+                             "Total Scans (any station)", "All Stations Scanned", "Cross-Station Duplicate"]
+            for col_idx, col_name in enumerate(dedup_headers, start=1):
+                cell = ws_dedup.cell(row=1, column=col_idx, value=col_name)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+
+            dup_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+            cross_station_count = 0
+            for row_idx, row in enumerate(dedup_rows, start=2):
+                is_dup = row["Cross-Station Duplicate"]
+                if is_dup:
+                    cross_station_count += 1
+                for col_idx, col_name in enumerate(dedup_headers, start=1):
+                    value = row[col_name]
+                    if col_name == "Cross-Station Duplicate":
+                        value = "Yes" if value else "No"
+                    cell = ws_dedup.cell(row=row_idx, column=col_idx, value=value)
+                    if is_dup:
+                        cell.fill = dup_fill
+
+            summary_row = len(dedup_rows) + 2
+            ws_dedup.cell(row=summary_row, column=1, value="Unique Attendees:")
+            ws_dedup.cell(row=summary_row, column=1).font = Font(bold=True)
+            ws_dedup.cell(row=summary_row, column=2, value=len(dedup_rows))
+            ws_dedup.cell(row=summary_row, column=2).font = Font(bold=True)
+            ws_dedup.cell(row=summary_row + 1, column=1, value="Cross-Station Duplicates:")
+            ws_dedup.cell(row=summary_row + 1, column=1).font = Font(bold=True)
+            ws_dedup.cell(row=summary_row + 1, column=2, value=cross_station_count)
+            ws_dedup.cell(row=summary_row + 1, column=2).font = Font(bold=True)
+
+            for col in ws_dedup.columns:
+                max_length = max(len(str(cell.value or "")) for cell in col)
+                ws_dedup.column_dimensions[col[0].column_letter].width = max_length + 2
+            ws_dedup.freeze_panes = "A2"
+
+            logger.info(
+                f"Dashboard export: {len(dedup_rows)} unique attendees, "
+                f"{cross_station_count} cross-station duplicates"
+            )
 
             # Save file
             wb.save(file_path)

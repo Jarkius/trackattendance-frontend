@@ -33,16 +33,6 @@ All settings are managed through environment variables, loaded from a `.env` fil
 | `AUTO_SYNC_MESSAGE_DURATION_MS` | `3000` | Duration of sync status messages (0-30000 ms) |
 | `AUTO_SYNC_CONNECTION_TIMEOUT` | `5` | Network timeout for connectivity checks (1-30 seconds) |
 
-## Live Sync
-
-Runs synchronously per scan, not on the idle-triggered schedule above. See [SYNC.md](SYNC.md#live-sync-real-time-cross-station-duplicate-check) for the full flow.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LIVE_SYNC_ENABLED` | `False` | Enable real-time cross-station duplicate check + immediate upload per scan. Adds 2 API calls per scan — see [API.md § Rate Limiting](API.md#rate-limiting) before enabling for a multi-station event |
-| `LIVE_SYNC_TIMEOUT_SECONDS` | `4.0` | Timeout for the duplicate-check call (0.5-10.0). Raised from 2.0 in v2.1.2 — a cold-path request can take ~2.4s, over the old timeout, causing the fail-open path to silently miss a real duplicate |
-| `LIVE_SYNC_DUP_WINDOW_MINUTES` | `5` | How far back to check for a cross-station duplicate (1-1440) |
-
 ## Sync Resilience
 
 | Variable | Default | Description |

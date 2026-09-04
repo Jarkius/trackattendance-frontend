@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Tests for qt_bridge.call_without_freezing_ui.
 
-Covers the fix for Dashboard/Settings/Live-Sync freezing the whole app:
-several QWebChannel-exposed slots called requests.*() directly on the Qt
-main thread, blocking the entire event loop (rendering, keyboard input via
+Covers the fix for Dashboard/Settings freezing the whole app: several
+QWebChannel-exposed slots called requests.*() directly on the Qt main
+thread, blocking the entire event loop (rendering, keyboard input via
 QWebEngineView, everything) for however long the network call took.
 
 call_without_freezing_ui(fn) runs fn() on a worker thread and pumps a nested
@@ -15,17 +15,13 @@ Each scenario runs in its own subprocess (same interpreter) rather than
 in-process. A QApplication instance persists for the rest of a process once
 constructed, so testing "no QApplication" and "with QApplication" behavior
 in the same process would make the outcome depend on test/file execution
-order — fragile, and could silently change how unrelated test files
-(anything that calls register_scan() with Live Sync mocked, in a different
-file that happens to run later alphabetically) exercise this code. Fresh
-subprocesses avoid that entirely. As a side benefit, if the no-QApplication
-fallback guard were ever broken, the failure mode (QEventLoop.exec() never
-returning) becomes a clean bounded-timeout test failure instead of hanging
-the whole test run.
+order — fragile. Fresh subprocesses avoid that entirely. As a side benefit,
+if the no-QApplication fallback guard were ever broken, the failure mode
+(QEventLoop.exec() never returning) becomes a clean bounded-timeout test
+failure instead of hanging the whole test run.
 
 Requires PyQt6. Tests are skipped with a clear message when PyQt6 is
-unavailable, matching the existing skip pattern in
-tests/test_live_sync_coordinator_enqueue.py.
+unavailable, matching the existing skip pattern elsewhere in this suite.
 
 Run: python tests/test_qt_bridge.py
 """

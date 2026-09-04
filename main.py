@@ -1567,8 +1567,6 @@ class Api(QObject):
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
             "monitoring_mode": config.CLOUD_READ_ONLY,
-            "live_sync_enabled": config.LIVE_SYNC_ENABLED and not config.CLOUD_READ_ONLY,
-            "live_sync_window_minutes": config.LIVE_SYNC_DUP_WINDOW_MINUTES,
             "log_level": config.LOGGING_LEVEL,
             "console_logging": config.LOGGING_CONSOLE,
             "debug_panel": _debug_log_buffer in logging.getLogger().handlers,
@@ -1775,17 +1773,6 @@ class Api(QObject):
         if v is not None:
             config.CLOUD_READ_ONLY = v.lower() in ("true", "1")
             count += 1
-        v = db.get_meta("setting:live_sync_enabled")
-        if v is not None:
-            config.LIVE_SYNC_ENABLED = v.lower() in ("true", "1")
-            count += 1
-        v = db.get_meta("setting:live_sync_window_minutes")
-        if v is not None:
-            try:
-                config.LIVE_SYNC_DUP_WINDOW_MINUTES = max(1, min(1440, int(v)))
-                count += 1
-            except (ValueError, TypeError):
-                pass
         # API key from SQLite (Option B: allows setting key without .env)
         if not config.CLOUD_API_KEY:
             v = db.get_meta("setting:cloud_api_key")
@@ -1885,32 +1872,8 @@ class Api(QObject):
         """Toggle monitoring (read-only) mode. Persisted across restarts."""
         config.CLOUD_READ_ONLY = enabled
         self._save_setting("cloud_read_only", str(enabled))
-        # Auto-disable Live Sync when monitoring mode is on
-        if enabled and config.LIVE_SYNC_ENABLED:
-            config.LIVE_SYNC_ENABLED = False
-            self._save_setting("live_sync_enabled", "False")
-            LOGGER.info("[Admin] Live Sync auto-disabled (monitoring mode on)")
         LOGGER.info("[Admin] Monitoring mode %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
-
-    @pyqtSlot(bool, result="QVariant")
-    def admin_set_live_sync(self, enabled: bool) -> dict:
-        """Toggle Live Sync mode. Persisted across restarts."""
-        if enabled and config.CLOUD_READ_ONLY:
-            return {"ok": False, "message": "Cannot enable Live Sync in monitoring mode"}
-        config.LIVE_SYNC_ENABLED = enabled
-        self._save_setting("live_sync_enabled", str(enabled))
-        LOGGER.info("[Admin] Live Sync %s", "enabled" if enabled else "disabled")
-        return {"ok": True, "value": enabled}
-
-    @pyqtSlot(int, result="QVariant")
-    def admin_set_live_sync_window(self, minutes: int) -> dict:
-        """Set Live Sync cross-station duplicate window in minutes. Persisted."""
-        minutes = max(1, min(1440, minutes))
-        config.LIVE_SYNC_DUP_WINDOW_MINUTES = minutes
-        self._save_setting("live_sync_window_minutes", str(minutes))
-        LOGGER.info("[Admin] Live Sync window set to %dm", minutes)
-        return {"ok": True, "value": minutes}
 
     @pyqtSlot(str, result="QVariant")
     def admin_set_log_level(self, level: str) -> dict:
@@ -2008,12 +1971,6 @@ class Api(QObject):
                     batch_size=config.CLOUD_SYNC_BATCH_SIZE,
                     connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
                 )
-                # Wire the SyncService plus this Api instance's own coordinator
-                # (self._sync_coordinator — injected by main() at startup, or a
-                # private one Api created itself if no API key was configured
-                # then) into AttendanceService, so live-sync jobs from
-                # register_scan() serialize with this Api's own sync_now() jobs.
-                self._service.set_sync_service(self._sync_service, coordinator=self._sync_coordinator)
                 LOGGER.info("[Admin] Sync service initialised with new API key")
             except Exception as exc:
                 LOGGER.warning("[Admin] Failed to init sync service: %s", exc)
@@ -2168,9 +2125,6 @@ class Api(QObject):
         values = {
             "CLOUD_API_URL": config.CLOUD_API_URL,
             "CLOUD_READ_ONLY": config.CLOUD_READ_ONLY,
-            "LIVE_SYNC_ENABLED": config.LIVE_SYNC_ENABLED,
-            "LIVE_SYNC_TIMEOUT_SECONDS": config.LIVE_SYNC_TIMEOUT_SECONDS,
-            "LIVE_SYNC_DUP_WINDOW_MINUTES": config.LIVE_SYNC_DUP_WINDOW_MINUTES,
             "CLOUD_SYNC_BATCH_SIZE": config.CLOUD_SYNC_BATCH_SIZE,
             "CONNECTION_CHECK_INTERVAL_SECONDS": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "CONNECTION_CHECK_TIMEOUT_SECONDS": config.CONNECTION_CHECK_TIMEOUT_SECONDS,
@@ -2589,13 +2543,11 @@ def main() -> None:
             batch_size=config.CLOUD_SYNC_BATCH_SIZE,
             connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
         )
-        # Single shared coordinator for all manual/automatic/live sync network
+        # Single shared coordinator for all manual/automatic sync network
         # work, so those jobs serialize through one worker thread instead of
         # racing each other. Created here (not unconditionally) so local-only
         # (no API key) installs never spin up an unused background thread.
         sync_coordinator = BackgroundSyncCoordinator()
-        # Wire SyncService + coordinator into AttendanceService for Live Sync (#54)
-        service.set_sync_service(sync_service, coordinator=sync_coordinator)
         LOGGER.info(
             "Connection status checks: interval=%sms, timeout=%.2fs",
             config.CONNECTION_CHECK_INTERVAL_MS,
