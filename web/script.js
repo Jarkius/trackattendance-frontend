@@ -1355,6 +1355,13 @@ ${destination}` : message;
         if (!badge) {
             return;
         }
+        // Clear the field immediately, before the bridge call below —
+        // submit_scan()/search_employee() can take noticeably longer than
+        // usual (e.g. Live Sync's cross-station check), and a second
+        // scanner trigger during that wait was landing on the still-full
+        // field and appending, producing badge values like "108670108670"
+        // (same badge read twice, concatenated) instead of two clean scans.
+        barcodeInput.value = '';
         if (badge.length > 50) {
             setLiveFeedback('Badge ID too long', 'red');
             return;
@@ -1367,7 +1374,6 @@ ${destination}` : message;
             queueOrRun((bridge) => {
                 bridge.submit_scan(badge, (response) => {
                     handleScanResponse(response);
-                    barcodeInput.value = '';
                     returnFocusToInput();
                 });
             });
@@ -1378,13 +1384,11 @@ ${destination}` : message;
                     // Fallback: no search support, just do normal scan
                     bridge.submit_scan(badge, (response) => {
                         handleScanResponse(response);
-                        barcodeInput.value = '';
                         returnFocusToInput();
                     });
                     return;
                 }
                 bridge.search_employee(badge, (searchResult) => {
-                    barcodeInput.value = '';
                     if (searchResult?.ok && searchResult.results && searchResult.results.length > 0) {
                         showLookupOverlay(badge, searchResult.results);
                     } else {

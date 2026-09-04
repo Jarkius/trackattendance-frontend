@@ -24,9 +24,9 @@ data/*
 !data/.gitkeep
 
 # Logs (keep structure, ignore contents)
-logs/*.log
-logs/*.png
-logs/*.jpg
+logs/**/*.log
+logs/**/*.png
+logs/**/*.jpg
 !logs/.gitkeep
 
 # Build Artifacts
