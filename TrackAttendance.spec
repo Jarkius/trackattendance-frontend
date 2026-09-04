@@ -23,7 +23,7 @@ a = Analysis(
         ('plugins/camera/models', 'plugins/camera/models'),
         ('plugins/camera/greetings', 'plugins/camera/greetings'),
     ] + certifi_datas + haar_datas,
-    hiddenimports=['certifi', 'truststore'],
+    hiddenimports=['certifi', 'truststore', 'pycaw', 'pycaw.pycaw', 'comtypes', 'comtypes.stream'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

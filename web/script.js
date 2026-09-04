@@ -2828,6 +2828,35 @@ ${destination}` : message;
         });
     }
 
+    // Max the Windows system (master speaker) volume — a different knob
+    // from the app's own Volume slider above, which can never exceed it
+    const adminMaxSystemVolumeBtn = document.getElementById('admin-max-system-volume-btn');
+    const adminMaxSystemVolumeStatus = document.getElementById('admin-max-system-volume-status');
+    if (adminMaxSystemVolumeBtn) {
+        adminMaxSystemVolumeBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            adminMaxSystemVolumeBtn.textContent = 'Setting...';
+            adminMaxSystemVolumeBtn.disabled = true;
+            queueOrRun((bridge) => {
+                if (!bridge.admin_max_system_volume) return;
+                bridge.admin_max_system_volume((result) => {
+                    adminMaxSystemVolumeBtn.textContent = 'Max System Volume';
+                    adminMaxSystemVolumeBtn.disabled = false;
+                    if (adminMaxSystemVolumeStatus) {
+                        if (result?.ok) {
+                            const prevPct = Math.round((result.previous_volume ?? 1) * 100);
+                            adminMaxSystemVolumeStatus.textContent = `Done — was ${prevPct}%, now 100%`;
+                            adminMaxSystemVolumeStatus.style.color = '#86bc25';
+                        } else {
+                            adminMaxSystemVolumeStatus.textContent = result?.message || 'Failed to set system volume';
+                            adminMaxSystemVolumeStatus.style.color = '#ff5252';
+                        }
+                    }
+                });
+            });
+        });
+    }
+
     // Camera detection toggle — also controls overlay visibility
     if (adminCameraDetectionToggle) {
         adminCameraDetectionToggle.addEventListener('click', (e) => {
