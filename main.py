@@ -52,6 +52,7 @@ from sync import SyncService, BackgroundSyncCoordinator
 from dashboard import DashboardService
 from qt_bridge import call_without_freezing_ui
 import config
+from version import __version__
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -1082,6 +1083,11 @@ class Api(QObject):
         if not self._dashboard_service:
             return {"registered": 0, "last_updated": "", "error": "Dashboard service not configured"}
         return self._dashboard_service.get_local_snapshot()
+
+    @pyqtSlot(result=str)
+    def get_app_version(self) -> str:
+        """Return the app version string (shown in the Admin Panel footer)."""
+        return __version__
 
     @pyqtSlot(result="QVariant")
     def get_dashboard_data(self) -> dict:
@@ -2455,7 +2461,7 @@ def initialize_app(
         app = QApplication(args)
 
     window = QMainWindow()
-    window.setWindowTitle('Track Attendance')
+    window.setWindowTitle(f'Track Attendance v{__version__}')
     window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     window.setWindowFlags(Qt.WindowType.FramelessWindowHint)
     window.setWindowOpacity(0.0 if enable_fade and show_window else 1.0)
@@ -2546,6 +2552,7 @@ def main() -> None:
 
     # Show roster error to user if bootstrap detected issues (e.g. duplicate Legacy IDs)
     if getattr(service, '_roster_error', None):
+    logging.getLogger(__name__).info("TrackAttendance v%s starting", __version__)
         QMessageBox.warning(
             None,
             "Roster Error",

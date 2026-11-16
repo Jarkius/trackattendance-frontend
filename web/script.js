@@ -479,6 +479,14 @@ document.addEventListener('DOMContentLoaded', () => {
             webChannelReady = true;
             api = channel.objects.api;
             window._debugBridge = api;  // expose for debug panel polling
+            if (api.get_app_version) {
+                api.get_app_version((v) => {
+                    const el = document.getElementById('admin-version');
+                    if (el) el.textContent = 'Track Attendance v' + v;
+                    const corner = document.getElementById('app-version');
+                    if (corner) corner.textContent = 'v' + v;
+                });
+            }
             console.info('[QWebChannel] API object assigned, attempting signal binding');
             console.debug('[QWebChannel] api properties:', {
                 hasConnectionStatusChanged: !!api.connection_status_changed,

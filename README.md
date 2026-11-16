@@ -180,6 +180,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.1.10** — Added app version display (window title, tiny corner label on the main screen, Admin Panel footer, startup log line) backed by a single `version.py`; added `build.bat` for one-step builds
 - **v2.1.9** — Fixed the admin Volume slider being capped by Windows' own system volume (one station's was left at 36%, so the slider's 100% still sounded quiet) — the slider now drives the actual Windows system volume directly, not just this app's own relative gain
 - **v2.1.8** — Fixed barcode scanner double-fires corrupting badge values (input field now clears before the scan bridge call, not after); retired Live Sync's real-time cross-station blocking duplicate check (violated offline-first, was the direct cause of the corruption above); added a "Deduplicated Attendance" sheet to the Excel export to catch cross-station duplicates after the fact instead
 - **v2.1.7** — Fixed local duplicate-window "Always" preset showing as unselected on a fresh station (config.py clamped `.env` values to 3600s max while the admin panel's "Always" preset uses 86400s, so no preset button matched after the silent downgrade)

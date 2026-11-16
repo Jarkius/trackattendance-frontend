@@ -2,6 +2,13 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.10 (2026-11-16)
+
+### Added
+
+- **App version is now visible and defined in one place.** New `version.py` (`__version__`) is the single source of truth. It's shown in the window title, a tiny bottom-right label on the main screen, the Admin Panel footer, and logged at startup (`TrackAttendance v... starting`), so a station's version can be checked without digging through docs or git. Previously the version existed only in CHANGELOG/README and git tags stopped at v2.1.3.
+- **`build.bat`** — one-step Windows build (activates `.venv`, runs `pyinstaller TrackAttendance.spec`, copies `deploy.bat` next to the exe so the output folder is ready to host/deploy).
+
 ## v2.1.9 (2026-09-04)
 
 ### Fixed

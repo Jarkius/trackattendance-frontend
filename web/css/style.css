@@ -1738,3 +1738,18 @@ body.dashboard-open {
     outline: none; box-sizing: border-box;
 }
 #admin-pin-input:focus { border-color: #86bc25; }
+
+/* Tiny version label, bottom-right corner. Non-interactive so it never
+   intercepts scanner focus or clicks. */
+.app-version {
+    position: fixed;
+    right: 8px;
+    bottom: 4px;
+    font-size: 10px;
+    line-height: 1;
+    opacity: 0.4;
+    color: #666;
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
+}
