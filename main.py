@@ -2539,6 +2539,7 @@ def main() -> None:
     # Initialize logging first thing
     from logging_config import setup_logging
     setup_logging()
+    logging.getLogger(__name__).info("TrackAttendance v%s starting", __version__)
 
     app = QApplication.instance()
     if app is None:
@@ -2552,7 +2553,6 @@ def main() -> None:
 
     # Show roster error to user if bootstrap detected issues (e.g. duplicate Legacy IDs)
     if getattr(service, '_roster_error', None):
-    logging.getLogger(__name__).info("TrackAttendance v%s starting", __version__)
         QMessageBox.warning(
             None,
             "Roster Error",
