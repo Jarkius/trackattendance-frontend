@@ -305,6 +305,23 @@ class TestDuplicateActionConfig(unittest.TestCase):
 
             self.assertEqual(config.DUPLICATE_BADGE_ACTION, "block")
 
+    def _action_with(self, value):
+        with patch.dict(os.environ, {"CLOUD_API_KEY": "test-key", "DUPLICATE_BADGE_ACTION": value}):
+            import importlib
+            import config
+            importlib.reload(config)
+            return config.DUPLICATE_BADGE_ACTION
+
+    def test_action_whitespace_is_stripped(self):
+        """'block ' is treated as 'block'."""
+        self.assertEqual(self._action_with("block "), "block")
+
+    def test_action_typo_falls_back_to_warn_with_warning(self):
+        """'blok' falls back to 'warn' and logs a warning."""
+        with self.assertLogs("config", level="WARNING") as cm:
+            self.assertEqual(self._action_with("blok"), "warn")
+        self.assertTrue(any("DUPLICATE_BADGE_ACTION" in m for m in cm.output))
+
 
 class TestShutdownSyncDeadlineConfig(unittest.TestCase):
     """SHUTDOWN_SYNC_DEADLINE_SECONDS parsing (default 30, bounded 1-600)."""

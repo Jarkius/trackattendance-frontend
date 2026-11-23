@@ -5,6 +5,7 @@ This module loads configuration from environment variables (.env file or system 
 Never commit secrets to git. Use .env file (ignored by git) for local development.
 """
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -49,6 +50,24 @@ def _safe_int(key: str, default: int, min_val: int = None, max_val: int = None) 
         return val
     except (ValueError, TypeError):
         return default
+
+def _safe_choice(key: str, default: str, allowed) -> str:
+    """Read a string env var, normalise (strip + lower) and validate it.
+
+    Any value outside ``allowed`` falls back to ``default`` with a warning,
+    so a typo can never silently disable a safety feature.
+    """
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    val = raw.strip().lower()
+    if val in allowed:
+        return val
+    logging.getLogger(__name__).warning(
+        "Invalid %s=%r (allowed: %s); falling back to %r",
+        key, raw, ", ".join(sorted(allowed)), default,
+    )
+    return default
 
 def _safe_float(key: str, default: float, min_val: float = None, max_val: float = None) -> float:
     raw = os.getenv(key)
@@ -284,7 +303,7 @@ DUPLICATE_BADGE_TIME_WINDOW_SECONDS = _safe_int("DUPLICATE_BADGE_TIME_WINDOW_SEC
 # 'warn': Accept scan + show yellow warning alert (default)
 # 'block': Reject duplicate scan + show red error alert
 # 'silent': Accept scan + no alert shown (for testing)
-DUPLICATE_BADGE_ACTION = os.getenv("DUPLICATE_BADGE_ACTION", "warn").lower()
+DUPLICATE_BADGE_ACTION = _safe_choice("DUPLICATE_BADGE_ACTION", "warn", {"warn", "block", "silent"})
 
 # Duration in milliseconds to show duplicate badge alert before auto-dismiss
 DUPLICATE_BADGE_ALERT_DURATION_MS = _safe_int("DUPLICATE_BADGE_ALERT_DURATION_MS", 3000, min_val=500, max_val=30000)

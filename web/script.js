@@ -1314,6 +1314,22 @@ ${destination}` : message;
 
     // ── Scan handling ────────────────────────────────────────────────────
 
+    // "60" -> "1 minute", "30" -> "30 seconds", "300" -> "5 minutes", "90" -> "1 min 30 sec"
+    const formatDuplicateWindow = (seconds) => {
+        const total = Math.round(Number(seconds));
+        if (!Number.isFinite(total) || total <= 0) return '';
+        if (total < 60) return `${total} second${total === 1 ? '' : 's'}`;
+        const mins = Math.floor(total / 60);
+        const secs = total % 60;
+        if (secs === 0) return `${mins} minute${mins === 1 ? '' : 's'}`;
+        return `${mins} min ${secs} sec`;
+    };
+    window.__formatDuplicateWindow = formatDuplicateWindow;
+    const duplicateWindowMessage = (response, fallback) => {
+        const text = formatDuplicateWindow(response?.duplicateWindowSeconds);
+        return text ? `Scanned within ${text}` : fallback;
+    };
+
     const handleScanResponse = (response) => {
         if (!response || response.ok === false) {
             const message = response?.message || 'Scan failed';
@@ -1323,7 +1339,7 @@ ${destination}` : message;
                 window.__handleDuplicateBadge({
                     badgeId: response.badgeId || 'Unknown',
                     fullName: response.fullName || 'Badge blocked',
-                    message: message,
+                    message: duplicateWindowMessage(response, message),
                     isError: true,  // Red error styling for block mode
                     alertDurationMs: duplicateBadgeAlertDurationMs,
                 });
@@ -1363,7 +1379,7 @@ ${destination}` : message;
             window.__handleDuplicateBadge({
                 badgeId: response.badgeId || 'Unknown',
                 fullName: response.fullName || 'Unknown',
-                message: 'Scanned within 5 minutes',
+                message: duplicateWindowMessage(response, 'Scanned within the duplicate window'),
                 isError: false,  // Yellow warning styling for warn mode
                 alertDurationMs: duplicateBadgeAlertDurationMs,
             });
