@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -335,8 +336,14 @@ class AttendanceService:
 
             # Clear old employees and reimport. The hash/mtime are stored only
             # after a successful import, so a fixed file is re-imported.
-            self._db.clear_employees()
-            inserted = self._db.bulk_insert_employees(employees)
+            try:
+                inserted = self._db.replace_employees(employees)
+            except sqlite3.DatabaseError as e:
+                # The previous roster is still in place (the replace is one transaction).
+                raise ValueError(
+                    f"Roster not imported: database error while saving employees ({e}). "
+                    f"The previous roster is still in use. Restart the application to retry."
+                ) from e
             self._db.set_roster_hash(current_hash)
             self._db.set_roster_meta("file_mtime", current_mtime)
             numeric_unpadded = sum(1 for w in numeric_widths if w < widest_digit_id)

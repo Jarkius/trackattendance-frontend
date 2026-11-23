@@ -195,3 +195,103 @@ class TestReportingJoinsUseIndex(unittest.TestCase):
         for sql in queries:
             plan = " | ".join(r[-1] for r in db._connection.execute("EXPLAIN QUERY PLAN " + sql))
             self.assertIn("SEARCH e USING", plan, plan)
+
+
+# --- no class may define the same method twice (silently keeps the last copy) ---
+
+class TestNoDuplicateMethods(unittest.TestCase):
+    def test_app_modules_define_each_method_once(self):
+        import ast
+        import collections
+        root = Path(__file__).resolve().parent.parent
+        problems = []
+        for module in ("main.py", "attendance.py", "database.py", "sync.py", "dashboard.py", "config.py"):
+            tree = ast.parse((root / module).read_text(encoding="utf-8"))
+            for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
+                counts = collections.Counter(
+                    f.name for f in cls.body if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef))
+                )
+                problems += [f"{module}:{cls.name}.{name} x{n}" for name, n in counts.items() if n > 1]
+        self.assertEqual(problems, [])
+
+
+@unittest.skipUnless(HAVE_QT, "PyQt6 not installed")
+class TestCameraProbeReentry(unittest.TestCase):
+    """A second click arriving inside the probe's nested event loop must not start a second probe."""
+
+    def test_reentrant_enumerate_returns_busy_and_probes_once(self):
+        import main as main_module
+        from main import Api
+        api = Api.__new__(Api)  # no Qt setup needed for this slot's guard
+        api._proximity_manager = None
+        probes = []
+        inner = {}
+
+        def fake_nested_loop(fn):
+            inner["result"] = Api.enumerate_cameras(api)  # re-entry, as the nested loop allows
+            return fn()
+
+        fake_cv2 = Mock()
+        fake_cv2.VideoCapture.return_value.isOpened.return_value = False
+        with patch.dict(sys.modules, {"cv2": fake_cv2}), \
+                patch.object(main_module, "call_without_freezing_ui", side_effect=fake_nested_loop), \
+                patch.object(Api, "_probe_cameras", side_effect=lambda *a: probes.append(1) or {"ok": True, "cameras": []}):
+            outer = Api.enumerate_cameras(api)
+        self.assertTrue(outer["ok"])
+        self.assertTrue(inner["result"].get("busy"), inner["result"])
+        self.assertEqual(len(probes), 1)
+        # guard is released afterwards
+        with patch.dict(sys.modules, {"cv2": fake_cv2}), \
+                patch.object(main_module, "call_without_freezing_ui", side_effect=lambda fn: fn()), \
+                patch.object(Api, "_probe_cameras", side_effect=lambda *a: {"ok": True, "cameras": []}):
+            self.assertTrue(Api.enumerate_cameras(api)["ok"])
+
+    def test_select_camera_refused_while_probing(self):
+        from main import Api
+        api = Api.__new__(Api)
+        api._camera_probe_running = True
+        result = Api.admin_select_camera(api, 1)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result.get("busy"))
+
+
+class TestRosterReplaceIsAtomic(unittest.TestCase):
+    def _db(self):
+        from database import DatabaseManager, EmployeeRecord
+        db = DatabaseManager(Path(tempfile.mkdtemp()) / "db.db")
+        db.replace_employees([EmployeeRecord("OLD1", "Old One", "BU", "P")])
+        return db, EmployeeRecord
+
+    def test_failed_insert_keeps_the_previous_roster(self):
+        db, EmployeeRecord = self._db()
+        with db._connection:
+            db._connection.execute(
+                "CREATE TRIGGER reject_bad BEFORE INSERT ON employees WHEN NEW.legacy_id = 'BAD' "
+                "BEGIN SELECT RAISE(ABORT, 'simulated failure'); END"
+            )
+        import sqlite3
+        with self.assertRaises(sqlite3.DatabaseError):
+            db.replace_employees([EmployeeRecord("NEW1", "New", "BU", "P"), EmployeeRecord("BAD", "Bad", "BU", "P")])
+        self.assertEqual(sorted(db.load_employee_cache()), ["OLD1"])
+
+    def test_returns_rows_actually_stored(self):
+        db, EmployeeRecord = self._db()
+        n = db.replace_employees([EmployeeRecord("A1", "A", "BU", "P"), EmployeeRecord("A1", "Dup", "BU", "P")])
+        self.assertEqual(n, 1)
+        self.assertEqual(sorted(db.load_employee_cache()), ["A1"])
+
+
+@unittest.skipUnless(HAVE_QT, "PyQt6 not installed")
+class TestRosterDbErrorIsReported(unittest.TestCase):
+    def test_db_error_during_import_sets_roster_error_and_keeps_old_roster(self):
+        import sqlite3
+        from attendance import AttendanceService
+        from database import DatabaseManager
+        d = Path(tempfile.mkdtemp())
+        wb = Workbook(); ws = wb.active
+        ws.append(["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]); ws.append(["NEW1", "N", "BU", "P"])
+        wb.save(d / "employee.xlsx")
+        with patch.object(DatabaseManager, "replace_employees", side_effect=sqlite3.OperationalError("disk I/O error")):
+            svc = AttendanceService(database_path=d / "db.db", employee_workbook_path=d / "employee.xlsx",
+                                    export_directory=d / "exp")
+        self.assertIn("database error", svc._roster_error)

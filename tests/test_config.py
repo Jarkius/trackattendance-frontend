@@ -321,6 +321,9 @@ class TestDuplicateActionConfig(unittest.TestCase):
         with self.assertLogs("config", level="WARNING") as cm:
             self.assertEqual(self._action_with("blok"), "warn")
         self.assertTrue(any("DUPLICATE_BADGE_ACTION" in m for m in cm.output))
+        import config
+        # Kept for main() to re-log after logging is configured.
+        self.assertTrue(any("DUPLICATE_BADGE_ACTION" in m for m in config.CONFIG_WARNINGS))
 
 
 class TestShutdownSyncDeadlineConfig(unittest.TestCase):

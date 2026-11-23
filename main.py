@@ -712,6 +712,8 @@ _debug_log_buffer = DebugLogBuffer(capacity=200)
 class Api(QObject):
     """Expose desktop controls to the embedded web UI."""
 
+    _camera_probe_running = False  # set while enumerate_cameras probes devices
+
     # Use QVariant so QWebChannel can deliver payloads to JS reliably
     connection_status_changed = pyqtSignal("QVariant")
 
@@ -1206,6 +1208,8 @@ class Api(QObject):
     @pyqtSlot(int, result="QVariant")
     def admin_select_camera(self, index: int) -> dict:
         """Select camera by device index. Restarts camera if running. Persisted."""
+        if self._camera_probe_running:
+            return {"ok": False, "busy": True, "message": "Camera scan in progress, try again"}
         index = max(0, min(10, index))
         config.CAMERA_DEVICE_ID = index
         self._save_setting("camera_device_id", str(index))
@@ -1255,12 +1259,21 @@ class Api(QObject):
         except ImportError:
             return {"ok": False, "cameras": [], "message": "OpenCV not available"}
 
+        # The nested event loop keeps slots live, so a second click (or a camera
+        # change) can arrive mid-probe. One probe at a time: concurrent probes
+        # contend for the same devices, which Windows opens exclusively.
+        if self._camera_probe_running:
+            return {"ok": False, "busy": True, "cameras": [], "message": "Camera scan already in progress"}
         active_id = config.CAMERA_DEVICE_ID
         active_running = bool(self._proximity_manager
                               and self._proximity_manager._running)
-        return call_without_freezing_ui(
-            lambda: self._probe_cameras(cv2, active_id, active_running)
-        )
+        self._camera_probe_running = True
+        try:
+            return call_without_freezing_ui(
+                lambda: self._probe_cameras(cv2, active_id, active_running)
+            )
+        finally:
+            self._camera_probe_running = False
 
     @staticmethod
     def _probe_cameras(cv2, active_id: int, active_running: bool) -> dict:
@@ -1283,45 +1296,6 @@ class Api(QObject):
                 cap.release()
 
         return {"ok": True, "cameras": cameras, "selected": active_id}
-
-    @pyqtSlot(int, result="QVariant")
-    def admin_select_camera(self, index: int) -> dict:
-        """Select camera by device index. Restarts camera if running. Persisted."""
-        index = max(0, min(10, index))
-        config.CAMERA_DEVICE_ID = index
-        self._save_setting("camera_device_id", str(index))
-
-        if self._proximity_manager:
-            was_running = self._proximity_manager._running
-            self._proximity_manager._camera_id = index
-            if was_running:
-                self._proximity_manager.stop()
-                # Delay restart to let old camera fully release
-                import threading
-                threading.Thread(
-                    target=self._deferred_camera_restart,
-                    daemon=True, name="camera-restart",
-                ).start()
-
-        LOGGER.info("[Admin] Camera selected: index %d", index)
-        return {"ok": True, "index": index}
-
-    def _deferred_camera_restart(self):
-        """Wait briefly, then restart camera on main thread."""
-        time.sleep(0.5)
-        from PyQt6.QtCore import QMetaObject, Qt
-        QMetaObject.invokeMethod(
-            self, "_do_camera_restart",
-            Qt.ConnectionType.QueuedConnection,
-        )
-
-    @pyqtSlot()
-    def _do_camera_restart(self):
-        """Restart camera on main thread after device change."""
-        if self._proximity_manager and not self._proximity_manager._running:
-            started = self._proximity_manager.start()
-            LOGGER.info("[Admin] Camera restart after device change: %s",
-                        "ok" if started else "failed")
 
     @pyqtSlot(result="QVariant")
     def toggle_camera(self) -> dict:
@@ -2612,6 +2586,8 @@ def main() -> None:
     from logging_config import setup_logging
     setup_logging()
     logging.getLogger(__name__).info("TrackAttendance v%s starting", __version__)
+    for message in getattr(config, "CONFIG_WARNINGS", []):
+        logging.getLogger("config").warning(message)
 
     app = QApplication.instance()
     if app is None:

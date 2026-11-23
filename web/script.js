@@ -1668,7 +1668,11 @@ ${destination}` : message;
         setOptionalStat(dashboardWalkinsStat, dashboardWalkins, data?.walkins);
         setOptionalStat(dashboardUnknownStat, dashboardUnknown, data?.unknown_badges);
         if (dashboardUpdated) {
-            dashboardUpdated.textContent = data?.last_updated || '--';
+            const updated = data?.last_updated || '--';
+            // Cloud unreachable: the figures come from this station's own scans.
+            dashboardUpdated.textContent = data?.source === 'local'
+                ? `${updated} · This station only (cloud unavailable)`
+                : updated;
         }
 
         // Update station cards
@@ -3003,6 +3007,8 @@ ${destination}` : message;
         adminCameraSelect.innerHTML = '<option value="-1">Scanning...</option>';
         bridge.enumerate_cameras((result) => {
             console.info('[Camera] enumerate_cameras result:', JSON.stringify(result));
+            // A probe is already running; its own reply will fill the list.
+            if (result && result.busy) return;
             adminCameraSelect.innerHTML = '';
             if (result && result.ok && result.cameras && result.cameras.length > 0) {
                 result.cameras.forEach((cam) => {

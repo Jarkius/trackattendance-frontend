@@ -236,6 +236,32 @@ class DatabaseManager:
             )
         return len(rows)
 
+    def replace_employees(self, employees: Iterable[EmployeeRecord]) -> int:
+        """Swap the whole roster in one transaction; returns rows actually stored.
+
+        If anything fails part-way, the previous roster is left untouched instead
+        of an empty table (which would turn every scan into an unknown badge).
+        """
+        rows = [
+            (
+                clean_badge_id(employee.legacy_id),
+                employee.full_name.strip(),
+                employee.sl_l1_desc.strip(),
+                employee.position_desc.strip(),
+                employee.email.strip() if employee.email else "",
+            )
+            for employee in employees
+        ]
+        with self._connection:
+            self._connection.execute("DELETE FROM employees")
+            self._connection.executemany(
+                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc, email)"
+                " VALUES(?, ?, ?, ?, ?)",
+                rows,
+            )
+            stored = self._connection.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+        return int(stored)
+
     def load_employee_cache(self) -> Dict[str, EmployeeRecord]:
         cursor = self._connection.execute(
             "SELECT legacy_id, full_name, sl_l1_desc, position_desc, email FROM employees"

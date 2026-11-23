@@ -240,6 +240,7 @@ class TestAttendanceBuckets(unittest.TestCase):
         self.assertEqual(result["walkins"], 2)
         self.assertEqual(result["unknown_badges"], 1)
         self.assertEqual(result["total_present"], 12)
+        self.assertEqual(result["source"], "cloud")
 
     @patch('dashboard.requests.get')
     def test_old_server_falls_back_to_bu_sum(self, mock_get):
@@ -288,6 +289,7 @@ class TestAttendanceBuckets(unittest.TestCase):
         self.assertEqual(result["scanned"], 10)
         self.assertEqual(result["attendance_rate"], 100.0)
         self.assertEqual(result["walkins"], 2)  # Somchai/"somchai " collapse; Malee Sook
+        self.assertEqual(result["source"], "local")  # UI labels it "This station only"
         self.assertEqual(result["unknown_badges"], 1)
         self.assertEqual(result["total_present"], 12)
 

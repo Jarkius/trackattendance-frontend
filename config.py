@@ -51,6 +51,9 @@ def _safe_int(key: str, default: int, min_val: int = None, max_val: int = None) 
     except (ValueError, TypeError):
         return default
 
+CONFIG_WARNINGS: list = []
+
+
 def _safe_choice(key: str, default: str, allowed) -> str:
     """Read a string env var, normalise (strip + lower) and validate it.
 
@@ -63,10 +66,14 @@ def _safe_choice(key: str, default: str, allowed) -> str:
     val = raw.strip().lower()
     if val in allowed:
         return val
-    logging.getLogger(__name__).warning(
-        "Invalid %s=%r (allowed: %s); falling back to %r",
-        key, raw, ", ".join(sorted(allowed)), default,
+    message = (
+        f"Invalid {key}={raw!r} (allowed: {', '.join(sorted(allowed))}); "
+        f"falling back to {default!r}"
     )
+    # config is imported before logging is configured, so keep the message for
+    # main() to re-log once the log file exists (a windowed build has no console).
+    CONFIG_WARNINGS.append(message)
+    logging.getLogger(__name__).warning(message)
     return default
 
 def _safe_float(key: str, default: float, min_val: float = None, max_val: float = None) -> float:

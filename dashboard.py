@@ -273,13 +273,16 @@ class DashboardService:
             result["error"] = f"API error: {e}"
             logger.error(f"Dashboard: Unexpected error: {e}")
 
+        result["source"] = "cloud" if stats_ok else "none"
         if not stats_ok:
             # Cloud unavailable: same three buckets from this station's SQLite.
+            # Marked "local" so the UI says these cover this station only.
             try:
                 local = self._db_manager.get_attendance_buckets()
                 result["scanned"] = local["registered_attended"]
                 result["walkins"] = local["walkins"]
                 result["unknown_badges"] = local["unknown_badges"]
+                result["source"] = "local"
             except Exception as e:
                 logger.error(f"Dashboard: Failed to compute local attendance buckets: {e}")
 
