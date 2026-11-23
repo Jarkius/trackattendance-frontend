@@ -216,6 +216,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const dashboardRegistered = document.getElementById('dashboard-registered');
     const dashboardScanned = document.getElementById('dashboard-scanned');
     const dashboardRate = document.getElementById('dashboard-rate');
+    const dashboardWalkins = document.getElementById('dashboard-walkins');
+    const dashboardWalkinsStat = document.getElementById('dashboard-walkins-stat');
+    const dashboardUnknown = document.getElementById('dashboard-unknown');
+    const dashboardUnknownStat = document.getElementById('dashboard-unknown-stat');
     const dashboardStationsBody = document.getElementById('dashboard-stations-body');
     const dashboardBuBody = document.getElementById('dashboard-bu-body');
     const dashboardUpdated = document.getElementById('dashboard-updated');
@@ -1637,6 +1641,15 @@ ${destination}` : message;
             const rate = data?.attendance_rate ?? 0;
             dashboardRate.textContent = `${rate.toFixed(1)}%`;
         }
+        // Walk-ins and unknown badge scans sit outside the rate; hide when unavailable (null)
+        const setOptionalStat = (stat, valueEl, value) => {
+            if (!stat || !valueEl) return;
+            const available = value !== null && value !== undefined;
+            stat.style.display = available ? '' : 'none';
+            if (available) valueEl.textContent = Number(value).toLocaleString();
+        };
+        setOptionalStat(dashboardWalkinsStat, dashboardWalkins, data?.walkins);
+        setOptionalStat(dashboardUnknownStat, dashboardUnknown, data?.unknown_badges);
         if (dashboardUpdated) {
             dashboardUpdated.textContent = data?.last_updated || '--';
         }

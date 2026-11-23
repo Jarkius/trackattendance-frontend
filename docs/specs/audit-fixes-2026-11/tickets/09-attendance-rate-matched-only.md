@@ -35,6 +35,6 @@ python -m pytest tests/test_dashboard.py tests/test_bu_export.py tests/test_exce
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `dashboard.py` (cloud path uses `matched_unique`/`walkin_unique`/`unknown_badge_unique`, old-server BU-sum fallback, local fallback when cloud stats are unavailable, rate capped at 100 with a warning, new keys `walkins`/`unknown_badges`/`total_present`; export Summary shows the buckets, new "Walk-ins" sheet, BU/Dedup/Not Yet Scanned count by normalised legacy_id; helpers `classify_export_scan`, `bucket_export_scans`, `compute_bu_breakdown`), `database.py` (`normalize_walkin_name`, `get_attendance_buckets`), `web/index.html` and `web/script.js` (Walk-ins and Unknown badges figures, hidden when null), `tests/test_dashboard.py`, `tests/test_bu_export.py` (now tests the real `compute_bu_breakdown` instead of a copy).
+- Verification results: the three target test files pass (63 passed). New tests fail on the base code (9 failed in test_dashboard.py; test_bu_export.py fails to import). Local CI: 501 passed, 1 skipped.
+- Known limitations: the local walk-in and unknown counts treat a scan as unmatched when no roster row matches `COALESCE(legacy_id, badge_id)` (the same join as the BU query), which is slightly broader than "legacy_id IS NULL". The export Summary derives its buckets from the export rows, so it can differ from the live dashboard if the cloud roster summary is stale. The UI change was not exercised in a running window.
