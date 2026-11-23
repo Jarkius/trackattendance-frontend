@@ -3147,6 +3147,19 @@ ${destination}` : message;
         const inOverlay = (adminOverlay && adminOverlay.contains(event.target))
             || (dashboardOverlay && dashboardOverlay.contains(event.target))
             || (lookupOverlay && lookupOverlay.contains(event.target));
+        // A scanner burst while the lookup overlay is open starts a fresh scan:
+        // close the overlay and move the first character into the barcode
+        // input, so the burst's Enter submits via the normal path instead of
+        // activating the focused "Record Scan" button. Space is left alone so
+        // it still activates a focused button; arrows/Enter/Tab are not
+        // printable single keys and keep their lookup behavior.
+        if (isLookupOverlayOpen() && lookupOverlay.contains(event.target)
+            && event.key.length === 1 && event.key !== ' '
+            && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            hideLookupOverlay();
+            captureStrayScanKey(event);
+            return;
+        }
         // On the plain scan screen (no overlay open), Tab has nothing to
         // move to — the header icons aren't natively tabbable — so the
         // browser just blurs the barcode input with nothing catching the
