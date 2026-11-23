@@ -704,14 +704,16 @@ class SyncService:
             if kind == "ok":
                 synced_ids.extend(ids)
                 synced_count += payload
-            elif kind == "rejected":
+            elif kind in ("rejected", "too_large"):
                 if len(indices) == 1:
-                    failed_ids.extend(ids)
+                    # A lone 400/422 is a verdict on that event. A lone 413 is not
+                    # (the payload limit is a server/proxy setting), so it stays pending.
+                    (failed_ids if kind == "rejected" else pending_ids).extend(ids)
                     errors.append(error)
                     return
                 mid = len(indices) // 2
                 LOGGER.warning(
-                    "[NetworkOnly] %s for %d scans; bisecting to isolate the rejected event(s)",
+                    "[NetworkOnly] %s for %d scans; splitting the batch",
                     error, len(indices),
                 )
                 resolve(indices[:mid], False)
@@ -741,9 +743,11 @@ class SyncService:
         - ``"ok"``: payload is saved + duplicates; the server covered every event.
         - ``"rejected"``: HTTP 400/422. The server says something in this payload is
           unacceptable; the caller bisects.
+        - ``"too_large"``: HTTP 413. The payload is too big, so the caller splits it
+          to make progress; a single event that is still too large stays pending.
         - ``"auth"``: HTTP 401. Scans stay pending.
         - ``"transient"``: everything else (5xx/429 after retries, timeouts, other
-          transport errors, 403/404/408/413 and other 4xx, a 200 with an unparseable
+          transport errors, 403/404/408 and other 4xx, a 200 with an unparseable
           body or counts that do not cover the batch). Scans stay pending.
         """
         from config import SYNC_RETRY_ENABLED, SYNC_RETRY_MAX_ATTEMPTS, SYNC_RETRY_BACKOFF_SECONDS
@@ -793,8 +797,10 @@ class SyncService:
                     return "auth", None, error_msg
                 if status in _REJECTION_STATUSES:
                     return "rejected", None, f"API error: {status} (event rejected by server)"
+                if status == 413:
+                    return "too_large", None, "API error: 413 (payload too large)"
                 if status != 429 and status < 500:
-                    # 403/404/408/413 and any other 4xx: proxy, deploy or config
+                    # 403/404/408 and any other 4xx: proxy, deploy or config
                     # problems, not a verdict on these events. Keep pending.
                     error_msg = f"API error: {status} (transient)"
                     LOGGER.warning(f"[NetworkOnly] {error_msg}")

@@ -24,6 +24,6 @@ python -m pytest tests/test_sync_network_only_batch.py tests/test_api_contracts.
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: implemented in ticket 01 (`_post_events` coverage check in `sync.py`: `saved + duplicates` must equal the batch size, otherwise the ids stay pending).
+- Verification results: `tests/test_sync_error_classification.py::TestTransientClassification::test_200_with_empty_object_body_leaves_everything_pending`, `::test_200_whose_counts_do_not_cover_batch_is_pending`, `::test_duplicates_count_toward_coverage`, `::test_200_with_json_that_is_not_an_object_is_pending`.
+- Known limitations: none.

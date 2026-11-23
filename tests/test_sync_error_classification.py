@@ -155,6 +155,52 @@ class TestBisection(unittest.TestCase):
 
 
 @patch("sync.time.sleep")
+class TestPayloadTooLarge(unittest.TestCase):
+    @patch("sync.requests.post")
+    def test_413_batch_is_split_and_halves_succeed(self, mock_post, _sleep):
+        def post(url, json=None, **kwargs):
+            events = json["events"]
+            if len(events) > 5:
+                return MockResponse(413)
+            return MockResponse(200, {"saved": len(events), "duplicates": 0})
+
+        mock_post.side_effect = post
+        scans = [_make_scan(i) for i in range(1, 11)]
+
+        result = _service().sync_scan_batch_network_only(scans, "S")
+
+        self.assertEqual(sorted(result["synced_ids"]), list(range(1, 11)))
+        self.assertEqual(result["failed_ids"], [])
+        self.assertEqual(result["pending_ids"], [])
+        self.assertEqual(result["synced_count"], 10)
+        self.assertEqual(mock_post.call_count, 3)
+
+    @patch("sync.requests.post")
+    def test_413_for_single_events_is_pending_never_failed(self, mock_post, _sleep):
+        mock_post.return_value = MockResponse(413)
+        scans = [_make_scan(i) for i in range(1, 5)]
+
+        result = _service().sync_scan_batch_network_only(scans, "S")
+
+        self.assertEqual(sorted(result["pending_ids"]), [1, 2, 3, 4])
+        self.assertEqual(result["failed_ids"], [])
+        self.assertEqual(result["synced_ids"], [])
+        self.assertIsNotNone(result["error"])
+
+    @patch("sync.requests.post")
+    def test_413_splitting_respects_budget(self, mock_post, _sleep):
+        mock_post.return_value = MockResponse(413)
+        scans = [_make_scan(i) for i in range(1, 101)]
+
+        with patch("sync._MAX_BISECT_REQUESTS", 4):
+            result = _service().sync_scan_batch_network_only(scans, "S")
+
+        self.assertEqual(mock_post.call_count, 5)
+        self.assertEqual(sorted(result["pending_ids"]), list(range(1, 101)))
+        self.assertEqual(result["failed_ids"], [])
+
+
+@patch("sync.time.sleep")
 class TestTransientClassification(unittest.TestCase):
     def _assert_all_pending(self, result, ids):
         self.assertEqual(sorted(result["pending_ids"]), ids)
@@ -176,7 +222,7 @@ class TestTransientClassification(unittest.TestCase):
 
     @patch("sync.requests.post")
     def test_non_rejection_4xx_statuses_are_pending(self, mock_post, _sleep):
-        for status in (403, 404, 408, 413):
+        for status in (403, 404, 408):
             with self.subTest(status=status):
                 mock_post.reset_mock()
                 mock_post.return_value = MockResponse(status)
@@ -191,6 +237,13 @@ class TestTransientClassification(unittest.TestCase):
         mock_post.return_value = MockResponse(200, text="<html>captive portal</html>", json_error=True)
         result = _service().sync_scan_batch_network_only([_make_scan(1), _make_scan(2)], "S")
         self._assert_all_pending(result, [1, 2])
+
+    @patch("sync.requests.post")
+    def test_200_with_empty_object_body_leaves_everything_pending(self, mock_post, _sleep):
+        mock_post.return_value = MockResponse(200, {})
+        result = _service().sync_scan_batch_network_only([_make_scan(1), _make_scan(2)], "S")
+        self._assert_all_pending(result, [1, 2])
+        self.assertEqual(result["synced_count"], 0)
 
     @patch("sync.requests.post")
     def test_200_with_json_that_is_not_an_object_is_pending(self, mock_post, _sleep):
