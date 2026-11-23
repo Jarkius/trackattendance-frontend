@@ -10,6 +10,27 @@ from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+# Zero-width characters that scanners/spreadsheets sometimes leave in IDs.
+_ID_INVISIBLE_CHARS = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
+
+
+def clean_badge_id(value: object) -> str:
+    """Display form of a badge/Legacy ID: whitespace (incl. NBSP) and zero-width chars removed at the ends."""
+    if value is None:
+        return ""
+    return str(value).translate(_ID_INVISIBLE_CHARS).replace("\u00a0", " ").strip()
+
+
+def normalize_badge_id(value: object) -> str:
+    """Comparison key for badge and Legacy IDs.
+
+    The single rule used at roster import, scan lookup, duplicate checks and
+    reporting joins: clean_badge_id() then upper-case (case-insensitive match,
+    same as the SQL ``COLLATE NOCASE`` comparisons). Stored values keep their
+    original spelling; only comparisons use this key.
+    """
+    return clean_badge_id(value).upper()
+
 logger = logging.getLogger(__name__)
 
 ISO_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # UTC format with Z suffix
@@ -104,6 +125,7 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_scans_station_name ON scans(station_name);
                 CREATE INDEX IF NOT EXISTS idx_scans_scanned_at ON scans(scanned_at);
                 CREATE INDEX IF NOT EXISTS idx_employees_sl_l1_desc ON employees(sl_l1_desc);
+                CREATE INDEX IF NOT EXISTS idx_scans_employee_key_nocase ON scans(COALESCE(legacy_id, badge_id) COLLATE NOCASE);
 
                 CREATE TABLE IF NOT EXISTS roster_meta (
                     key TEXT PRIMARY KEY,
@@ -189,7 +211,7 @@ class DatabaseManager:
     def bulk_insert_employees(self, employees: Iterable[EmployeeRecord]) -> int:
         rows = [
             (
-                employee.legacy_id.strip(),
+                clean_badge_id(employee.legacy_id),
                 employee.full_name.strip(),
                 employee.sl_l1_desc.strip(),
                 employee.position_desc.strip(),
@@ -210,7 +232,7 @@ class DatabaseManager:
             "SELECT legacy_id, full_name, sl_l1_desc, position_desc, email FROM employees"
         )
         return {
-            row["legacy_id"]: EmployeeRecord(
+            normalize_badge_id(row["legacy_id"]): EmployeeRecord(
                 legacy_id=row["legacy_id"],
                 full_name=row["full_name"],
                 sl_l1_desc=row["sl_l1_desc"],
@@ -574,9 +596,9 @@ class DatabaseManager:
             SELECT
                 e.sl_l1_desc AS bu_name,
                 COUNT(DISTINCT e.legacy_id) AS registered,
-                COUNT(DISTINCT s.badge_id) AS scanned
+                COUNT(DISTINCT CASE WHEN s.id IS NOT NULL THEN e.legacy_id END) AS scanned
             FROM employees e
-            LEFT JOIN scans s ON e.legacy_id = s.badge_id
+            LEFT JOIN scans s ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
             GROUP BY e.sl_l1_desc
             ORDER BY e.sl_l1_desc
         """)
@@ -588,9 +610,9 @@ class DatabaseManager:
     def count_unmatched_scanned_badges(self) -> int:
         """Count distinct badge_ids in scans that don't match any employee."""
         cursor = self._connection.execute("""
-            SELECT COUNT(DISTINCT s.badge_id) AS cnt
+            SELECT COUNT(DISTINCT UPPER(s.badge_id)) AS cnt
             FROM scans s
-            LEFT JOIN employees e ON s.badge_id = e.legacy_id
+            LEFT JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
             WHERE e.legacy_id IS NULL
         """)
         return int(cursor.fetchone()["cnt"] or 0)

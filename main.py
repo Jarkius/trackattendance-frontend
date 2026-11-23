@@ -2586,6 +2586,9 @@ def main() -> None:
             "The application will continue but roster data may be incomplete.",
         )
 
+    if getattr(service, '_roster_warning', None):
+        QMessageBox.warning(None, "Roster Warning", service._roster_warning)
+
     # Initialize sync service for cloud integration (only if API key is available)
     sync_service = None
     dashboard_service = None
