@@ -18,11 +18,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 try:
     from openpyxl import Workbook
-    from attendance import AttendanceService
-    from database import normalize_badge_id
+    import PyQt6  # noqa: F401  (attendance.py needs it)
     AVAILABLE = True
 except ImportError:
     AVAILABLE = False
+
+if AVAILABLE:
+    # Not guarded: if these break, the tests must fail, not silently skip.
+    from attendance import AttendanceService
+    from database import normalize_badge_id
 
 HEADERS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
 
