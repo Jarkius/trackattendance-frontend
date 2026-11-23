@@ -467,13 +467,38 @@ Authorization: Bearer <API_KEY>
 Authorization: Bearer <API_KEY>
 ```
 
+**Query Parameters**:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `limit` | integer (optional) | Maximum rows returned. Default and maximum: 100000. |
+
+There is no pagination: a single call returns up to `limit` scans ordered by `scanned_at` ascending. If `total_records` equals 100000 the result may be truncated.
+
 **Response** (Success - HTTP 200):
 ```json
 {
+  "total_records": 2,
+  "export_timestamp": "2025-12-15T09:00:00.000Z",
   "scans": [
-    ["101117", "Main Gate", "2025-12-15T08:30:00Z", true],
-    ["102345", "Side Entrance", "2025-12-15T08:31:15Z", true],
-    ["999999", "Main Gate", "2025-12-15T08:32:00Z", false]
+    {
+      "badge_id": "101117",
+      "legacy_id": "101117",
+      "station_name": "Main Gate",
+      "scanned_at": "2025-12-15T08:30:00.000Z",
+      "matched": true,
+      "business_unit": "Audit",
+      "scan_source": "badge"
+    },
+    {
+      "badge_id": "999999",
+      "legacy_id": null,
+      "station_name": "Main Gate",
+      "scanned_at": "2025-12-15T08:32:00.000Z",
+      "matched": false,
+      "business_unit": null,
+      "scan_source": "manual"
+    }
   ]
 }
 ```
@@ -482,11 +507,16 @@ Authorization: Bearer <API_KEY>
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `scans` | array of arrays | Each inner array represents one scan record with 4 elements |
-| `scans[][0]` | string | Badge ID that was scanned |
-| `scans[][1]` | string | Station name where scan occurred |
-| `scans[][2]` | string (ISO 8601) | Timestamp when scan occurred (UTC) |
-| `scans[][3]` | boolean | Whether badge was matched in employee roster |
+| `total_records` | integer | Number of scans returned (not a count of all scans in the database) |
+| `export_timestamp` | string (ISO 8601) | When the export was generated (UTC) |
+| `scans` | array of objects | One object per scan |
+| `scans[].badge_id` | string | Badge ID (or typed text for manual entries) that was scanned |
+| `scans[].legacy_id` | string \| null | Roster legacy ID the scan matched, if any |
+| `scans[].station_name` | string | Station name where scan occurred |
+| `scans[].scanned_at` | string (ISO 8601) \| null | Timestamp when scan occurred (UTC) |
+| `scans[].matched` | boolean | Whether badge was matched in employee roster |
+| `scans[].business_unit` | string \| null | Business unit, if known |
+| `scans[].scan_source` | string | Source of the scan, e.g. `badge` or `manual` (defaults to `manual`) |
 
 **Note**: The client matches badge IDs against the local employee database to enrich with employee names, Business Units (SL L1 Desc), and positions before exporting to Excel.
 

@@ -81,7 +81,7 @@ docs/                Technical docs (API, Architecture, Sync, PRD)
 
 **Offline-first**: All scans save locally first. Sync happens in background when idle. No data lost if offline.
 
-**Privacy**: Employee names stay in local SQLite only. Only badge IDs sync to cloud.
+**Privacy**: Roster employee names stay in local SQLite only; badge IDs sync to cloud. For manual entries of people not in the roster, the typed text (which may be a name) is synced as the badge_id so multi-station exports include walk-ins.
 
 ## Key Patterns
 
@@ -123,7 +123,7 @@ Syncs to `trackattendance-api` (separate repo: `Jarkius/trackattendance-api`)
 
 - `POST /v1/scans/batch` — batch upload with Bearer auth and idempotency keys
 - `GET /v1/dashboard/stats` — aggregated statistics
-- `GET /v1/dashboard/export` — paginated scan export
+- `GET /v1/dashboard/export` — full scan export (no pagination; optional `limit`, max 100000)
 
 ## Related repos
 
