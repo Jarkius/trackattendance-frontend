@@ -58,3 +58,9 @@ plugins/camera/greetings/__pycache__/
 
 # Throwaway check files — see ~/.claude/CLAUDE.md scratch/throwaway convention
 .scratchpad/
+
+# Local backups, agent scratch, downloaded logs
+.env.bak*
+.omc/
+.omx/
+logs/cloudrun-*.json
