@@ -161,6 +161,12 @@ AUTO_SYNC_CHECK_INTERVAL_SECONDS = _safe_int("AUTO_SYNC_CHECK_INTERVAL_SECONDS",
 # Set to 1 to sync as soon as any scan is pending
 AUTO_SYNC_MIN_PENDING_SCANS = _safe_int("AUTO_SYNC_MIN_PENDING_SCANS", 1, min_val=1, max_val=10000)
 
+# Overall time budget (seconds) for the sync-pending-scans step of shutdown.
+# Once exceeded, no further batches are started; remaining scans stay pending
+# (and are still included in the export). Checked between batches, so one
+# in-flight request may overrun it by up to its own network timeout.
+SHUTDOWN_SYNC_DEADLINE_SECONDS = _safe_int("SHUTDOWN_SYNC_DEADLINE_SECONDS", 30, min_val=1, max_val=600)
+
 # Show status message when auto-sync starts
 AUTO_SYNC_SHOW_START_MESSAGE = os.getenv("AUTO_SYNC_SHOW_START_MESSAGE", "True").lower() in ("true", "1", "yes")
 
