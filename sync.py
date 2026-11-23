@@ -838,21 +838,18 @@ class SyncService:
         if CLOUD_READ_ONLY:
             return {"ok": False, "skipped": True}
         try:
-            key = self._build_idempotency_key(station_name, scan.badge_id, scan.id)
-            payload = {
-                "events": [{
-                    "idempotency_key": key,
-                    "badge_id": scan.badge_id,
-                    "station_name": scan.station_name,
-                    "scanned_at": scan.scanned_at,
-                    "business_unit": scan.sl_l1_desc or None,
-                    "scan_source": scan.scan_source,
-                }]
-            }
+            # Same builder as the batch path: the server keeps the first copy of an
+            # idempotency key, so this event must carry the full meta and normalised
+            # timestamp. Deliberately not routed through _post_events: this is
+            # best-effort with a short timeout, and batch sync is the safety net.
+            payload = {"events": self._build_batch_events([scan], station_name)}
             response = requests.post(
                 f"{self.api_url}/v1/scans/batch",
                 json=payload,
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    "Authorization": f"Bearer {self.api_key}",
+                },
                 timeout=3.0,
             )
             if response.status_code == 200:

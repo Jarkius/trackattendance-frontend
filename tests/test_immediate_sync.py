@@ -388,5 +388,74 @@ class TestSyncSingleScan(unittest.TestCase):
         self.assertIn("error", result)
 
 
+class TestImmediateEventMatchesBatchEvent(unittest.TestCase):
+    """Immediate Write must upload the same event the batch path would (#102).
+
+    The server keeps the first copy of an idempotency key (ON CONFLICT DO
+    NOTHING), so a stripped immediate event permanently wins over the full one.
+    """
+
+    def setUp(self):
+        os.environ["CLOUD_READ_ONLY"] = "False"
+        from sync import SyncService
+        self.service = SyncService(db=MagicMock(), api_url="http://test.example.com", api_key="k")
+
+    @staticmethod
+    def _scan(**overrides):
+        from database import ScanRecord
+        fields = dict(
+            id=42, badge_id="B100", scanned_at="2026-11-24T10:00:00+00:00",
+            station_name="Gate1", employee_full_name="Test User", legacy_id="L100",
+            sl_l1_desc="IT", position_desc="Engineer", scan_source=None,
+        )
+        fields.update(overrides)
+        return ScanRecord(**fields)
+
+    def _captured_events(self, call):
+        with patch("sync.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=200)
+            mock_post.return_value.json.return_value = {"saved": 1, "duplicates": 0}
+            mock_post.return_value.elapsed.total_seconds.return_value = 0.01
+            call()
+        self.assertEqual(mock_post.call_count, 1)
+        return mock_post.call_args.kwargs["json"]["events"], mock_post.call_args.kwargs
+
+    def _assert_same_event(self, scan):
+        imm, imm_kwargs = self._captured_events(lambda: self.service.sync_single_scan(scan, "Gate1"))
+        batch, _ = self._captured_events(
+            lambda: self.service.sync_scan_batch_network_only([scan], "Gate1")
+        )
+        self.assertEqual(imm, batch)
+        self.assertEqual(len(imm), 1)
+        self.assertIn("meta", imm[0])
+        self.assertTrue(imm[0]["scanned_at"].endswith("Z"))
+        self.assertEqual(imm[0]["idempotency_key"], "Gate1-B100-42")
+        self.assertEqual(imm_kwargs["headers"]["Content-Type"], "application/json; charset=utf-8")
+        return imm[0]
+
+    def test_matched_badge_scan_event_equals_batch_event(self):
+        event = self._assert_same_event(self._scan(legacy_id="B100"))
+        self.assertTrue(event["meta"]["matched"])
+        self.assertEqual(event["meta"]["legacy_id"], "B100")
+        self.assertEqual(event["scan_source"], "manual")  # default when unset
+
+    def test_lookup_scan_with_distinct_legacy_id_event_equals_batch_event(self):
+        event = self._assert_same_event(self._scan(badge_id="B100", legacy_id="L999", scan_source="lookup"))
+        self.assertEqual(event["meta"]["legacy_id"], "L999")
+        self.assertEqual(event["scan_source"], "lookup")
+
+    def test_immediate_path_stays_network_only(self):
+        from sync import SyncService
+
+        class ExplodingDb:
+            def __getattr__(self, name):
+                raise AssertionError(f"touched db.{name}")
+
+        service = SyncService(db=ExplodingDb(), api_url="http://test.example.com", api_key="k")
+        with patch("sync.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=200)
+            self.assertTrue(service.sync_single_scan(self._scan(), "Gate1")["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()
