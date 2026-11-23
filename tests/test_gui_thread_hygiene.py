@@ -93,7 +93,7 @@ class TestShutdownSyncDeadline(unittest.TestCase):
         svc.db = _FakeDb(n)
         svc.batch_size = 10
         svc.sync_scan_batch_network_only.side_effect = (
-            lambda scans, station: {"synced_ids": list(scans), "failed_ids": []}
+            lambda scans, station, should_stop=None: {"synced_ids": list(scans), "failed_ids": []}
         )
         return svc
 
@@ -118,7 +118,9 @@ class TestShutdownSyncDeadline(unittest.TestCase):
 
     def test_no_progress_batch_stops_loop(self):
         svc = self._service(5)
-        svc.sync_scan_batch_network_only.side_effect = lambda s, st: {"synced_ids": [], "failed_ids": []}
+        svc.sync_scan_batch_network_only.side_effect = (
+            lambda s, st, should_stop=None: {"synced_ids": [], "failed_ids": []}
+        )
         result = sync_pending_until_deadline(
             svc, 30, run_network_call=lambda fn: fn(), clock=lambda: 0
         )

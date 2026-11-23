@@ -133,6 +133,8 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_scans_scanned_at ON scans(scanned_at);
                 CREATE INDEX IF NOT EXISTS idx_employees_sl_l1_desc ON employees(sl_l1_desc);
                 CREATE INDEX IF NOT EXISTS idx_scans_employee_key_nocase ON scans(COALESCE(legacy_id, badge_id) COLLATE NOCASE);
+                -- Lets scans-driven joins probe employees by legacy_id case-insensitively.
+                CREATE INDEX IF NOT EXISTS idx_employees_legacy_nocase ON employees(legacy_id COLLATE NOCASE);
 
                 CREATE TABLE IF NOT EXISTS roster_meta (
                     key TEXT PRIMARY KEY,
@@ -621,18 +623,30 @@ class DatabaseManager:
 
     def get_scans_by_bu(self) -> list[dict]:
         """Get unique scanned badge count grouped by BU using local data."""
+        # Joins are driven from scans (CROSS JOIN fixes the order in SQLite) so each
+        # scan is one indexed probe into employees; driving from employees cannot use
+        # an index for this NOCASE expression and costs scans x employees.
+        scanned_by_bu = {
+            row["bu_name"]: row["scanned"]
+            for row in self._connection.execute("""
+                SELECT e.sl_l1_desc AS bu_name, COUNT(DISTINCT e.legacy_id) AS scanned
+                FROM scans s
+                CROSS JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
+                GROUP BY e.sl_l1_desc
+            """)
+        }
         cursor = self._connection.execute("""
-            SELECT
-                e.sl_l1_desc AS bu_name,
-                COUNT(DISTINCT e.legacy_id) AS registered,
-                COUNT(DISTINCT CASE WHEN s.id IS NOT NULL THEN e.legacy_id END) AS scanned
-            FROM employees e
-            LEFT JOIN scans s ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
-            GROUP BY e.sl_l1_desc
-            ORDER BY e.sl_l1_desc
+            SELECT sl_l1_desc AS bu_name, COUNT(DISTINCT legacy_id) AS registered
+            FROM employees
+            GROUP BY sl_l1_desc
+            ORDER BY sl_l1_desc
         """)
         return [
-            {"bu_name": row["bu_name"], "registered": row["registered"], "scanned": row["scanned"]}
+            {
+                "bu_name": row["bu_name"],
+                "registered": row["registered"],
+                "scanned": scanned_by_bu.get(row["bu_name"], 0),
+            }
             for row in cursor.fetchall()
         ]
 
@@ -656,8 +670,8 @@ class DatabaseManager:
         """
         registered = int(self._connection.execute("""
             SELECT COUNT(DISTINCT e.legacy_id) AS cnt
-            FROM employees e
-            JOIN scans s ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
+            FROM scans s
+            CROSS JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
         """).fetchone()["cnt"] or 0)
         walkins: set[str] = set()
         unknown: set[str] = set()

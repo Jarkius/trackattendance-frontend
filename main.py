@@ -164,8 +164,12 @@ def sync_pending_until_deadline(
     total_synced = 0
     total_failed = 0
     deadline_hit = False
+
+    def past_deadline() -> bool:
+        return clock() - start >= deadline_seconds
+
     while True:
-        if clock() - start >= deadline_seconds:
+        if past_deadline():
             deadline_hit = True
             break
         batch_scans = sync_service.db.fetch_pending_scans(limit=sync_service.batch_size)
@@ -173,7 +177,9 @@ def sync_pending_until_deadline(
             break
         station_name = sync_service.db.get_station_name() or "UnknownStation"
         batch_result = run_network_call(
-            lambda: sync_service.sync_scan_batch_network_only(batch_scans, station_name)
+            lambda: sync_service.sync_scan_batch_network_only(
+                batch_scans, station_name, should_stop=past_deadline
+            )
         )
         synced_ids = batch_result.get('synced_ids', [])
         failed_ids = batch_result.get('failed_ids', [])
@@ -183,9 +189,11 @@ def sync_pending_until_deadline(
             sync_service.db.mark_scans_as_failed(failed_ids, batch_result.get('error') or 'Sync failed')
         total_synced += len(synced_ids)
         total_failed += len(failed_ids)
-        if not synced_ids and not failed_ids:
-            # No progress this batch (all pending_ids, e.g. a 401/retry-exhaustion)
-            # -- stop rather than loop forever on the same unresolved scans.
+        if batch_result.get('pending_ids') or (not synced_ids and not failed_ids):
+            # Something in this batch could not be resolved (auth, network, server,
+            # or the deadline). The next fetch would return the same scans, so stop
+            # instead of re-posting them; they stay pending and are exported.
+            deadline_hit = deadline_hit or past_deadline()
             break
     return {"synced": total_synced, "failed": total_failed, "deadline_hit": deadline_hit}
 

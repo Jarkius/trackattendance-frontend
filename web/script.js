@@ -1310,7 +1310,8 @@ ${destination}` : message;
             if (!bridge.submit_manual_scan) return;
             bridge.submit_manual_scan(originalQuery, legacyId, (response) => {
                 handleScanResponse(response);
-                barcodeInput.value = '';
+                // No clear here: the input was already cleared when the lookup
+                // started, and the next scan may have begun before this reply.
                 returnFocusToInput();
             });
         });
@@ -3186,9 +3187,11 @@ ${destination}` : message;
             && !(adminOverlay && adminOverlay.contains(event.target))
             && event.key.length === 1 && event.key !== ' '
             && !event.ctrlKey && !event.metaKey && !event.altKey) {
-            hideLookupOverlay();
-            captureStrayScanKey(event);
-            return;
+            const typingInInput = event.target === barcodeInput;
+            if (captureStrayScanKey(event) || typingInInput) {
+                hideLookupOverlay();
+                return;
+            }
         }
         // On the plain scan screen (no overlay open), Tab has nothing to
         // move to — the header icons aren't natively tabbable — so the

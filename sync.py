@@ -625,6 +625,7 @@ class SyncService:
         self,
         scans: List[ScanRecord],
         station_name: str,
+        should_stop: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """Upload a caller-supplied snapshot of scans to the cloud API. No SQLite access.
 
@@ -689,18 +690,29 @@ class SyncService:
         pending_ids: List[int] = []
         synced_count = 0
         errors: List[str] = []
+        reject_errors: List[str] = []
         budget = [_MAX_BISECT_REQUESTS]
+        # Once the server or network fails mid-split (or the caller's deadline
+        # passes), every remaining part stays pending instead of being posted:
+        # each further request would cost a full retry cycle for nothing.
+        halted = [False]
 
         def resolve(indices: List[int], first: bool) -> None:
             """Upload scans[i] for i in indices; bucket every id exactly once."""
             nonlocal synced_count
             ids = [scans[i].id for i in indices]
+            if halted[0] or (should_stop is not None and should_stop()):
+                halted[0] = True
+                pending_ids.extend(ids)
+                return
             if not first:
                 if budget[0] <= 0:
                     pending_ids.extend(ids)
                     return
                 budget[0] -= 1
-            kind, payload, error = self._post_events([events[i] for i in indices], len(indices))
+            kind, payload, error = self._post_events(
+                [events[i] for i in indices], len(indices), should_stop=should_stop
+            )
             if kind == "ok":
                 synced_ids.extend(ids)
                 synced_count += payload
@@ -709,7 +721,7 @@ class SyncService:
                     # A lone 400/422 is a verdict on that event. A lone 413 is not
                     # (the payload limit is a server/proxy setting), so it stays pending.
                     (failed_ids if kind == "rejected" else pending_ids).extend(ids)
-                    errors.append(error)
+                    (reject_errors if kind == "rejected" else errors).append(error)
                     return
                 mid = len(indices) // 2
                 LOGGER.warning(
@@ -723,12 +735,16 @@ class SyncService:
                 # stay pending and are retried on a later cycle.
                 pending_ids.extend(ids)
                 errors.append(error)
+                halted[0] = True
 
         resolve(list(range(len(scans))), True)
 
-        error_msg = errors[0] if errors else None
-        if len(errors) > 1:
-            error_msg = f"{errors[0]} (+{len(errors) - 1} more)"
+        # Rejections first: callers store `error` on the failed rows, so it must
+        # describe why those rows were rejected, not an unrelated transient error.
+        all_errors = reject_errors + errors
+        error_msg = all_errors[0] if all_errors else None
+        if len(all_errors) > 1:
+            error_msg = f"{all_errors[0]} (+{len(all_errors) - 1} more)"
         if failed_ids:
             LOGGER.error("[NetworkOnly] %d scan(s) rejected by the server: %s", len(failed_ids), error_msg)
         return {
@@ -736,7 +752,12 @@ class SyncService:
             "pending_ids": pending_ids, "synced_count": synced_count, "error": error_msg,
         }
 
-    def _post_events(self, events: List[dict], expected: int) -> Tuple[str, Any, Optional[str]]:
+    def _post_events(
+        self,
+        events: List[dict],
+        expected: int,
+        should_stop: Optional[Callable[[], bool]] = None,
+    ) -> Tuple[str, Any, Optional[str]]:
         """POST one batch with retry/backoff and classify the outcome. No SQLite access.
 
         Returns ``(kind, payload, error)`` where kind is one of:
@@ -814,6 +835,9 @@ class SyncService:
                     LOGGER.warning(f"[NetworkOnly] {last_error} (not retried this cycle)")
                     return "transient", None, last_error
 
+            if attempt < max_attempts - 1 and should_stop is not None and should_stop():
+                LOGGER.warning(f"[NetworkOnly] {last_error}; deadline reached, not retrying")
+                break
             if attempt < max_attempts - 1:
                 wait_time = backoff_seconds * (2 ** attempt)
                 LOGGER.warning(f"[NetworkOnly] {last_error}, retrying in {wait_time}s...")

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from database import normalize_badge_id, normalize_walkin_name
+from excel_safety import neutralize_formulas
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
@@ -31,11 +32,16 @@ logger = logging.getLogger(__name__)
 EXPORT_SERVER_LIMIT = 100000
 
 
-def classify_export_scan(employee_found: bool, scan_source: str) -> str:
-    """Attendance bucket for one export row: registered, walkin or unknown."""
-    if employee_found:
+def classify_export_scan(employee_found: bool, scan_source: Optional[str], cloud_matched: bool = False) -> str:
+    """Attendance bucket for one export row: registered, walkin or unknown.
+
+    A scan the cloud matched counts as registered even if this station's roster
+    lacks the person, so the export agrees with the dashboard. A missing or empty
+    scan_source means "manual", matching the server default and the local query.
+    """
+    if employee_found or cloud_matched:
         return "registered"
-    return "walkin" if scan_source == "manual" else "unknown"
+    return "walkin" if (scan_source or "manual") == "manual" else "unknown"
 
 
 def bucket_export_scans(enriched_scans: List[dict]) -> Dict[str, Any]:
@@ -475,9 +481,9 @@ class DashboardService:
                     business_unit = "--"
                     position = "--"
 
-                scan_source = scan.get("scan_source", "manual") if isinstance(scan, dict) else "manual"
+                scan_source = (scan.get("scan_source") if isinstance(scan, dict) else None) or "manual"
                 enriched_scans.append({
-                    "_kind": classify_export_scan(employee is not None, scan_source),
+                    "_kind": classify_export_scan(employee is not None, scan_source, bool(matched)),
                     "Scan Value": badge_id,
                     "Legacy ID": employee.legacy_id if employee else (legacy_id or ""),
                     "Full Name": full_name,
@@ -760,6 +766,7 @@ class DashboardService:
                 ws_walkins.column_dimensions[col[0].column_letter].width = max_length + 2
 
             # Save file
+            neutralize_formulas(wb)
             wb.save(file_path)
             result["ok"] = True
             result["message"] = f"Exported {len(df)} scans to Excel"

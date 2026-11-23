@@ -12,6 +12,8 @@ from typing import Dict, List, Optional
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
+
+from excel_safety import neutralize_formulas
 from PyQt6.QtWidgets import QInputDialog, QMessageBox, QWidget
 
 from database import (
@@ -266,7 +268,10 @@ class AttendanceService:
             employees: List[EmployeeRecord] = []
             row_num = 1  # header is row 1
             legacy_col = header_to_index["Legacy ID"]
-            numeric_unpadded = 0
+            # Widths of numeric-format IDs, and the widest all-digit ID of any kind.
+            # A numeric ID can only have lost leading zeros if it is shorter than that.
+            numeric_widths: List[int] = []
+            widest_digit_id = 0
             for row_cells in sheet.iter_rows(min_row=2):
                 row_num += 1
                 row = tuple(getattr(c, "value", None) for c in row_cells)
@@ -276,7 +281,9 @@ class AttendanceService:
                 if not legacy_id:
                     continue
                 if numeric_risk:
-                    numeric_unpadded += 1
+                    numeric_widths.append(len(legacy_id))
+                if legacy_id.isascii() and legacy_id.isdigit():
+                    widest_digit_id = max(widest_digit_id, len(legacy_id))
                 id_key = normalize_badge_id(legacy_id)
                 full_name = _safe_string(row[header_to_index["Full Name"]] if header_to_index["Full Name"] < len(row) else None)
                 sl_l1_desc = _safe_string(row[header_to_index["SL L1 Desc"]] if header_to_index["SL L1 Desc"] < len(row) else None)
@@ -332,6 +339,7 @@ class AttendanceService:
             inserted = self._db.bulk_insert_employees(employees)
             self._db.set_roster_hash(current_hash)
             self._db.set_roster_meta("file_mtime", current_mtime)
+            numeric_unpadded = sum(1 for w in numeric_widths if w < widest_digit_id)
             if numeric_unpadded:
                 warning = (
                     f"{numeric_unpadded} numeric Legacy ID cell(s) in "
@@ -372,6 +380,7 @@ class AttendanceService:
                 for col in ws.columns:
                     max_len = max((len(str(cell.value or "")) for cell in col), default=10)
                     ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+                neutralize_formulas(wb)
                 wb.save(path)
             finally:
                 wb.close()
@@ -410,6 +419,7 @@ class AttendanceService:
             for row in sample_rows:
                 sheet.append(row)
 
+            neutralize_formulas(workbook)
             workbook.save(path)
         finally:
             workbook.close()
@@ -787,6 +797,7 @@ class AttendanceService:
                             continue
                         max_length = max(max_length, len(str(value)))
                 sheet.column_dimensions[get_column_letter(col_idx)].width = min(max_length + 2, 60)
+            neutralize_formulas(workbook)
             workbook.save(export_path)
         finally:
             workbook.close()

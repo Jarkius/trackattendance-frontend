@@ -106,7 +106,7 @@ class TestBadgeIdNormalisation(unittest.TestCase):
         self.assertFalse(svc._roster_warning)
 
     def test_numeric_cell_general_format_adds_warning_with_count(self):
-        self._write([[123, "Alice", "BU1", "P"], [456, "Bob", "BU1", "P"], ["789", "Cy", "BU1", "P"]])
+        self._write([[123, "Alice", "BU1", "P"], [456, "Bob", "BU1", "P"], ["00789", "Cy", "BU1", "P"]])
         svc = self._service()
         self.assertIsNone(svc._roster_error)  # a warning, not an error
         self.assertIn("123", svc._employee_cache)  # import still happens
@@ -114,7 +114,7 @@ class TestBadgeIdNormalisation(unittest.TestCase):
         self.assertIn("2 numeric", svc._roster_warning)
 
     def test_warning_persists_when_roster_unchanged(self):
-        self._write([[123, "Alice", "BU1", "P"]])
+        self._write([[123, "Alice", "BU1", "P"], ["00456", "Bob", "BU1", "P"]])
         self._service()
         self.services.pop().close()
         svc = self._service()  # cached path, no reimport
