@@ -587,6 +587,7 @@ class AttendanceService:
                     "status": "duplicate_rejected",
                     "message": f"Duplicate: Badge {sanitized} scanned within {config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS} seconds",
                     "is_duplicate": True,
+                    "duplicateWindowSeconds": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
                     "badgeId": sanitized,
                     "fullName": employee.full_name if employee else "Unknown",
                 }
@@ -669,6 +670,7 @@ class AttendanceService:
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
             "is_duplicate": show_duplicate_alert,  # Only true for 'warn' mode
+            "duplicateWindowSeconds": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
         }
         return payload
 
