@@ -3153,7 +3153,8 @@ ${destination}` : message;
         // activating the focused "Record Scan" button. Space is left alone so
         // it still activates a focused button; arrows/Enter/Tab are not
         // printable single keys and keep their lookup behavior.
-        if (isLookupOverlayOpen() && lookupOverlay.contains(event.target)
+        if (isLookupOverlayOpen()
+            && !(adminOverlay && adminOverlay.contains(event.target))
             && event.key.length === 1 && event.key !== ' '
             && !event.ctrlKey && !event.metaKey && !event.altKey) {
             hideLookupOverlay();
