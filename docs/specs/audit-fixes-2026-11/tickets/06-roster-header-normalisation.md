@@ -29,6 +29,6 @@ python -m pytest tests/ <CI ignores> -v --tb=short
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `attendance.py` (new `_clean_header`, `_normalise_header`, `map_roster_headers`, `_one_line`; `validate_roster_headers` and `_bootstrap_employee_directory` use the shared mapping; missing columns, strict-validation skip, header-less sheet and zero valid rows now raise `ValueError`); new `tests/test_roster_header_normalisation.py` (13 tests); `tests/test_roster_bootstrap_corrupt_file.py` (one assertion, see limitations).
+- Verification results: `pytest tests/test_roster_header_normalisation.py tests/test_roster_bootstrap_corrupt_file.py tests/test_config.py` 45 passed; local CI equivalent 444 passed, 1 skipped. The new tests failed before the change (12 of 13).
+- Known limitations: the existing corrupt-file test with strict validation asserted `_roster_error is None` (the silent skip this ticket removes); it now asserts an error is set. Legacy ID value conversion is unchanged (ticket 07). A failed import never stores the roster hash/mtime, so a fixed file re-imports (tested).
