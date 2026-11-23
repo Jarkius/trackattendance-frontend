@@ -2255,6 +2255,7 @@ ${destination}` : message;
     const adminMonitoringStatus = document.getElementById('admin-monitoring-status');
     const adminImmediateSyncToggle = document.getElementById('admin-immediate-sync-toggle');
     const adminImmediateSyncStatus = document.getElementById('admin-immediate-sync-status');
+    const adminPartyBgToggle = document.getElementById('admin-party-bg-toggle');
     const adminDupDetectionToggle = document.getElementById('admin-dup-detection-toggle');
     const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
@@ -2370,6 +2371,12 @@ ${destination}` : message;
                             : 'OFF: uploads on idle (default)';
                         adminImmediateSyncStatus.style.color = immediateSyncEnabled ? '#86bc25' : '#999';
                     }
+                    // Background image toggle
+                    const partyBgEnabled = !!result.show_party_background;
+                    if (adminPartyBgToggle) {
+                        adminPartyBgToggle.classList.toggle('active', partyBgEnabled);
+                    }
+                    document.body.classList.toggle('party-bg', partyBgEnabled);
                     // Duplicate detection toggle
                     const dupEnabled = result.duplicate_detection_enabled !== false;
                     if (adminDupDetectionToggle) {
@@ -2638,6 +2645,21 @@ ${destination}` : message;
             queueOrRun((bridge) => {
                 if (bridge.admin_set_immediate_sync) {
                     bridge.admin_set_immediate_sync(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Background image toggle
+    if (adminPartyBgToggle) {
+        adminPartyBgToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminPartyBgToggle.classList.contains('active');
+            adminPartyBgToggle.classList.toggle('active', newState);
+            document.body.classList.toggle('party-bg', newState);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_party_background) {
+                    bridge.admin_set_party_background(newState, () => {});
                 }
             });
         });

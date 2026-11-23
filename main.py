@@ -1574,6 +1574,7 @@ class Api(QObject):
             "dashboard_url": dashboard_url,
             "monitoring_mode": config.CLOUD_READ_ONLY,
             "immediate_sync_enabled": config.IMMEDIATE_SYNC_ENABLED,
+            "show_party_background": config.SHOW_PARTY_BACKGROUND,
             "log_level": config.LOGGING_LEVEL,
             "console_logging": config.LOGGING_CONSOLE,
             "debug_panel": _debug_log_buffer in logging.getLogger().handlers,
@@ -1806,6 +1807,10 @@ class Api(QObject):
         if v is not None:
             config.IMMEDIATE_SYNC_ENABLED = v.lower() in ("true", "1")
             count += 1
+        v = db.get_meta("setting:show_party_background")
+        if v is not None:
+            config.SHOW_PARTY_BACKGROUND = v.lower() in ("true", "1")
+            count += 1
         # API key from SQLite (Option B: allows setting key without .env)
         if not config.CLOUD_API_KEY:
             v = db.get_meta("setting:cloud_api_key")
@@ -1914,6 +1919,14 @@ class Api(QObject):
         config.IMMEDIATE_SYNC_ENABLED = enabled
         self._save_setting("immediate_sync_enabled", str(enabled))
         LOGGER.info("[Admin] Immediate sync %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_party_background(self, enabled: bool) -> dict:
+        """Toggle the web/images/party-bg.jpg background. Persisted across restarts."""
+        config.SHOW_PARTY_BACKGROUND = enabled
+        self._save_setting("show_party_background", str(enabled))
+        LOGGER.info("[Admin] Party background %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
 
     @pyqtSlot(str, result="QVariant")
