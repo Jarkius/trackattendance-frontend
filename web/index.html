@@ -17,7 +17,6 @@
 </head>
 
 <body class="party-bg">
-    <span class="app-version" id="app-version" aria-hidden="true"></span>
     <header>
         <div class="header-inner">
             <h1>Station : <span id="station-name">--</span></h1>
@@ -110,6 +109,7 @@
                     <div class="dashboard-section card">
                         <div class="card-content">
                             <span class="card-title">Dashboard</span>
+                            <span class="app-version" id="app-version" aria-hidden="true"></span>
                             <div class="row">
                                 <div class="col s6">
                                     <div class="counter">
@@ -314,6 +314,11 @@
                         <button class="adm-toggle" id="admin-monitoring-toggle" type="button"></button>
                     </div>
                     <p class="adm-status" id="admin-monitoring-status" style="font-size:0.72rem;color:#999;">Read-only: view dashboard without sending data</p>
+                    <div class="adm-toggle-row" style="margin-top:8px;">
+                        <span class="adm-toggle-row__label">Immediate Write</span>
+                        <button class="adm-toggle" id="admin-immediate-sync-toggle" type="button"></button>
+                    </div>
+                    <p class="adm-status" id="admin-immediate-sync-status" style="font-size:0.72rem;color:#999;">Upload each scan immediately instead of waiting for an idle gap</p>
                 </div>
                 <div class="adm-section">
                     <div class="adm-section__header adm-section__header--scanning"><i class="material-icons">badge</i> Scanning</div>

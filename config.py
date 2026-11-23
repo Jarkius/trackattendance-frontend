@@ -143,6 +143,12 @@ CONNECTION_CHECK_INITIAL_DELAY_MS = int(float(os.getenv("CONNECTION_CHECK_INITIA
 # Enable/disable automatic synchronization
 AUTO_SYNC_ENABLED = os.getenv("AUTO_SYNC_ENABLED", "True").lower() in ("true", "1", "yes")
 
+# Upload each scan immediately after it's recorded, in addition to the
+# idle-triggered batch sync below (which still runs as the fallback/catch-up
+# path regardless of this setting). Off by default -- most events don't need
+# per-scan cloud visibility badly enough to pay the extra request per scan.
+IMMEDIATE_SYNC_ENABLED = os.getenv("IMMEDIATE_SYNC_ENABLED", "False").lower() in ("true", "1", "yes")
+
 # Time in seconds to wait after last scan before allowing auto-sync
 # This ensures auto-sync only happens during idle periods
 AUTO_SYNC_IDLE_SECONDS = _safe_int("AUTO_SYNC_IDLE_SECONDS", 30, min_val=5, max_val=3600)

@@ -1573,6 +1573,7 @@ class Api(QObject):
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
             "monitoring_mode": config.CLOUD_READ_ONLY,
+            "immediate_sync_enabled": config.IMMEDIATE_SYNC_ENABLED,
             "log_level": config.LOGGING_LEVEL,
             "console_logging": config.LOGGING_CONSOLE,
             "debug_panel": _debug_log_buffer in logging.getLogger().handlers,
@@ -1801,6 +1802,10 @@ class Api(QObject):
         if v is not None:
             config.CLOUD_READ_ONLY = v.lower() in ("true", "1")
             count += 1
+        v = db.get_meta("setting:immediate_sync_enabled")
+        if v is not None:
+            config.IMMEDIATE_SYNC_ENABLED = v.lower() in ("true", "1")
+            count += 1
         # API key from SQLite (Option B: allows setting key without .env)
         if not config.CLOUD_API_KEY:
             v = db.get_meta("setting:cloud_api_key")
@@ -1901,6 +1906,14 @@ class Api(QObject):
         config.CLOUD_READ_ONLY = enabled
         self._save_setting("cloud_read_only", str(enabled))
         LOGGER.info("[Admin] Monitoring mode %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_immediate_sync(self, enabled: bool) -> dict:
+        """Toggle immediate per-scan cloud upload. Persisted across restarts."""
+        config.IMMEDIATE_SYNC_ENABLED = enabled
+        self._save_setting("immediate_sync_enabled", str(enabled))
+        LOGGER.info("[Admin] Immediate sync %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
 
     @pyqtSlot(str, result="QVariant")
@@ -2572,11 +2585,16 @@ def main() -> None:
             batch_size=config.CLOUD_SYNC_BATCH_SIZE,
             connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
         )
-        # Single shared coordinator for all manual/automatic sync network
-        # work, so those jobs serialize through one worker thread instead of
-        # racing each other. Created here (not unconditionally) so local-only
-        # (no API key) installs never spin up an unused background thread.
+        # Single shared coordinator for all manual/automatic/immediate-write
+        # sync network work, so those jobs serialize through one worker
+        # thread instead of racing each other. Created here (not
+        # unconditionally) so local-only (no API key) installs never spin
+        # up an unused background thread.
         sync_coordinator = BackgroundSyncCoordinator()
+        # Wire SyncService + coordinator into AttendanceService so
+        # register_scan() can submit an immediate-write upload job when
+        # config.IMMEDIATE_SYNC_ENABLED is on.
+        service.set_sync_service(sync_service, coordinator=sync_coordinator)
         LOGGER.info(
             "Connection status checks: interval=%sms, timeout=%.2fs",
             config.CONNECTION_CHECK_INTERVAL_MS,

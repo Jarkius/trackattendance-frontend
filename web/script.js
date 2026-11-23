@@ -2253,6 +2253,8 @@ ${destination}` : message;
     const adminRefreshStatus = document.getElementById('admin-refresh-status');
     const adminMonitoringToggle = document.getElementById('admin-monitoring-toggle');
     const adminMonitoringStatus = document.getElementById('admin-monitoring-status');
+    const adminImmediateSyncToggle = document.getElementById('admin-immediate-sync-toggle');
+    const adminImmediateSyncStatus = document.getElementById('admin-immediate-sync-status');
     const adminDupDetectionToggle = document.getElementById('admin-dup-detection-toggle');
     const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
@@ -2356,6 +2358,17 @@ ${destination}` : message;
                             ? 'ON: No data sent to cloud (read-only)'
                             : 'OFF: Normal sync active';
                         adminMonitoringStatus.style.color = monitoringEnabled ? '#ff9800' : '#999';
+                    }
+                    // Immediate write toggle
+                    const immediateSyncEnabled = !!result.immediate_sync_enabled;
+                    if (adminImmediateSyncToggle) {
+                        adminImmediateSyncToggle.classList.toggle('active', immediateSyncEnabled);
+                    }
+                    if (adminImmediateSyncStatus) {
+                        adminImmediateSyncStatus.textContent = immediateSyncEnabled
+                            ? 'ON: each scan uploads immediately'
+                            : 'OFF: uploads on idle (default)';
+                        adminImmediateSyncStatus.style.color = immediateSyncEnabled ? '#86bc25' : '#999';
                     }
                     // Duplicate detection toggle
                     const dupEnabled = result.duplicate_detection_enabled !== false;
@@ -2605,6 +2618,26 @@ ${destination}` : message;
             queueOrRun((bridge) => {
                 if (bridge.admin_set_monitoring_mode) {
                     bridge.admin_set_monitoring_mode(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Immediate write toggle
+    if (adminImmediateSyncToggle) {
+        adminImmediateSyncToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminImmediateSyncToggle.classList.contains('active');
+            adminImmediateSyncToggle.classList.toggle('active', newState);
+            if (adminImmediateSyncStatus) {
+                adminImmediateSyncStatus.textContent = newState
+                    ? 'ON: each scan uploads immediately'
+                    : 'OFF: uploads on idle (default)';
+                adminImmediateSyncStatus.style.color = newState ? '#86bc25' : '#999';
+            }
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_immediate_sync) {
+                    bridge.admin_set_immediate_sync(newState, () => {});
                 }
             });
         });

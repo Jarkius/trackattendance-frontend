@@ -49,6 +49,19 @@ class AttendanceService:
         else:
             self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
+        self._sync_service = None  # Set via set_sync_service() for immediate-write sync
+        self._sync_coordinator = None  # Set via set_sync_service() for immediate-write sync
+
+    def set_sync_service(self, sync_service, coordinator=None) -> None:
+        """Attach SyncService for immediate per-scan cloud upload.
+
+        coordinator: shared BackgroundSyncCoordinator (from main.py) used to
+        enqueue the immediate-write upload instead of spawning a raw thread
+        per scan. If not supplied, immediate-write is disabled (register_scan()
+        checks for this) rather than falling back to a per-scan threading.Thread.
+        """
+        self._sync_service = sync_service
+        self._sync_coordinator = coordinator
 
     def employees_loaded(self) -> bool:
         return self._db.employees_loaded()
@@ -536,6 +549,54 @@ class AttendanceService:
         # is unaffected and still runs synchronously.
         timestamp = datetime.now(timezone.utc).strftime(ISO_TIMESTAMP_FORMAT)
         self._db.record_scan(sanitized, self.station_name, employee, timestamp, scan_source=scan_source)
+
+        # Immediate write: upload this scan to cloud right away instead of
+        # waiting for the idle-triggered batch sync, via the shared
+        # BackgroundSyncCoordinator worker thread. record_scan() above has
+        # already committed the scan to SQLite (offline-first: the local
+        # write always happens first, regardless of whether this enqueue
+        # succeeds). sync_single_scan() performs network I/O only — it
+        # never touches self._db — so it's safe to run on the coordinator's
+        # worker thread. It never marks the scan as synced itself (that
+        # would touch SQLite off the main thread); the row stays 'pending'
+        # and the normal idle-triggered batch sync marks it synced later,
+        # using the same idempotency key so a redundant re-send is a safe
+        # no-op. If the bounded queue is full or the coordinator is
+        # unavailable/paused, the scan simply falls back to that same batch
+        # path — no scan is ever lost, only its immediate-upload latency.
+        if (config.IMMEDIATE_SYNC_ENABLED and not config.CLOUD_READ_ONLY
+                and self._sync_service and self._sync_coordinator):
+            scan_to_sync = self._db.fetch_last_pending_scan()
+            if scan_to_sync:
+                sync_service = self._sync_service
+                station = self.station_name  # resolved on the main thread, not the worker
+                badge_id = scan_to_sync.badge_id
+
+                def _log_result(job_id: int, result: dict) -> None:
+                    if result.get("ok"):
+                        LOGGER.info("[ImmediateSync] Uploaded badge=%s", badge_id)
+                    else:
+                        LOGGER.warning(
+                            "[ImmediateSync] Failed badge=%s: %s — will be picked up by next batch sync",
+                            badge_id, result.get("error") or result.get("message"),
+                        )
+
+                def _log_error(job_id: int, exc: Exception) -> None:
+                    LOGGER.warning(
+                        "[ImmediateSync] Exception for badge=%s: %s — will be picked up by next batch sync",
+                        badge_id, exc,
+                    )
+
+                job_id = self._sync_coordinator.submit(
+                    lambda: sync_service.sync_single_scan(scan_to_sync, station),
+                    on_result=_log_result,
+                    on_error=_log_error,
+                )
+                if job_id is None:
+                    LOGGER.info(
+                        "[ImmediateSync] Coordinator busy for badge=%s — will be picked up by next batch sync",
+                        badge_id,
+                    )
 
         history = self._db.get_recent_scans()
         # Only flag as duplicate for UI alert if action is 'warn' (not 'silent')

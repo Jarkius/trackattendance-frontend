@@ -784,6 +784,47 @@ class SyncService:
             "synced_count": 0, "error": last_error,
         }
 
+    def sync_single_scan(self, scan: ScanRecord, station_name: str) -> dict:
+        """Immediately sync a single scan to cloud. Fire-and-forget safe.
+
+        Network-only — never touches self.db. station_name must be resolved by
+        the caller on the thread that owns self.db (the main thread) beforehand;
+        this matches the pattern established by sync_scan_batch_network_only().
+        """
+        from config import CLOUD_READ_ONLY
+        if CLOUD_READ_ONLY:
+            return {"ok": False, "skipped": True}
+        try:
+            key = self._build_idempotency_key(station_name, scan.badge_id, scan.id)
+            payload = {
+                "events": [{
+                    "idempotency_key": key,
+                    "badge_id": scan.badge_id,
+                    "station_name": scan.station_name,
+                    "scanned_at": scan.scanned_at,
+                    "business_unit": scan.sl_l1_desc or None,
+                    "scan_source": scan.scan_source,
+                }]
+            }
+            response = requests.post(
+                f"{self.api_url}/v1/scans/batch",
+                json=payload,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                timeout=3.0,
+            )
+            if response.status_code == 200:
+                # Don't call mark_scans_as_synced here — this runs in a
+                # background thread and the SQLite connection belongs to the
+                # main thread.  Batch sync will mark it later; the idempotency
+                # key prevents double-counting on the cloud side.
+                LOGGER.info("[ImmediateSync] Uploaded OK: badge=%s", scan.badge_id)
+                return {"ok": True}
+            LOGGER.warning("[ImmediateSync] Upload HTTP %d", response.status_code)
+            return {"ok": False, "error": f"HTTP {response.status_code}"}
+        except Exception as e:
+            LOGGER.warning("[ImmediateSync] Upload failed: %s", e)
+            return {"ok": False, "error": str(e)}
+
     def get_cloud_scan_count(self) -> Tuple[bool, int, str]:
         """Get count of scans in cloud database.
 
