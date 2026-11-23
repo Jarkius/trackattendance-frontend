@@ -555,6 +555,37 @@ class TestDashboardExport(unittest.TestCase):
         self.assertEqual(result["message"], "No scan data to export")
         self.assertTrue(result.get("noData", False))
 
+    def _export_with_total(self, mock_get, total):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "total_records": total,
+            "scans": [{
+                "badge_id": "TEST001", "legacy_id": "TEST001",
+                "station_name": "TestStation",
+                "scanned_at": "2026-01-01T08:00:00Z",
+                "matched": True, "scan_source": "badge",
+            }],
+        }
+        mock_get.return_value = mock_response
+        return self.service.export_to_excel()
+
+    @patch('dashboard.requests.get')
+    def test_export_warns_when_possibly_truncated(self, mock_get):
+        """total_records at the server's 100000 cap logs a truncation warning."""
+        with self.assertLogs('dashboard', level='WARNING') as cm:
+            self._export_with_total(mock_get, 100000)
+        self.assertTrue(any("truncated" in m for m in cm.output))
+
+    @patch('dashboard.requests.get')
+    def test_export_no_truncation_warning_below_cap(self, mock_get):
+        """total_records just below the cap logs no truncation warning."""
+        with self.assertLogs('dashboard', level='WARNING') as cm:
+            import logging
+            logging.getLogger('dashboard').warning("sentinel")
+            self._export_with_total(mock_get, 99999)
+        self.assertFalse(any("truncated" in m for m in cm.output))
+
     @patch('dashboard.requests.get')
     def test_export_api_error(self, mock_get):
         """Test export handles API error status."""

@@ -23,6 +23,6 @@ python -m pytest tests/test_dashboard.py -v
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `docs/API.md` (export section matches server.ts: object scans, total_records, export_timestamp, limit, no pagination); `CLAUDE.md` (Cloud API line no longer "paginated"; Privacy line covers walk-in typed text synced as badge_id); `dashboard.py` (EXPORT_SERVER_LIMIT; warns when export reaches 100000); `tests/test_dashboard.py` (warning at 100000, none at 99999)
+- Verification results: `pytest tests/test_dashboard.py -q -p no:cacheprovider` -> 28 passed
+- Known limitations: the warning is advisory only; exports above 100000 scans are still truncated server-side (no pagination exists).

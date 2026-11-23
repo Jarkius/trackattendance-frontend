@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Server caps GET /v1/dashboard/export at this many rows (no pagination).
+EXPORT_SERVER_LIMIT = 100000
+
 
 class DashboardService:
     """Service for fetching multi-station dashboard data via Cloud API."""
@@ -312,6 +315,14 @@ class DashboardService:
 
             data = response.json()
             scans = data.get("scans", [])
+
+            total_records = data.get("total_records", len(scans))
+            if max(total_records, len(scans)) >= EXPORT_SERVER_LIMIT:
+                logger.warning(
+                    "Export returned %d records, at the server limit of %d; "
+                    "the export may be truncated",
+                    max(total_records, len(scans)), EXPORT_SERVER_LIMIT,
+                )
 
             if not scans:
                 result["message"] = "No scan data to export"
