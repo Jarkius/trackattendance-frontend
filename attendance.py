@@ -672,7 +672,15 @@ class AttendanceService:
         }
         return payload
 
-    def export_scans(self) -> Dict[str, object]:
+    def export_scans(self, run_blocking=None) -> Dict[str, object]:
+        """Write all scans to an Excel file.
+
+        The SQLite read always happens on the calling thread (sqlite3
+        connections are thread-affine). When ``run_blocking`` is given, only
+        the workbook build/save -- which touches no database -- is passed to
+        it (e.g. ``call_without_freezing_ui``) so the GUI thread stays
+        responsive for large histories.
+        """
         scans = self._db.fetch_all_scans()
         if not scans:
             return {
@@ -682,6 +690,20 @@ class AttendanceService:
                 "records": 0,
             }
         export_path = self._build_export_path()
+        if run_blocking is None:
+            self._write_export_workbook(scans, export_path)
+        else:
+            run_blocking(lambda: self._write_export_workbook(scans, export_path))
+        return {
+            "ok": True,
+            "fileName": export_path.name,
+            "absolutePath": str(export_path),
+            "records": len(scans),
+        }
+
+    @staticmethod
+    def _write_export_workbook(scans, export_path: Path) -> None:
+        """Build and save the workbook. Pure CPU/file I/O, no database access."""
         workbook = Workbook()
         try:
             sheet = workbook.active
@@ -721,12 +743,6 @@ class AttendanceService:
             workbook.save(export_path)
         finally:
             workbook.close()
-        return {
-            "ok": True,
-            "fileName": export_path.name,
-            "absolutePath": str(export_path),
-            "records": len(scans),
-        }
 
     def _build_export_path(self) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

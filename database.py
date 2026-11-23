@@ -98,6 +98,7 @@ class DatabaseManager:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status ON scans(sync_status);
+                CREATE INDEX IF NOT EXISTS idx_scans_synced_at ON scans(synced_at);
                 CREATE INDEX IF NOT EXISTS idx_scans_badge_station_time_nocase ON scans(badge_id COLLATE NOCASE, station_name COLLATE NOCASE, scanned_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_scans_legacy_station_time_nocase ON scans(legacy_id COLLATE NOCASE, station_name COLLATE NOCASE, scanned_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status_time ON scans(sync_status, scanned_at);
@@ -567,23 +568,27 @@ class DatabaseManager:
         return cursor.rowcount
 
     def get_sync_statistics(self) -> Dict[str, Any]:
-        """Get sync statistics for UI display."""
-        cursor = self._connection.execute(
-            """
-            SELECT
-                COUNT(*) FILTER (WHERE sync_status = 'pending') as pending,
-                COUNT(*) FILTER (WHERE sync_status = 'synced') as synced,
-                COUNT(*) FILTER (WHERE sync_status = 'failed') as failed,
-                MAX(synced_at) as last_sync_time
-            FROM scans
-            """
-        )
-        row = cursor.fetchone()
+        """Get sync statistics for UI display.
+
+        Counts come from a GROUP BY over the covering idx_scans_sync_status
+        index and the last sync time from MAX() on idx_scans_synced_at, so
+        neither reads the scans table itself (this runs after every scan and
+        on each auto-sync tick).
+        """
+        counts = {"pending": 0, "synced": 0, "failed": 0}
+        for row in self._connection.execute(
+            "SELECT sync_status, COUNT(*) AS n FROM scans GROUP BY sync_status"
+        ):
+            if row["sync_status"] in counts:
+                counts[row["sync_status"]] = int(row["n"] or 0)
+        last = self._connection.execute(
+            "SELECT MAX(synced_at) AS last_sync_time FROM scans"
+        ).fetchone()
         return {
-            "pending": int(row["pending"] or 0),
-            "synced": int(row["synced"] or 0),
-            "failed": int(row["failed"] or 0),
-            "last_sync_time": row["last_sync_time"],
+            "pending": counts["pending"],
+            "synced": counts["synced"],
+            "failed": counts["failed"],
+            "last_sync_time": last["last_sync_time"],
         }
 
     def get_scans_by_bu(self) -> list[dict]:
