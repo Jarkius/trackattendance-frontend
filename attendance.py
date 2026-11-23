@@ -18,7 +18,49 @@ from database import DatabaseManager, EmployeeRecord, ScanRecord, ISO_TIMESTAMP_
 
 LOGGER = logging.getLogger(__name__)
 REQUIRED_COLUMNS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
+OPTIONAL_EMAIL_COLUMN = "Email"
 EXAMPLE_WORKBOOK_NAME = "exampleof_employee.xlsx"
+
+# Invisible characters that Excel/copy-paste commonly leave in header cells.
+_INVISIBLE_HEADER_CHARS = dict.fromkeys(
+    map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None
+)
+
+
+def _clean_header(value: object) -> str:
+    """Display form of a header cell: no zero-width chars, NBSP as space, trimmed."""
+    if value is None:
+        return ""
+    text = str(value).translate(_INVISIBLE_HEADER_CHARS).replace("\u00a0", " ")
+    return " ".join(text.split())
+
+
+def _normalise_header(value: object) -> str:
+    """Comparison key for a header cell (cleaned and case-insensitive)."""
+    return _clean_header(value).casefold()
+
+
+def map_roster_headers(header_row) -> Dict[str, int]:
+    """Map canonical column names (required + optional Email) to column indices.
+
+    Shared by validate_roster_headers and the roster import so both agree on
+    what counts as a matching header. First matching column wins.
+    """
+    by_key: Dict[str, int] = {}
+    for idx, cell in enumerate(header_row):
+        key = _normalise_header(cell)
+        if key and key not in by_key:
+            by_key[key] = idx
+    mapping: Dict[str, int] = {}
+    for canonical in [*REQUIRED_COLUMNS, OPTIONAL_EMAIL_COLUMN]:
+        idx = by_key.get(_normalise_header(canonical))
+        if idx is not None:
+            mapping[canonical] = idx
+    return mapping
+
+
+def _one_line(message: str) -> str:
+    return " ".join(message.split())
 
 
 DISPLAY_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -88,20 +130,20 @@ class AttendanceService:
             if not header_row or all(cell is None for cell in header_row):
                 return False, "Roster file has no headers (first row is empty)"
 
-            # Extract non-empty headers
+            # Extract non-empty headers (cleaned display form)
             actual_headers = {
-                str(name).strip() for name in header_row
-                if name and str(name).strip()
+                _clean_header(name) for name in header_row
+                if _clean_header(name)
             }
 
-            # Check for required columns
-            from config import REQUIRED_ROSTER_COLUMNS
-            missing = [col for col in REQUIRED_ROSTER_COLUMNS if col not in actual_headers]
+            # Check for required columns (same normalisation as the import)
+            mapping = map_roster_headers(header_row)
+            missing = [col for col in REQUIRED_COLUMNS if col not in mapping]
 
             if missing:
                 msg = f"Roster missing required columns:\n\n"
                 msg += f"Missing: {', '.join(missing)}\n\n"
-                msg += f"Required: {', '.join(REQUIRED_ROSTER_COLUMNS)}\n\n"
+                msg += f"Required: {', '.join(REQUIRED_COLUMNS)}\n\n"
                 msg += f"Found: {', '.join(sorted(actual_headers)) if actual_headers else '(none)'}"
                 return False, msg
 
@@ -146,7 +188,10 @@ class AttendanceService:
                 LOGGER.error("Roster validation failed: %s", validation_msg)
                 if ROSTER_STRICT_VALIDATION:
                     LOGGER.error("Strict validation enabled - skipping import")
-                    return
+                    raise ValueError(
+                        f"Roster not imported. {_one_line(validation_msg)} "
+                        f"Fix {self._employee_workbook_path.name} and restart the application."
+                    )
             else:
                 LOGGER.warning("Roster validation skipped (disabled): %s", validation_msg)
 
@@ -166,22 +211,26 @@ class AttendanceService:
             ) from e
         try:
             sheet = workbook.active
-            header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
-            ordered_headers = [
-                str(name).strip()
-                for name in header_row
-                if name and str(name).strip()
-            ]
+            header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), None)
+            if not header_row:
+                raise ValueError(
+                    f"Roster not imported: {self._employee_workbook_path.name} has no header row. "
+                    f"Fix the file and restart the application."
+                )
+            ordered_headers = [_clean_header(name) for name in header_row if _clean_header(name)]
             if ordered_headers:
                 self._employee_headers = ordered_headers
-            header_to_index = {name: idx for idx, name in enumerate(header_row) if name}
+            header_to_index = map_roster_headers(header_row)
             missing = [name for name in REQUIRED_COLUMNS if name not in header_to_index]
             if missing:
                 LOGGER.error("Employee workbook missing columns: %s", ", ".join(missing))
-                return
+                raise ValueError(
+                    f"Roster not imported: missing required column(s): {', '.join(missing)}. "
+                    f"Fix {self._employee_workbook_path.name} and restart the application."
+                )
 
             # Detect optional columns present in this workbook
-            email_index = header_to_index.get("Email")
+            email_index = header_to_index.get(OPTIONAL_EMAIL_COLUMN)
 
             seen_ids: dict[str, int] = {}  # legacy_id → first row number
             duplicates: list[dict] = []  # detailed duplicate info
@@ -236,15 +285,22 @@ class AttendanceService:
                     f"Fix employee.xlsx and restart the application."
                 )
 
-            if employees:
-                # Clear old employees and reimport
-                self._db.clear_employees()
-                inserted = self._db.bulk_insert_employees(employees)
-                self._db.set_roster_hash(current_hash)
-                self._db.set_roster_meta("file_mtime", current_mtime)
-                LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
-                # Roster BU counts will be pushed to cloud after first
-                # successful health check (see main.py Api._run_check)
+            if not employees:
+                raise ValueError(
+                    f"Roster not imported: {self._employee_workbook_path.name} has no valid "
+                    f"employee rows (every Legacy ID is empty). "
+                    f"Fix the file and restart the application."
+                )
+
+            # Clear old employees and reimport. The hash/mtime are stored only
+            # after a successful import, so a fixed file is re-imported.
+            self._db.clear_employees()
+            inserted = self._db.bulk_insert_employees(employees)
+            self._db.set_roster_hash(current_hash)
+            self._db.set_roster_meta("file_mtime", current_mtime)
+            LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
+            # Roster BU counts will be pushed to cloud after first
+            # successful health check (see main.py Api._run_check)
         finally:
             workbook.close()
 
