@@ -1,9 +1,13 @@
 @echo off
 setlocal EnableExtensions
 
-:: One-step Windows build. Run from the repo root.
-:: Output: dist\TrackAttendance\ (TrackAttendance.exe + _internal\ + deploy.bat),
-:: which is the folder to host on a share and run deploy.bat from.
+:: One-step Windows build + install. Run from the repo root.
+::   1. Builds dist\TrackAttendance\ (onedir: TrackAttendance.exe + _internal\)
+::   2. Copies deploy.bat next to the exe
+::   3. Runs that deploy.bat, which copies the build to C:\TrackAttendance
+::      (keeps the station's data\, database, logs and .env) and refreshes the
+::      desktop shortcut.
+:: Pass "nodeploy" to build only:  build.bat nodeploy
 
 cd /d "%~dp0"
 
@@ -25,4 +29,20 @@ if errorlevel 1 (
 copy /y deploy.bat "dist\TrackAttendance\deploy.bat" >nul
 echo.
 echo Built TrackAttendance v%VER% -^> dist\TrackAttendance
-echo Next: run dist\TrackAttendance\deploy.bat to install on this laptop, or copy the folder to your share.
+
+if /i "%~1"=="nodeploy" (
+    echo Skipping install ^(nodeploy^).
+    exit /b 0
+)
+
+:: A running copy locks C:\TrackAttendance\TrackAttendance.exe and _internal
+tasklist /fi "imagename eq TrackAttendance.exe" 2>nul | find /i "TrackAttendance.exe" >nul
+if not errorlevel 1 (
+    echo.
+    echo TrackAttendance.exe is running. Close it, then run: dist\TrackAttendance\deploy.bat
+    exit /b 1
+)
+
+echo Installing to C:\TrackAttendance...
+call "dist\TrackAttendance\deploy.bat"
+exit /b %ERRORLEVEL%
