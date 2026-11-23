@@ -20,7 +20,7 @@ audio.py             Voice playback on successful scans (QMediaPlayer)
 logging_config.py    Logging setup
 
 web/                 Embedded kiosk UI (HTML/CSS/JS, Materialize, Inter font)
-scripts/             Utility scripts (migration, debug, reset failed scans)
+scripts/             sync-to-saas.sh; utility scripts (migration, debug, reset failed scans) live in tests/
 tests/               Test and simulation scripts (stress test, sync tests)
 docs/                Technical docs (API, Architecture, Sync, PRD)
 data/                Runtime data — database.db, employee.xlsx (gitignored)
@@ -37,7 +37,7 @@ assets/              Icons, voice MP3s, PyInstaller resources
 - `pyinstaller TrackAttendance.spec` — build Windows .exe
 - `python tests/stress_full_app.py --iterations 100 --delay-ms 30` — end-to-end stress test
 - `python tests/test_production_sync.py` — test cloud sync
-- `python scripts/reset_failed_scans.py` — reset failed scans to pending
+- `python tests/reset_failed_scans.py` — reset failed scans to pending
 
 ## Coding Style
 

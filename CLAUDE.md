@@ -47,11 +47,11 @@ python tests/test_encoding_thai.py
 python tests/test_validation_ui.py --test all
 
 # Utility scripts
-python scripts/reset_failed_scans.py
-python scripts/migrate_sync_schema.py
-python scripts/debug_sync_performance.py
-python scripts/check_timestamp_format.py
-python scripts/create_test_scan.py
+python tests/reset_failed_scans.py
+python tests/migrate_sync_schema.py
+python tests/debug_sync_performance.py
+python tests/check_timestamp_format.py
+python tests/create_test_scan.py
 
 # Sync shared bugfixes to the trackattendance-saas fork (see "Related repos" below)
 bash scripts/sync-to-saas.sh                 # report which shared files differ
@@ -71,7 +71,7 @@ config.py            All configuration with .env override
 logging_config.py    Logging setup
 
 web/                 Embedded kiosk UI (HTML/CSS/JS, Materialize)
-scripts/             Utility scripts (migration, debug, reset)
+scripts/             sync-to-saas.sh (port shared fixes to the saas fork); utility scripts live in tests/
 tests/               Test and simulation scripts
 docs/                Technical docs (API, Architecture, Sync, PRD)
 ψ/                   Oracle memory (retrospectives, learnings, handoffs)
@@ -101,7 +101,7 @@ docs/                Technical docs (API, Architecture, Sync, PRD)
 
 Required: `CLOUD_API_URL`, `CLOUD_API_KEY`
 
-Optional (with defaults in `config.py`): `AUTO_SYNC_IDLE_SECONDS`, `AUTO_SYNC_CHECK_INTERVAL_SECONDS`, `CLOUD_SYNC_BATCH_SIZE`, `DUPLICATE_BADGE_DETECTION_ENABLED`, `DUPLICATE_BADGE_TIME_WINDOW_SECONDS`, `DUPLICATE_BADGE_ACTION`, `SHOW_FULL_SCREEN`, `ENABLE_FADE_ANIMATION`, `SHOW_PARTY_BACKGROUND`, `LOG_LEVEL`
+Optional (with defaults in `config.py`): `AUTO_SYNC_IDLE_SECONDS`, `AUTO_SYNC_CHECK_INTERVAL_SECONDS`, `CLOUD_SYNC_BATCH_SIZE`, `DUPLICATE_BADGE_DETECTION_ENABLED`, `DUPLICATE_BADGE_TIME_WINDOW_SECONDS`, `DUPLICATE_BADGE_ACTION`, `SHOW_FULL_SCREEN`, `ENABLE_FADE_ANIMATION`, `SHOW_PARTY_BACKGROUND`, `LOGGING_LEVEL`, `DUPLICATE_BADGE_ALERT_DURATION_MS`
 
 ## Style
 
