@@ -171,7 +171,8 @@ class TestNetworkOnlyNeverTouchesDb(unittest.TestCase):
         result = service.sync_scan_batch_network_only([scan], "TestStation")
 
         self.assertFalse(result["ok"])
-        self.assertEqual(result["failed_ids"], [scan.id])
+        self.assertEqual(result["pending_ids"], [scan.id])
+        self.assertEqual(result["failed_ids"], [])
 
     def test_empty_scan_list_never_touches_db(self):
         service = self._make_service()
@@ -278,14 +279,15 @@ class TestResultClassification(unittest.TestCase):
         self.assertEqual(result["synced_ids"], [scan.id])
 
     @patch('sync.requests.post')
-    def test_connection_error_returns_all_ids_as_failed(self, mock_post):
+    def test_generic_request_exception_returns_all_ids_as_pending(self, mock_post):
         mock_post.side_effect = requests.exceptions.RequestException("boom")
         service = self._make_service()
         scan = _make_scan()
 
         result = service.sync_scan_batch_network_only([scan], "TestStation")
 
-        self.assertEqual(result["failed_ids"], [scan.id])
+        self.assertEqual(result["pending_ids"], [scan.id])
+        self.assertEqual(result["failed_ids"], [])
         self.assertFalse(result["ok"])
 
     @patch('sync.time.sleep')

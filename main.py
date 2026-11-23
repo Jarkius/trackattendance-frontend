@@ -2586,6 +2586,14 @@ def main() -> None:
             "The application will continue but roster data may be incomplete.",
         )
 
+    # Recover scans parked as 'failed' by earlier versions or transient errors (#101).
+    # Runs once, on the main thread, before any sync job can start.
+    try:
+        requeued = service._db.requeue_failed_scans()
+        LOGGER.info("Startup: re-queued %d failed scan(s) as pending", requeued)
+    except Exception as exc:
+        LOGGER.warning("Startup: could not re-queue failed scans: %s", exc)
+
     # Initialize sync service for cloud integration (only if API key is available)
     sync_service = None
     dashboard_service = None

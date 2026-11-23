@@ -548,6 +548,24 @@ class DatabaseManager:
             )
         return cursor.rowcount
 
+    def requeue_failed_scans(self) -> int:
+        """Move every 'failed' scan back to 'pending' so the next sync retries it.
+
+        Called once at startup on the main thread. A scan the server genuinely
+        rejects is bisected back to 'failed' in that run and is not retried again
+        until the next startup, so a truly bad event costs a handful of requests
+        per launch, not per sync cycle. Returns the number of rows re-queued.
+        """
+        with self._connection:
+            cursor = self._connection.execute(
+                """
+                UPDATE scans
+                SET sync_status = 'pending'
+                WHERE sync_status = 'failed'
+                """
+            )
+        return cursor.rowcount
+
     def get_sync_statistics(self) -> Dict[str, Any]:
         """Get sync statistics for UI display."""
         cursor = self._connection.execute(
