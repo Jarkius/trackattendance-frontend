@@ -31,6 +31,6 @@ python -m pytest tests/test_duplicate_detection.py -v
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `web/script.js` only. The duplicate alert no longer sets `barcodeInput.disabled` (removed from show, auto-dismiss and `dismissDuplicateOverlay`). New `captureStrayScanKey(event)` dismisses an open alert on any printable key, and when focus is outside the input it appends the key synchronously, `preventDefault`s and focuses the input at once. The global keydown handler uses it. When the lookup or admin overlay is open it keeps the old `returnFocusToInput()` path. `returnFocusToInput` keeps its 80 ms delay for the non-key callers (post-scan, window focus, overlay close). The clear-before-bridge-call in `submitScan` is untouched. Python is unchanged.
+- Verification results: disposable QWebEngineView + real QWebChannel harness (outside repo), keys sent with QTest at 10 ms/char. (a) alert visible, input focused, "123456"+Enter: submitted in full and the overlay hides. (a2) block-style alert, focus on body, "246810"+Enter: submitted in full and the overlay hides. (b) focus on body, "987654"+Enter: submitted in full. (c) baseline focused scan "555555": submitted. The same harness against the old script.js fails 5 of the checks. CI-equivalent script: 431 passed, 1 skipped.
+- Known limitations: not tried with a real scanner at the kiosk. Dashboard/admin scanner behavior was not exercised in the harness. Keys typed with ctrl/alt/meta are not captured. Ticket 05 can reuse `captureStrayScanKey` for the lookup overlay.

@@ -642,6 +642,26 @@ ${destination}` : message;
         }, 80);
     };
 
+    // A printable keystroke is part of a new scan: dismiss any duplicate alert
+    // (never blocks or drops the key) and, when the key landed outside the
+    // barcode input, append it to the input synchronously and focus it with no
+    // delay. Returns true if the key was captured into the input.
+    // Reusable by other key handlers (e.g. the lookup overlay).
+    const captureStrayScanKey = (event) => {
+        if (!event || typeof event.key !== 'string' || event.key.length !== 1) return false;
+        if (event.ctrlKey || event.metaKey || event.altKey) return false;
+        if (debugMode || debugConsole._visible || dashboardOpen) return false;
+        if (barcodeInput.disabled || !document.body.contains(barcodeInput)) return false;
+        if (typeof isDuplicateOverlayOpen === 'function' && isDuplicateOverlayOpen()) {
+            dismissDuplicateOverlay();
+        }
+        if (event.target === barcodeInput) return false;  // native typing handles it
+        event.preventDefault();
+        barcodeInput.focus();
+        barcodeInput.value += event.key;
+        return true;
+    };
+
     // Short synthesized alert tone for rejected/blocked scans — plays via the
     // Web Audio API (no MP3 asset, no Python bridge round-trip) so it's fully
     // independent of the VoicePlayer used for success greetings. Two quick
@@ -684,7 +704,6 @@ ${destination}` : message;
         }
         duplicateOverlay.classList.remove('duplicate-overlay--visible');
         duplicateOverlay.setAttribute('aria-hidden', 'true');
-        barcodeInput.disabled = false;
         returnFocusToInput();
     };
     const isDuplicateOverlayOpen = () => {
@@ -723,10 +742,10 @@ ${destination}` : message;
         // Update styling based on error state
         duplicateOverlay.classList.toggle('duplicate-overlay--error', isError);
 
-        // Show the overlay and disable barcode input to prevent further scans
+        // Show the overlay. The barcode input stays enabled so the next
+        // scanner burst is never dropped; a new scan keystroke dismisses it.
         duplicateOverlay.classList.add('duplicate-overlay--visible');
         duplicateOverlay.setAttribute('aria-hidden', 'false');
-        barcodeInput.disabled = true;
 
         // Audible cue for rejected/blocked scans (error state only — the
         // yellow "accepted but flagged" warn case stays silent).
@@ -741,7 +760,6 @@ ${destination}` : message;
                 duplicateOverlayTimeout = null;
                 duplicateOverlay.classList.remove('duplicate-overlay--visible');
                 duplicateOverlay.setAttribute('aria-hidden', 'true');
-                barcodeInput.disabled = false;  // Re-enable input after overlay dismisses
                 returnFocusToInput();
             }, duration);
         }
@@ -3140,8 +3158,14 @@ ${destination}` : message;
             returnFocusToInput();
             return;
         }
-        if (!inOverlay && event.target !== barcodeInput && event.key.length === 1) {
-            returnFocusToInput();
+        if (!inOverlay && event.target === barcodeInput) {
+            captureStrayScanKey(event);  // only dismisses a duplicate alert
+        } else if (!inOverlay && event.key.length === 1) {
+            const lookupOpen = isLookupOverlayOpen();
+            const adminOpen = adminOverlay && adminOverlay.classList.contains('admin-overlay--visible');
+            if (lookupOpen || adminOpen || !captureStrayScanKey(event)) {
+                returnFocusToInput();
+            }
         }
     });
     const debouncedRefreshConnection = debounce(() => {
