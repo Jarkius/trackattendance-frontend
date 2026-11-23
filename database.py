@@ -21,6 +21,12 @@ def clean_badge_id(value: object) -> str:
     return str(value).translate(_ID_INVISIBLE_CHARS).replace("\u00a0", " ").strip()
 
 
+def normalize_walkin_name(value: object) -> str:
+    """Dedupe key for walk-in names typed at the kiosk: clean, collapse runs
+    of whitespace and lower-case, so "Somchai" and "somchai " are one person."""
+    return " ".join(clean_badge_id(value).split()).lower()
+
+
 def normalize_badge_id(value: object) -> str:
     """Comparison key for badge and Legacy IDs.
 
@@ -639,6 +645,37 @@ class DatabaseManager:
             WHERE e.legacy_id IS NULL
         """)
         return int(cursor.fetchone()["cnt"] or 0)
+
+    def get_attendance_buckets(self) -> dict:
+        """Distinct counts for the three attendance buckets from local scans.
+
+        registered_attended: employees matched by COALESCE(legacy_id, badge_id).
+        walkins: unmatched manual scans (typed names), de-duplicated by
+            normalize_walkin_name.
+        unknown_badges: unmatched non-manual scans, by normalize_badge_id.
+        """
+        registered = int(self._connection.execute("""
+            SELECT COUNT(DISTINCT e.legacy_id) AS cnt
+            FROM employees e
+            JOIN scans s ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
+        """).fetchone()["cnt"] or 0)
+        walkins: set[str] = set()
+        unknown: set[str] = set()
+        for row in self._connection.execute("""
+            SELECT s.badge_id AS badge_id, COALESCE(s.scan_source, 'manual') AS scan_source
+            FROM scans s
+            LEFT JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
+            WHERE e.legacy_id IS NULL
+        """):
+            if row["scan_source"] == "manual":
+                walkins.add(normalize_walkin_name(row["badge_id"]))
+            else:
+                unknown.add(normalize_badge_id(row["badge_id"]))
+        return {
+            "registered_attended": registered,
+            "walkins": len(walkins),
+            "unknown_badges": len(unknown),
+        }
 
     def clear_all_scans(self) -> int:
         """Clear all scan records from local database. Preserves station name. Returns scan count deleted."""

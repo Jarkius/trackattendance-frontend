@@ -1,181 +1,99 @@
 #!/usr/bin/env python3
 """
-Tests for BU (Business Unit) export computation logic.
+Tests for the export's BU breakdown (dashboard.compute_bu_breakdown).
 
-Verifies that the BU breakdown in export is computed from enriched scan data
-(local employee cache) rather than stale cloud API data. This was the root
-cause of #52: wrong scanned counts and spurious "Unmatched" entries.
+The breakdown is computed from enriched scan rows (local employee cache), not
+stale cloud BU data (#52), and counts each employee once by normalised
+legacy_id (#109): a badge scan and a lookup of the same person are one person,
+walk-ins are excluded, unknown badges form the trailing "(Unmatched)" row.
 
 Run: python tests/test_bu_export.py
 """
 
+import os
+import sys
 import unittest
-from collections import defaultdict
+from pathlib import Path
 from types import SimpleNamespace
 
+os.environ.setdefault("CLOUD_API_KEY", "test-api-key-for-testing")
+os.environ.setdefault("CLOUD_API_URL", "http://test.example.com")
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-def compute_bu_breakdown(enriched_scans, employee_cache):
-    """Extract the BU computation logic from dashboard.export_to_excel().
-
-    This mirrors the logic at dashboard.py lines 419-444 exactly,
-    extracted here for unit testing without openpyxl/database dependencies.
-    """
-    bu_scanned = defaultdict(set)
-    for row in enriched_scans:
-        badge_id = row["Scan Value"]
-        bu = row["SL L1 Desc"]
-        bu_key = bu if bu and bu != "--" else "(Unmatched)"
-        bu_scanned[bu_key].add(badge_id)
-
-    bu_registered = defaultdict(int)
-    for emp in employee_cache.values():
-        bu_registered[emp.sl_l1_desc or "(Unmatched)"] += 1
-
-    all_bus = sorted(set(bu_scanned.keys()) | set(bu_registered.keys()))
-    bu_export = []
-    for bu_name in all_bus:
-        if bu_name == "(Unmatched)":
-            continue
-        registered = bu_registered.get(bu_name, 0)
-        scanned = len(bu_scanned.get(bu_name, set()))
-        rate = round((scanned / registered) * 100, 1) if registered > 0 else 0.0
-        bu_export.append({
-            "bu_name": bu_name,
-            "registered": registered,
-            "scanned": scanned,
-            "attendance_rate": rate,
-        })
-    if "(Unmatched)" in bu_scanned:
-        bu_export.append({
-            "bu_name": "(Unmatched)",
-            "registered": 0,
-            "scanned": len(bu_scanned["(Unmatched)"]),
-            "attendance_rate": 0.0,
-        })
-    return bu_export
+from dashboard import compute_bu_breakdown
 
 
 def _emp(legacy_id, bu):
-    """Create a minimal employee-like object."""
     return SimpleNamespace(legacy_id=legacy_id, sl_l1_desc=bu)
 
 
+def _reg(legacy_id, bu, scan_value=None):
+    return {"_kind": "registered", "Legacy ID": legacy_id, "SL L1 Desc": bu,
+            "Scan Value": scan_value or legacy_id}
+
+
+def _unknown(value):
+    return {"_kind": "unknown", "Legacy ID": "", "SL L1 Desc": "--", "Scan Value": value}
+
+
+def _walkin(name):
+    return {"_kind": "walkin", "Legacy ID": "", "SL L1 Desc": "--", "Scan Value": name}
+
+
 class TestBUExportComputation(unittest.TestCase):
-    """Test BU breakdown computation from enriched scan data."""
 
     def test_basic_bu_breakdown(self):
-        """Scans are grouped by BU with correct counts."""
-        enriched_scans = [
-            {"Scan Value": "001", "SL L1 Desc": "Engineering"},
-            {"Scan Value": "002", "SL L1 Desc": "Engineering"},
-            {"Scan Value": "003", "SL L1 Desc": "Sales"},
-        ]
-        employee_cache = {
-            "001": _emp("001", "Engineering"),
-            "002": _emp("002", "Engineering"),
-            "003": _emp("003", "Sales"),
-            "004": _emp("004", "Sales"),
-        }
+        scans = [_reg("001", "Engineering"), _reg("002", "Engineering"), _reg("003", "Sales")]
+        cache = {"001": _emp("001", "Engineering"), "002": _emp("002", "Engineering"),
+                 "003": _emp("003", "Sales"), "004": _emp("004", "Sales")}
 
-        result = compute_bu_breakdown(enriched_scans, employee_cache)
+        result = compute_bu_breakdown(scans, cache)
 
         eng = next(r for r in result if r["bu_name"] == "Engineering")
-        self.assertEqual(eng["registered"], 2)
-        self.assertEqual(eng["scanned"], 2)
-        self.assertEqual(eng["attendance_rate"], 100.0)
-
+        self.assertEqual((eng["registered"], eng["scanned"], eng["attendance_rate"]), (2, 2, 100.0))
         sales = next(r for r in result if r["bu_name"] == "Sales")
-        self.assertEqual(sales["registered"], 2)
-        self.assertEqual(sales["scanned"], 1)
-        self.assertEqual(sales["attendance_rate"], 50.0)
+        self.assertEqual((sales["registered"], sales["scanned"], sales["attendance_rate"]), (2, 1, 50.0))
 
-    def test_unmatched_scans_grouped_separately(self):
-        """Scans with '--' BU are grouped as (Unmatched) at the end."""
-        enriched_scans = [
-            {"Scan Value": "001", "SL L1 Desc": "Engineering"},
-            {"Scan Value": "999", "SL L1 Desc": "--"},
-        ]
-        employee_cache = {
-            "001": _emp("001", "Engineering"),
-        }
-
-        result = compute_bu_breakdown(enriched_scans, employee_cache)
+    def test_unknown_badges_grouped_separately_last(self):
+        scans = [_reg("001", "Engineering"), _unknown("999")]
+        result = compute_bu_breakdown(scans, {"001": _emp("001", "Engineering")})
 
         self.assertEqual(len(result), 2)
-        # Unmatched should be last
         self.assertEqual(result[-1]["bu_name"], "(Unmatched)")
         self.assertEqual(result[-1]["scanned"], 1)
         self.assertEqual(result[-1]["registered"], 0)
-        self.assertEqual(result[-1]["attendance_rate"], 0.0)
 
-    def test_duplicate_badge_counted_once(self):
-        """Same badge scanned twice counts as 1 unique scan."""
-        enriched_scans = [
-            {"Scan Value": "001", "SL L1 Desc": "Engineering"},
-            {"Scan Value": "001", "SL L1 Desc": "Engineering"},
-        ]
-        employee_cache = {
-            "001": _emp("001", "Engineering"),
-        }
+    def test_walkins_not_in_any_bu_row(self):
+        scans = [_reg("001", "Engineering"), _walkin("Somchai")]
+        result = compute_bu_breakdown(scans, {"001": _emp("001", "Engineering")})
 
-        result = compute_bu_breakdown(enriched_scans, employee_cache)
+        self.assertEqual([r["bu_name"] for r in result], ["Engineering"])
 
-        eng = result[0]
-        self.assertEqual(eng["scanned"], 1)
+    def test_badge_and_lookup_of_same_person_counted_once(self):
+        """Badge scan (raw value differs) and lookup scan, same legacy_id."""
+        scans = [_reg("E001", "Engineering", scan_value="105193T"),
+                 _reg("e001", "Engineering", scan_value="E001")]
+        result = compute_bu_breakdown(scans, {"E001": _emp("E001", "Engineering")})
+
+        self.assertEqual(result[0]["scanned"], 1)
+
+    def test_duplicate_unknown_badge_counted_once(self):
+        result = compute_bu_breakdown([_unknown("zz9"), _unknown("ZZ9 ")], {})
+        self.assertEqual(result[-1]["scanned"], 1)
 
     def test_bu_with_no_scans_still_appears(self):
-        """A BU with registered employees but zero scans should appear."""
-        enriched_scans = [
-            {"Scan Value": "001", "SL L1 Desc": "Engineering"},
-        ]
-        employee_cache = {
-            "001": _emp("001", "Engineering"),
-            "002": _emp("002", "HR"),
-        }
-
-        result = compute_bu_breakdown(enriched_scans, employee_cache)
-
-        hr = next(r for r in result if r["bu_name"] == "HR")
-        self.assertEqual(hr["registered"], 1)
-        self.assertEqual(hr["scanned"], 0)
-        self.assertEqual(hr["attendance_rate"], 0.0)
+        scans = [_reg("001", "Engineering")]
+        cache = {"001": _emp("001", "Engineering"), "002": _emp("002", "HR")}
+        hr = next(r for r in compute_bu_breakdown(scans, cache) if r["bu_name"] == "HR")
+        self.assertEqual((hr["registered"], hr["scanned"], hr["attendance_rate"]), (1, 0, 0.0))
 
     def test_empty_scans_and_cache(self):
-        """No scans and no employees returns empty list."""
-        result = compute_bu_breakdown([], {})
-        self.assertEqual(result, [])
+        self.assertEqual(compute_bu_breakdown([], {}), [])
 
-    def test_employees_with_none_bu_grouped_as_unmatched(self):
-        """Employees with None sl_l1_desc are counted as (Unmatched)."""
-        enriched_scans = []
-        employee_cache = {
-            "001": _emp("001", None),
-        }
-
-        result = compute_bu_breakdown(enriched_scans, employee_cache)
-
-        # No scans, so (Unmatched) won't appear in bu_scanned → won't be in output
-        # Only BUs with scans OR registered employees appear
-        unmatched = [r for r in result if r["bu_name"] == "(Unmatched)"]
-        # (Unmatched) appears in bu_registered but not bu_scanned,
-        # and the code skips it in the main loop, only appending if in bu_scanned
-        self.assertEqual(len(unmatched), 0)
-
-    def test_bus_sorted_alphabetically(self):
-        """BU names should be sorted alphabetically (Unmatched last)."""
-        enriched_scans = [
-            {"Scan Value": "001", "SL L1 Desc": "Zebra"},
-            {"Scan Value": "002", "SL L1 Desc": "Alpha"},
-            {"Scan Value": "003", "SL L1 Desc": "--"},
-        ]
-        employee_cache = {
-            "001": _emp("001", "Zebra"),
-            "002": _emp("002", "Alpha"),
-        }
-
-        result = compute_bu_breakdown(enriched_scans, employee_cache)
-
-        names = [r["bu_name"] for r in result]
+    def test_bus_sorted_alphabetically_unmatched_last(self):
+        scans = [_reg("001", "Zebra"), _reg("002", "Alpha"), _unknown("003")]
+        cache = {"001": _emp("001", "Zebra"), "002": _emp("002", "Alpha")}
+        names = [r["bu_name"] for r in compute_bu_breakdown(scans, cache)]
         self.assertEqual(names, ["Alpha", "Zebra", "(Unmatched)"])
 
 
