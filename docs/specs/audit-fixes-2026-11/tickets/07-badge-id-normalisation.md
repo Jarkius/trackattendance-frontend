@@ -34,6 +34,6 @@ python -m pytest tests/test_duplicate_detection.py tests/test_bu_export.py tests
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `database.py` (`clean_badge_id`, `normalize_badge_id`; cache keyed by normalised ID; `get_scans_by_bu` / `count_unmatched_scanned_badges` join on `COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE`; new `CREATE INDEX IF NOT EXISTS idx_scans_employee_key_nocase`), `attendance.py` (`_legacy_id_from_cell`, cell iteration in the import, normalised duplicate key and lookup, `_roster_warning`), `dashboard.py` (cache lookup normalised), `main.py` (shows the roster warning), new `tests/test_badge_id_normalisation.py` (11 tests).
+- Verification results: new tests plus duplicate-detection, bu_export, search-priority and roster-header tests: 57 passed. Local CI equivalent: 457 passed, 1 skipped.
+- Known limitations: the numeric-ID warning is persisted in `roster_meta` key `roster_warning` and re-shown at each startup until the roster is fixed and re-imported. Stored `scans.badge_id` keeps the raw scan; the unmatched count uses `UPPER(badge_id)` and does not strip zero-width characters in SQL (scans are already stripped by `register_scan`). Zero-width characters in stored IDs are removed on import.

@@ -15,6 +15,7 @@ The dashboard shows:
 from __future__ import annotations
 
 import logging
+from database import normalize_badge_id
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
@@ -364,7 +365,7 @@ class DashboardService:
                 # Use legacy_id from cloud meta if available, otherwise try badge_id
                 legacy_id = scan.get("legacy_id") if isinstance(scan, dict) else None
                 lookup_key = legacy_id or badge_id
-                employee = employee_cache.get(lookup_key)
+                employee = employee_cache.get(normalize_badge_id(lookup_key))
                 if employee:
                     full_name = employee.full_name
                     business_unit = employee.sl_l1_desc or "--"

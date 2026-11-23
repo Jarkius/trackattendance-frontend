@@ -2586,6 +2586,9 @@ def main() -> None:
             "The application will continue but roster data may be incomplete.",
         )
 
+    if getattr(service, '_roster_warning', None):
+        QMessageBox.warning(None, "Roster Warning", service._roster_warning)
+
     # Recover scans parked as 'failed' by earlier versions or transient errors (#101).
     # Runs once, on the main thread, before any sync job can start.
     try:

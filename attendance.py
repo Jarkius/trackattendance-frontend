@@ -14,7 +14,10 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 from PyQt6.QtWidgets import QInputDialog, QMessageBox, QWidget
 
-from database import DatabaseManager, EmployeeRecord, ScanRecord, ISO_TIMESTAMP_FORMAT
+from database import (
+    DatabaseManager, EmployeeRecord, ScanRecord, ISO_TIMESTAMP_FORMAT,
+    clean_badge_id, normalize_badge_id,
+)
 
 LOGGER = logging.getLogger(__name__)
 REQUIRED_COLUMNS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
@@ -63,6 +66,30 @@ def _one_line(message: str) -> str:
     return " ".join(message.split())
 
 
+def _legacy_id_from_cell(cell) -> tuple[str, bool]:
+    """Read a Legacy ID cell. Returns (id_text, lost_leading_zeros_risk).
+
+    Numeric cells lose leading zeros in Excel. When the cell's number format is
+    all zeros (e.g. ``00000``) the value is zero-padded to that width. Any other
+    numeric cell keeps ``str(int)`` and is flagged so the operator gets a warning.
+    Integral floats are treated as ints.
+    """
+    value = getattr(cell, "value", None)
+    if value is None:
+        return "", False
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return clean_badge_id(value), False
+    if isinstance(value, float):
+        if not value.is_integer():
+            return clean_badge_id(value), False
+        value = int(value)
+    text = str(value)
+    fmt = getattr(cell, "number_format", None) or ""
+    if value >= 0 and re.fullmatch(r"0+", fmt):
+        return text.zfill(len(fmt)), False
+    return text, True
+
+
 DISPLAY_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 class AttendanceService:
     """High-level operations for coordinating scans, employees, and exports."""
@@ -81,6 +108,7 @@ class AttendanceService:
         self._export_directory.mkdir(parents=True, exist_ok=True)
         self._employee_headers: List[str] = list(REQUIRED_COLUMNS)
         self._employee_cache: Dict[str, EmployeeRecord] = {}
+        self._roster_warning: Optional[str] = None
         self._station_name: Optional[str] = self._db.get_station_name()
 
         try:
@@ -91,6 +119,7 @@ class AttendanceService:
         else:
             self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
+        self._roster_warning = self._db.get_roster_meta("roster_warning") or None
         self._sync_service = None  # Set via set_sync_service() for immediate-write sync
         self._sync_coordinator = None  # Set via set_sync_service() for immediate-write sync
 
@@ -236,27 +265,32 @@ class AttendanceService:
             duplicates: list[dict] = []  # detailed duplicate info
             employees: List[EmployeeRecord] = []
             row_num = 1  # header is row 1
-            for row in sheet.iter_rows(min_row=2, values_only=True):
+            legacy_col = header_to_index["Legacy ID"]
+            numeric_unpadded = 0
+            for row_cells in sheet.iter_rows(min_row=2):
                 row_num += 1
-                legacy_id_raw = row[header_to_index["Legacy ID"]] if header_to_index["Legacy ID"] < len(row) else None
-                if legacy_id_raw is None:
+                row = tuple(getattr(c, "value", None) for c in row_cells)
+                if legacy_col >= len(row_cells):
                     continue
-                legacy_id = str(legacy_id_raw).strip()
+                legacy_id, numeric_risk = _legacy_id_from_cell(row_cells[legacy_col])
                 if not legacy_id:
                     continue
+                if numeric_risk:
+                    numeric_unpadded += 1
+                id_key = normalize_badge_id(legacy_id)
                 full_name = _safe_string(row[header_to_index["Full Name"]] if header_to_index["Full Name"] < len(row) else None)
                 sl_l1_desc = _safe_string(row[header_to_index["SL L1 Desc"]] if header_to_index["SL L1 Desc"] < len(row) else None)
-                if legacy_id in seen_ids:
+                if id_key in seen_ids:
                     duplicates.append({
                         "legacy_id": legacy_id,
                         "full_name": full_name,
                         "business_unit": sl_l1_desc,
                         "row": row_num,
-                        "first_row": seen_ids[legacy_id],
+                        "first_row": seen_ids[id_key],
                     })
                     LOGGER.warning(
                         "Roster: duplicate Legacy ID %s on row %d (first seen row %d) — %s [%s], skipped",
-                        legacy_id, row_num, seen_ids[legacy_id], full_name, sl_l1_desc,
+                        legacy_id, row_num, seen_ids[id_key], full_name, sl_l1_desc,
                     )
                     continue
                 position_desc = _safe_string(row[header_to_index["Position Desc"]] if header_to_index["Position Desc"] < len(row) else None)
@@ -270,7 +304,7 @@ class AttendanceService:
                         email=email,
                     )
                 )
-                seen_ids[legacy_id] = row_num
+                seen_ids[id_key] = row_num
             # Abort import if duplicates found — admin must fix the roster first
             if duplicates:
                 LOGGER.error(
@@ -298,6 +332,17 @@ class AttendanceService:
             inserted = self._db.bulk_insert_employees(employees)
             self._db.set_roster_hash(current_hash)
             self._db.set_roster_meta("file_mtime", current_mtime)
+            if numeric_unpadded:
+                warning = (
+                    f"{numeric_unpadded} numeric Legacy ID cell(s) in "
+                    f"{self._employee_workbook_path.name} use a number format that does not keep "
+                    f"leading zeros, so IDs such as 00123 may have been stored as 123. "
+                    f"Format the Legacy ID column as Text (or as 00000) and re-save the roster."
+                )
+                LOGGER.warning("Roster: %s", warning)
+            else:
+                warning = ""
+            self._db.set_roster_meta("roster_warning", warning)
             LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
             # Roster BU counts will be pushed to cloud after first
             # successful health check (see main.py Api._run_check)
@@ -557,7 +602,7 @@ class AttendanceService:
 
         # For lookup: user typed a name but selected an employee — resolve by legacy_id
         # For badge/manual: resolve by the scan value itself
-        lookup_key = lookup_legacy_id if lookup_legacy_id else sanitized
+        lookup_key = normalize_badge_id(lookup_legacy_id if lookup_legacy_id else sanitized)
         employee = self._employee_cache.get(lookup_key)
 
         # Check for duplicate badge scan (Issue #20)
