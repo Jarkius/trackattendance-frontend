@@ -32,6 +32,6 @@ python -m pytest tests/ <CI ignores from project-verification.md> -v --tb=short
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `sync.py` (classification and bisection moved into `sync_scan_batch_network_only` plus a new `_post_events` helper; `_is_retryable_error` is now used), `database.py` (`requeue_failed_scans()`), `main.py` (one startup call, logs the count), `tests/test_sync_error_classification.py` (new), `tests/test_sync_network_only_batch.py` (two assertions that encoded the old bug now expect `pending_ids`).
+- Verification results: the five ticket test files pass (71 passed, 4 subtests). The local CI script passes (446 passed, 1 skipped; the two Windows-only standalone tests exit 0).
+- Known limitations: the legacy `_sync_one_batch` path is unreachable from app code and was left unchanged. It still marks 4xx and generic `RequestException` batches as failed. Bisection is capped at 64 extra requests per batch; the remainder stays pending. Requeue runs once per startup, so a truly bad event is retried and re-failed once per launch. A 200 whose `saved + duplicates` does not equal the batch size is now pending.

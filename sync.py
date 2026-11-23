@@ -18,23 +18,26 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _is_retryable_error(exception: Exception) -> bool:
-    """
-    Determine if an error is transient and should trigger a retry.
+    """Return True if a transport exception deserves an in-place retry with backoff.
 
-    Retryable errors:
-    - Connection timeouts
-    - Connection errors (temporary network issues)
-    - Server errors (5xx)
-
-    Non-retryable errors:
-    - Authentication errors (4xx except 429)
-    - Bad request (4xx)
+    Timeouts and connection errors are retried with exponential backoff. Any other
+    ``requests`` exception is still transient from the scans' point of view (the scans
+    stay pending), but retrying immediately is pointless, so the caller gives up on
+    this cycle without backoff.
     """
-    if isinstance(exception, requests.exceptions.Timeout):
-        return True
-    if isinstance(exception, requests.exceptions.ConnectionError):
-        return True
-    return False
+    return isinstance(
+        exception, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
+    )
+
+
+# HTTP statuses where the server says "this payload is unacceptable". Only these
+# trigger bisection; every other non-2xx status is transient (scans stay pending).
+_REJECTION_STATUSES = (400, 422)
+
+# Upper bound on extra HTTP calls spent bisecting one batch, so a batch full of bad
+# events cannot hold the background worker for minutes. Ids left unresolved when the
+# budget runs out stay pending and are retried (and bisected further) next cycle.
+_MAX_BISECT_REQUESTS = 64
 
 
 class BackgroundSyncCoordinator:
@@ -646,13 +649,14 @@ class SyncService:
                 "ok": bool,                 # False only for a genuine transport-level
                                              # failure (e.g. malformed response); see below
                 "synced_ids": List[int],    # scan.id values the cloud accepted
-                "failed_ids": List[int],    # scan.id values that permanently failed
-                                             # (4xx other than 401/429) — caller should
+                "failed_ids": List[int],    # scan.id values the server rejected
+                                             # individually (400/422 bisected down to a
+                                             # single event) — caller should
                                              # mark_scans_as_failed() for these
-                "pending_ids": List[int],   # scan.id values still unresolved (retries
-                                             # exhausted, or a 401) — caller should leave
-                                             # these as pending, matching _sync_one_batch's
-                                             # existing "keep as pending" behavior
+                "pending_ids": List[int],   # scan.id values still unresolved (transport
+                                             # errors, 5xx/429, 401, 403/404/408/413, an
+                                             # unparseable or short 200) — caller leaves
+                                             # these as pending
                 "synced_count": int,
                 "error": Optional[str],
             }
@@ -680,6 +684,68 @@ class SyncService:
         LOGGER.info(f"[NetworkOnly] Attempting to sync {len(scans)} scans")
         events = self._build_batch_events(scans, station_name)
 
+        synced_ids: List[int] = []
+        failed_ids: List[int] = []
+        pending_ids: List[int] = []
+        synced_count = 0
+        errors: List[str] = []
+        budget = [_MAX_BISECT_REQUESTS]
+
+        def resolve(indices: List[int], first: bool) -> None:
+            """Upload scans[i] for i in indices; bucket every id exactly once."""
+            nonlocal synced_count
+            ids = [scans[i].id for i in indices]
+            if not first:
+                if budget[0] <= 0:
+                    pending_ids.extend(ids)
+                    return
+                budget[0] -= 1
+            kind, payload, error = self._post_events([events[i] for i in indices], len(indices))
+            if kind == "ok":
+                synced_ids.extend(ids)
+                synced_count += payload
+            elif kind == "rejected":
+                if len(indices) == 1:
+                    failed_ids.extend(ids)
+                    errors.append(error)
+                    return
+                mid = len(indices) // 2
+                LOGGER.warning(
+                    "[NetworkOnly] %s for %d scans; bisecting to isolate the rejected event(s)",
+                    error, len(indices),
+                )
+                resolve(indices[:mid], False)
+                resolve(indices[mid:], False)
+            else:
+                # "auth" or "transient": nothing is known about these scans, so they
+                # stay pending and are retried on a later cycle.
+                pending_ids.extend(ids)
+                errors.append(error)
+
+        resolve(list(range(len(scans))), True)
+
+        error_msg = errors[0] if errors else None
+        if len(errors) > 1:
+            error_msg = f"{errors[0]} (+{len(errors) - 1} more)"
+        if failed_ids:
+            LOGGER.error("[NetworkOnly] %d scan(s) rejected by the server: %s", len(failed_ids), error_msg)
+        return {
+            "ok": error_msg is None, "synced_ids": synced_ids, "failed_ids": failed_ids,
+            "pending_ids": pending_ids, "synced_count": synced_count, "error": error_msg,
+        }
+
+    def _post_events(self, events: List[dict], expected: int) -> Tuple[str, Any, Optional[str]]:
+        """POST one batch with retry/backoff and classify the outcome. No SQLite access.
+
+        Returns ``(kind, payload, error)`` where kind is one of:
+        - ``"ok"``: payload is saved + duplicates; the server covered every event.
+        - ``"rejected"``: HTTP 400/422. The server says something in this payload is
+          unacceptable; the caller bisects.
+        - ``"auth"``: HTTP 401. Scans stay pending.
+        - ``"transient"``: everything else (5xx/429 after retries, timeouts, other
+          transport errors, 403/404/408/413 and other 4xx, a 200 with an unparseable
+          body or counts that do not cover the batch). Scans stay pending.
+        """
         from config import SYNC_RETRY_ENABLED, SYNC_RETRY_MAX_ATTEMPTS, SYNC_RETRY_BACKOFF_SECONDS
 
         max_attempts = SYNC_RETRY_MAX_ATTEMPTS if SYNC_RETRY_ENABLED else 1
@@ -703,86 +769,57 @@ class SyncService:
                 )
                 response.encoding = 'utf-8'
                 LOGGER.info(f"[NetworkOnly] Cloud API response received in {response.elapsed.total_seconds():.2f}s")
+                status = response.status_code
 
-                if response.status_code == 200:
+                if status == 200:
                     try:
                         result = response.json()
-                    except (json.JSONDecodeError, ValueError) as e:
-                        LOGGER.error(f"[NetworkOnly] Invalid JSON response (status {response.status_code}): {response.text[:200]}")
-                        error_msg = f"Invalid server response: {e}"
-                        return {
-                            "ok": False, "synced_ids": [], "failed_ids": all_ids,
-                            "pending_ids": [], "synced_count": 0, "error": error_msg,
-                        }
-                    synced_count = result.get("saved", 0) + result.get("duplicates", 0)
+                        covered = int(result.get("saved", 0)) + int(result.get("duplicates", 0))
+                    except (json.JSONDecodeError, ValueError, TypeError, AttributeError) as e:
+                        LOGGER.error(f"[NetworkOnly] Invalid JSON response (status 200): {response.text[:200]}")
+                        return "transient", None, f"Invalid server response: {e}"
+                    if covered != expected:
+                        error_msg = f"Server response covered {covered} of {expected} events"
+                        LOGGER.warning(f"[NetworkOnly] {error_msg}")
+                        return "transient", None, error_msg
                     LOGGER.info(
-                        f"[NetworkOnly] Successfully synced {synced_count} scans "
+                        f"[NetworkOnly] Successfully synced {covered} scans "
                         f"(saved: {result.get('saved')}, duplicates: {result.get('duplicates')})"
                     )
-                    return {
-                        "ok": True, "synced_ids": all_ids, "failed_ids": [],
-                        "pending_ids": [], "synced_count": synced_count, "error": None,
-                    }
-                else:
-                    if response.status_code == 401:
-                        error_msg = "API error: 401 (Unauthorized - check API key)"
-                        LOGGER.error(f"[NetworkOnly] {error_msg}")
-                        return {
-                            "ok": False, "synced_ids": [], "failed_ids": [],
-                            "pending_ids": all_ids, "synced_count": 0, "error": error_msg,
-                        }
-                    elif 400 <= response.status_code < 500 and response.status_code != 429:
-                        error_msg = f"API error: {response.status_code} (non-retryable)"
-                        LOGGER.error(f"[NetworkOnly] Sync failed: {error_msg}")
-                        return {
-                            "ok": False, "synced_ids": [], "failed_ids": all_ids,
-                            "pending_ids": [], "synced_count": 0, "error": error_msg,
-                        }
-                    else:
-                        error_msg = f"API error: {response.status_code}"
-                        last_error = error_msg
-                        if attempt < max_attempts - 1:
-                            wait_time = backoff_seconds * (2 ** attempt)
-                            LOGGER.warning(f"[NetworkOnly] {error_msg}, retrying in {wait_time}s...")
-                            time.sleep(wait_time)
-                        continue
-
-            except requests.exceptions.Timeout as e:
-                error_msg = f"Connection timeout: {str(e)}"
-                last_error = error_msg
-                if attempt < max_attempts - 1:
-                    wait_time = backoff_seconds * (2 ** attempt)
-                    LOGGER.warning(f"[NetworkOnly] {error_msg}, retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                else:
-                    LOGGER.error(f"[NetworkOnly] Sync failed after {max_attempts} attempts: {error_msg}")
-
-            except requests.exceptions.ConnectionError as e:
-                error_msg = f"Connection error: {str(e)}"
-                last_error = error_msg
-                if attempt < max_attempts - 1:
-                    wait_time = backoff_seconds * (2 ** attempt)
-                    LOGGER.warning(f"[NetworkOnly] {error_msg}, retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                else:
-                    LOGGER.error(f"[NetworkOnly] Sync failed after {max_attempts} attempts: {error_msg}")
+                    return "ok", covered, None
+                if status == 401:
+                    error_msg = "API error: 401 (Unauthorized - check API key)"
+                    LOGGER.error(f"[NetworkOnly] {error_msg}")
+                    return "auth", None, error_msg
+                if status in _REJECTION_STATUSES:
+                    return "rejected", None, f"API error: {status} (event rejected by server)"
+                if status != 429 and status < 500:
+                    # 403/404/408/413 and any other 4xx: proxy, deploy or config
+                    # problems, not a verdict on these events. Keep pending.
+                    error_msg = f"API error: {status} (transient)"
+                    LOGGER.warning(f"[NetworkOnly] {error_msg}")
+                    return "transient", None, error_msg
+                last_error = f"API error: {status}"
 
             except requests.exceptions.RequestException as e:
-                error_msg = f"Network error: {str(e)}"
-                LOGGER.error(f"[NetworkOnly] Sync failed: {error_msg}")
-                return {
-                    "ok": False, "synced_ids": [], "failed_ids": all_ids,
-                    "pending_ids": [], "synced_count": 0, "error": error_msg,
-                }
+                kind = "Connection timeout" if isinstance(e, requests.exceptions.Timeout) else "Network error"
+                last_error = f"{kind}: {str(e)}"
+                if not _is_retryable_error(e):
+                    LOGGER.warning(f"[NetworkOnly] {last_error} (not retried this cycle)")
+                    return "transient", None, last_error
 
-        # All retries exhausted with no success - keep as pending for future retry
-        if last_error:
-            error_msg = f"Network error (after {max_attempts} attempts): {last_error}"
-            LOGGER.warning("[NetworkOnly] %s — scans kept as pending for future retry", error_msg)
-        return {
-            "ok": last_error is None, "synced_ids": [], "failed_ids": [], "pending_ids": all_ids,
-            "synced_count": 0, "error": last_error,
-        }
+            if attempt < max_attempts - 1:
+                wait_time = backoff_seconds * (2 ** attempt)
+                LOGGER.warning(f"[NetworkOnly] {last_error}, retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                LOGGER.error(f"[NetworkOnly] Sync failed after {max_attempts} attempts: {last_error}")
+
+        LOGGER.warning(
+            "[NetworkOnly] Network error (after %d attempts): %s - scans kept as pending for future retry",
+            max_attempts, last_error,
+        )
+        return "transient", None, last_error
 
     def sync_single_scan(self, scan: ScanRecord, station_name: str) -> dict:
         """Immediately sync a single scan to cloud. Fire-and-forget safe.
