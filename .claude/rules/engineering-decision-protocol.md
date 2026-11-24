@@ -54,6 +54,7 @@ If a non-critical answer is missing, proceed with a documented default. If a P0 
 
 Get explicit confirmation before:
 - Deleting or overwriting user data or unreviewed work.
+- Overwriting an existing `README.md` or an existing file under `docs/`. Installing or updating the engineering system must merge or skip these, never replace them. Only add new files under `docs/engineering/`.
 - Dropping tables, destructive migrations, or irreversible data transformations.
 - Force-pushing, rewriting published history, or deleting shared branches.
 - Pushing code, merging PRs, deploying, changing production infrastructure, or modifying shared systems.
