@@ -317,6 +317,7 @@ class TestImmediateSyncEnqueue(unittest.TestCase):
             service.close()
 
 
+@unittest.skipUnless(PYQT6_AVAILABLE, "PyQt6 not installed in this environment")
 class TestSyncSingleScan(unittest.TestCase):
     """Unit tests for SyncService.sync_single_scan() in isolation -- no
     AttendanceService/coordinator involved, just the HTTP call shape."""
