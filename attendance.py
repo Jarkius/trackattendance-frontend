@@ -25,10 +25,11 @@ from database import (
 LOGGER = logging.getLogger(__name__)
 # Bump when the set of roster columns stored in `employees` changes, so a roster
 # imported by an older build is re-imported once even if employee.xlsx is
-# byte-identical (v2: Career Level).
-ROSTER_IMPORT_VERSION = "2"
+# byte-identical (v2: Career Level; v3: re-import after v2 stored it empty).
+ROSTER_IMPORT_VERSION = "3"
 REQUIRED_COLUMNS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
 OPTIONAL_EMAIL_COLUMN = "Email"
+OPTIONAL_CAREER_LEVEL_COLUMN = "Career Level"
 EXAMPLE_WORKBOOK_NAME = "exampleof_employee.xlsx"
 
 # Invisible characters that Excel/copy-paste commonly leave in header cells.
@@ -51,7 +52,7 @@ def _normalise_header(value: object) -> str:
 
 
 def map_roster_headers(header_row) -> Dict[str, int]:
-    """Map canonical column names (required + optional Email) to column indices.
+    """Map canonical column names (required + optional Email/Career Level) to column indices.
 
     Shared by validate_roster_headers and the roster import so both agree on
     what counts as a matching header. First matching column wins.
@@ -62,7 +63,7 @@ def map_roster_headers(header_row) -> Dict[str, int]:
         if key and key not in by_key:
             by_key[key] = idx
     mapping: Dict[str, int] = {}
-    for canonical in [*REQUIRED_COLUMNS, OPTIONAL_EMAIL_COLUMN]:
+    for canonical in [*REQUIRED_COLUMNS, OPTIONAL_EMAIL_COLUMN, OPTIONAL_CAREER_LEVEL_COLUMN]:
         idx = by_key.get(_normalise_header(canonical))
         if idx is not None:
             mapping[canonical] = idx
@@ -268,7 +269,7 @@ class AttendanceService:
 
             # Detect optional columns present in this workbook
             email_index = header_to_index.get(OPTIONAL_EMAIL_COLUMN)
-            career_level_index = header_to_index.get("Career Level")
+            career_level_index = header_to_index.get(OPTIONAL_CAREER_LEVEL_COLUMN)
 
             seen_ids: dict[str, int] = {}  # legacy_id → first row number
             duplicates: list[dict] = []  # detailed duplicate info

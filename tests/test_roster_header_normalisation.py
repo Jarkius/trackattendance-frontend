@@ -97,6 +97,33 @@ class TestRosterHeaderNormalisation(unittest.TestCase):
             ("Alice", "BU1", "P", "a@example.com"),
         )
 
+    def test_career_level_imported_and_stored(self):
+        """Career Level must survive header mapping AND the DB write (both
+        were silently dropped after the #105/#113 merge)."""
+        self._write(
+            [*GOOD_HEADERS, "Email", " career level "],
+            [["00123", "Alice", "BU1", "P", "a@example.com", 5.0],
+             ["00124", "Bob", "BU1", "P", "b@example.com", "9"]],
+        )
+        svc = self._service()
+        self.assertIsNone(svc._roster_error)
+        self.assertEqual(svc._employee_cache["00123"].career_level, "5")
+        self.assertEqual(svc._employee_cache["00124"].career_level, "9")
+        stored = dict(svc._db._connection.execute(
+            "SELECT legacy_id, career_level FROM employees").fetchall())
+        self.assertEqual(stored, {"00123": "5", "00124": "9"})
+
+    def test_older_import_version_forces_reimport_of_unchanged_file(self):
+        self._write([*GOOD_HEADERS, "Career Level"], [["00123", "Alice", "BU1", "P", 4]])
+        svc = self._service()
+        # Simulate a DB imported by the buggy build: same file, empty level, old stamp.
+        svc._db._connection.execute("UPDATE employees SET career_level = ''")
+        svc._db.set_roster_meta("import_version", "2")
+        self.services.pop().close()
+
+        svc = self._service()
+        self.assertEqual(svc._employee_cache["00123"].career_level, "4")
+
     def test_validate_roster_headers_accepts_cosmetic_variants(self):
         self._write(["legacy id ", "Full Name", "SL L1 Desc", "Position Desc"], [])
         svc = self._service()

@@ -255,14 +255,15 @@ class DatabaseManager:
                 employee.sl_l1_desc.strip(),
                 employee.position_desc.strip(),
                 employee.email.strip() if employee.email else "",
+                employee.career_level.strip() if employee.career_level else "",
             )
             for employee in employees
         ]
         with self._connection:
             self._connection.execute("DELETE FROM employees")
             self._connection.executemany(
-                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc, email)"
-                " VALUES(?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc, email, career_level)"
+                " VALUES(?, ?, ?, ?, ?, ?)",
                 rows,
             )
             stored = self._connection.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
