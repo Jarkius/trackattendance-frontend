@@ -128,6 +128,7 @@ class TestShutdownSyncDeadline(unittest.TestCase):
         self.assertFalse(result["deadline_hit"])
 
 
+@unittest.skipUnless(PYQT6_AVAILABLE, "PyQt6 not available")
 class TestExportWorkbookOffThread(unittest.TestCase):
     def test_db_read_on_caller_thread_write_via_run_blocking(self):
         from attendance import AttendanceService
