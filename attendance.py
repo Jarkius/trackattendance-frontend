@@ -429,7 +429,7 @@ class AttendanceService:
         try:
             sheet = workbook.active
             sheet.title = "Employees"
-            # Career Level (0 = Intern ... 9 = Partner) is optional; today's import ignores it.
+            # Optional Career Level: 0 = Intern ... 9 = Partner (both excluded from the Lucky Draw).
             sheet.append(REQUIRED_COLUMNS + ["Email", "Career Level"])
 
             sample_rows = [

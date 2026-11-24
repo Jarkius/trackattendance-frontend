@@ -235,3 +235,5 @@ class TestExampleRosterWorkbook(unittest.TestCase):
         svc = self._service("employee.xlsx")
         self.assertIsNone(svc._roster_error)
         self.assertEqual(svc._db.count_employees(), len(rows) - 1)
+        stored = {e.career_level for e in svc._db.load_employee_cache().values()}
+        self.assertEqual(stored, {str(v) for v in levels})
