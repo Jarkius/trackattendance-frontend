@@ -63,6 +63,7 @@ class EmployeeRecord:
     sl_l1_desc: str
     position_desc: str
     email: str = ""
+    career_level: str = ""
 
 
 @dataclass(frozen=True)
@@ -148,6 +149,10 @@ class DatabaseManager:
         except sqlite3.OperationalError:
             pass  # column already exists
         try:
+            self._connection.execute("ALTER TABLE employees ADD COLUMN career_level TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        try:
             self._connection.execute("ALTER TABLE scans ADD COLUMN email TEXT")
         except sqlite3.OperationalError:
             pass  # column already exists
@@ -225,13 +230,14 @@ class DatabaseManager:
                 employee.sl_l1_desc.strip(),
                 employee.position_desc.strip(),
                 employee.email.strip() if employee.email else "",
+                employee.career_level.strip() if employee.career_level else "",
             )
             for employee in employees
         ]
         with self._connection:
             self._connection.executemany(
-                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc, email)"
-                " VALUES(?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc, email, career_level)"
+                " VALUES(?, ?, ?, ?, ?, ?)",
                 rows,
             )
         return len(rows)
@@ -264,7 +270,7 @@ class DatabaseManager:
 
     def load_employee_cache(self) -> Dict[str, EmployeeRecord]:
         cursor = self._connection.execute(
-            "SELECT legacy_id, full_name, sl_l1_desc, position_desc, email FROM employees"
+            "SELECT legacy_id, full_name, sl_l1_desc, position_desc, email, career_level FROM employees"
         )
         return {
             normalize_badge_id(row["legacy_id"]): EmployeeRecord(
@@ -273,6 +279,7 @@ class DatabaseManager:
                 sl_l1_desc=row["sl_l1_desc"],
                 position_desc=row["position_desc"],
                 email=row["email"] or "",
+                career_level=row["career_level"] or "",
             )
             for row in cursor.fetchall()
         }

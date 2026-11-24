@@ -101,6 +101,10 @@ def compute_bu_breakdown(enriched_scans: List[dict], employee_cache: Dict[str, A
     return bu_export
 
 
+# Career Levels not eligible for the lucky draw: 9 = Partner, 0 = Intern.
+LUCKY_DRAW_EXCLUDED_LEVELS = frozenset({"9", "0"})
+
+
 class DashboardService:
     """Service for fetching multi-station dashboard data via Cloud API."""
 
@@ -372,6 +376,28 @@ class DashboardService:
         except Exception:
             return iso_timestamp  # Return raw value as fallback
 
+    @staticmethod
+    def _write_simple_sheet(wb, title, headers, rows, total_label, header_fill, header_font) -> None:
+        """Header + data rows + a bold total line, auto-width, frozen header."""
+        from openpyxl.styles import Font, Alignment
+
+        ws = wb.create_sheet(title)
+        for col_idx, name in enumerate(headers, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=name)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+        for row_idx, values in enumerate(rows, start=2):
+            for col_idx, value in enumerate(values, start=1):
+                ws.cell(row=row_idx, column=col_idx, value=value)
+        total_row = len(rows) + 2
+        ws.cell(row=total_row, column=1, value=total_label).font = Font(bold=True)
+        ws.cell(row=total_row, column=2, value=len(rows)).font = Font(bold=True)
+        for col in ws.columns:
+            max_length = max(len(str(cell.value or "")) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = max_length + 2
+        ws.freeze_panes = "A2"
+
     def _parse_datetime_for_sort(self, formatted_datetime: str) -> datetime:
         """Parse a `_format_datetime()`-produced string back into a sortable
         datetime, for ranking a person's multiple scans by earliest-first.
@@ -479,10 +505,12 @@ class DashboardService:
                     full_name = employee.full_name
                     business_unit = employee.sl_l1_desc or "--"
                     position = employee.position_desc or "--"
+                    career_level = employee.career_level or "--"
                 else:
                     full_name = "Unknown"
                     business_unit = "--"
                     position = "--"
+                    career_level = "--"
 
                 scan_source = (scan.get("scan_source") if isinstance(scan, dict) else None) or "manual"
                 enriched_scans.append({
@@ -492,6 +520,7 @@ class DashboardService:
                     "Full Name": full_name,
                     "SL L1 Desc": business_unit,
                     "Position Desc": position,
+                    "Career Level": career_level,
                     "Email": employee.email if employee else "",
                     "Station": station,
                     "Scanned At": self._format_datetime(scanned_at),
@@ -502,7 +531,7 @@ class DashboardService:
             for row in enriched_scans:
                 row["_ScannedAtDt"] = self._parse_datetime_for_sort(row["Scanned At"])
 
-            columns = ["Scan Value", "Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Email", "Station", "Scanned At", "Matched", "Scan Source"]
+            columns = ["Scan Value", "Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Career Level", "Email", "Station", "Scanned At", "Matched", "Scan Source"]
             df = pd.DataFrame(enriched_scans)[columns] if enriched_scans else pd.DataFrame(columns=columns)
             buckets = bucket_export_scans(enriched_scans)
 
@@ -636,7 +665,7 @@ class DashboardService:
             not_scanned.sort(key=lambda e: (e.sl_l1_desc or "", e.full_name or ""))
 
             ws_missing = wb.create_sheet("Not Yet Scanned")
-            missing_headers = ["Legacy ID", "Full Name", "Email", "SL L1 Desc", "Position Desc"]
+            missing_headers = ["Legacy ID", "Full Name", "Email", "SL L1 Desc", "Position Desc", "Career Level"]
             for col_idx, col_name in enumerate(missing_headers, start=1):
                 cell = ws_missing.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill
@@ -649,6 +678,7 @@ class DashboardService:
                 ws_missing.cell(row=row_idx, column=3, value=emp.email or "--")
                 ws_missing.cell(row=row_idx, column=4, value=emp.sl_l1_desc or "--")
                 ws_missing.cell(row=row_idx, column=5, value=emp.position_desc or "--")
+                ws_missing.cell(row=row_idx, column=6, value=emp.career_level or "--")
 
             # Summary row
             summary_row = len(not_scanned) + 2
@@ -663,91 +693,74 @@ class DashboardService:
 
             logger.info(f"Dashboard export: {len(not_scanned)} employees not yet scanned")
 
-            # Add "Deduplicated Attendance" sheet — one row per employee who
-            # actually scanned, keeping their earliest scan as the canonical
-            # attendance record and flagging anyone who scanned at 2+
-            # distinct stations. Built from `enriched_scans` (the same
-            # employee-matched data "Not Yet Scanned" above is complementary
-            # to) so the two sheets can never drift apart on what counts as
-            # "scanned".
-            #
-            # Replaces the real-time Live Sync cross-station block that was
-            # retired after the 2026-09-03 event (see docs/SYNC.md) — that
-            # mechanism required a synchronous cloud round-trip inside the
-            # scan path itself, which caused barcode double-fires to
-            # concatenate into garbage badge values when the network was
-            # slow. Cross-station duplicates are rare enough (10 out of
-            # ~1,500 scans at that event) that catching them here, after the
-            # fact, is a better trade than blocking every scan on a network
-            # call to catch them a few seconds sooner.
+            # Registered employees only (garbled/unrecognised badges and walk-ins
+            # are not attendees). Same employee-matched data "Not Yet Scanned"
+            # above is complementary to, so the sheets can never drift apart on
+            # what counts as "scanned". The old "Deduplicated Attendance" sheet
+            # was replaced by the "Unique Scans (Per Day)" and "Lucky Draw"
+            # sheets below.
             matched_scans = [row for row in enriched_scans if row["_kind"] == "registered"]
 
-            by_legacy_id: Dict[str, List[dict]] = {}
-            for row in matched_scans:
-                by_legacy_id.setdefault(normalize_badge_id(row["Legacy ID"]), []).append(row)
+            # One row per employee (normalised legacy_id): their earliest scan
+            # across all stations.
+            first_by_legacy_id: Dict[str, dict] = {}
+            for row in sorted(matched_scans, key=lambda r: r["_ScannedAtDt"]):
+                first_by_legacy_id.setdefault(normalize_badge_id(row["Legacy ID"]), row)
+            dedup_rows = sorted(
+                (
+                    {
+                        "Legacy ID": first["Legacy ID"],
+                        "Full Name": first["Full Name"],
+                        "SL L1 Desc": first["SL L1 Desc"],
+                        "Position Desc": first["Position Desc"],
+                        "Career Level": first["Career Level"],
+                        "First Station": first["Station"],
+                        "First Scanned At": first["Scanned At"],
+                    }
+                    for first in first_by_legacy_id.values()
+                ),
+                key=lambda r: r["Full Name"] or "",
+            )
 
-            dedup_rows = []
-            for _key, rows in by_legacy_id.items():
-                rows_sorted = sorted(rows, key=lambda r: r["_ScannedAtDt"])
-                first = rows_sorted[0]
-                stations = sorted({str(r["Station"]) for r in rows})
-                dedup_rows.append({
-                    "Legacy ID": first["Legacy ID"],
-                    "Full Name": first["Full Name"],
-                    "SL L1 Desc": first["SL L1 Desc"],
-                    "Position Desc": first["Position Desc"],
-                    "Email": first["Email"],
-                    "First Station": first["Station"],
-                    "First Scanned At": first["Scanned At"],
-                    "Scan Source": first["Scan Source"],
-                    "Total Scans (any station)": len(rows),
-                    "All Stations Scanned": ", ".join(stations),
-                    "Cross-Station Duplicate": len(stations) > 1,
-                })
-            dedup_rows.sort(key=lambda r: r["Full Name"] or "")
+            # "Unique Scans (Per Day)": one row per employee per calendar day,
+            # keeping that day's first scan. Raw duplicates stay in "All Scans".
+            per_day: Dict[tuple, dict] = {}
+            for row in sorted(matched_scans, key=lambda r: r["_ScannedAtDt"]):
+                day = row["Scanned At"][:10] if row["_ScannedAtDt"] != datetime.min else "--"
+                per_day.setdefault((normalize_badge_id(row["Legacy ID"]), day), row)
+            per_day_rows = sorted(
+                per_day.items(), key=lambda kv: (kv[0][1], kv[1]["Full Name"] or "")
+            )
+            self._write_simple_sheet(
+                wb, "Unique Scans (Per Day)",
+                ["Date", "Legacy ID", "Full Name", "SL L1 Desc", "Position Desc",
+                 "Career Level", "Email", "Station", "First Scanned At", "Scan Source"],
+                [[day, r["Legacy ID"], r["Full Name"], r["SL L1 Desc"], r["Position Desc"],
+                  r["Career Level"], r["Email"], r["Station"], r["Scanned At"], r["Scan Source"]]
+                 for (_lid, day), r in per_day_rows],
+                "Unique Employee-Days:", header_fill, header_font,
+            )
 
-            ws_dedup = wb.create_sheet("Deduplicated Attendance")
-            dedup_headers = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Email",
-                             "First Station", "First Scanned At", "Scan Source",
-                             "Total Scans (any station)", "All Stations Scanned", "Cross-Station Duplicate"]
-            for col_idx, col_name in enumerate(dedup_headers, start=1):
-                cell = ws_dedup.cell(row=1, column=col_idx, value=col_name)
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = Alignment(horizontal="center")
-
-            dup_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
-            cross_station_count = 0
-            for row_idx, row in enumerate(dedup_rows, start=2):
-                is_dup = row["Cross-Station Duplicate"]
-                if is_dup:
-                    cross_station_count += 1
-                for col_idx, col_name in enumerate(dedup_headers, start=1):
-                    value = row[col_name]
-                    if col_name == "Cross-Station Duplicate":
-                        value = "Yes" if value else "No"
-                    cell = ws_dedup.cell(row=row_idx, column=col_idx, value=value)
-                    if is_dup:
-                        cell.fill = dup_fill
-
-            summary_row = len(dedup_rows) + 2
-            ws_dedup.cell(row=summary_row, column=1, value="Unique Attendees:")
-            ws_dedup.cell(row=summary_row, column=1).font = Font(bold=True)
-            ws_dedup.cell(row=summary_row, column=2, value=len(dedup_rows))
-            ws_dedup.cell(row=summary_row, column=2).font = Font(bold=True)
-            ws_dedup.cell(row=summary_row + 1, column=1, value="Cross-Station Duplicates:")
-            ws_dedup.cell(row=summary_row + 1, column=1).font = Font(bold=True)
-            ws_dedup.cell(row=summary_row + 1, column=2, value=cross_station_count)
-            ws_dedup.cell(row=summary_row + 1, column=2).font = Font(bold=True)
-
-            for col in ws_dedup.columns:
-                max_length = max(len(str(cell.value or "")) for cell in col)
-                ws_dedup.column_dimensions[col[0].column_letter].width = max_length + 2
-            ws_dedup.freeze_panes = "A2"
-
+            # "Lucky Draw": one row per rostered employee who attended (first
+            # scan overall), no Email. Partners (level 9) and interns (level 0)
+            # are not eligible.
+            draw_rows = [
+                r for r in dedup_rows
+                if r["Full Name"] != "Unknown"
+                and str(r["Career Level"]).strip() not in LUCKY_DRAW_EXCLUDED_LEVELS
+            ]
+            self._write_simple_sheet(
+                wb, "Lucky Draw",
+                ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Career Level",
+                 "First Station", "First Scanned At"],
+                [[r["Legacy ID"], r["Full Name"], r["SL L1 Desc"], r["Position Desc"],
+                  r["Career Level"], r["First Station"], r["First Scanned At"]]
+                 for r in draw_rows],
+                "Eligible Names:", header_fill, header_font,
+            )
             logger.info(
-                f"Dashboard export: {len(dedup_rows)} unique attendees, "
-                f"{cross_station_count} cross-station duplicates"
+                f"Dashboard export: {len(per_day_rows)} unique employee-days, "
+                f"{len(draw_rows)} lucky draw eligible"
             )
 
             # Walk-ins: typed names of people missing from the roster, one row

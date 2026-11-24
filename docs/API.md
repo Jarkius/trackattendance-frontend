@@ -170,7 +170,7 @@ curl -X POST https://trackattendance-api-969370105809.asia-southeast1.run.app/v1
 why. This section is kept for reference in case the endpoint is still
 live on `trackattendance-api` and another integration calls it directly.
 Cross-station duplicates are now caught after the fact via the export's
-"Deduplicated Attendance" sheet instead of a real-time, blocking check.
+"Unique Scans (Per Day)" sheet (raw duplicates stay in "All Scans") instead of a real-time, blocking check.
 
 **Authentication**: Required (Bearer token)
 
