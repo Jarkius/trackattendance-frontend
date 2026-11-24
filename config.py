@@ -5,6 +5,7 @@ This module loads configuration from environment variables (.env file or system 
 Never commit secrets to git. Use .env file (ignored by git) for local development.
 """
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -49,6 +50,31 @@ def _safe_int(key: str, default: int, min_val: int = None, max_val: int = None) 
         return val
     except (ValueError, TypeError):
         return default
+
+CONFIG_WARNINGS: list = []
+
+
+def _safe_choice(key: str, default: str, allowed) -> str:
+    """Read a string env var, normalise (strip + lower) and validate it.
+
+    Any value outside ``allowed`` falls back to ``default`` with a warning,
+    so a typo can never silently disable a safety feature.
+    """
+    raw = os.getenv(key)
+    if raw is None:
+        return default
+    val = raw.strip().lower()
+    if val in allowed:
+        return val
+    message = (
+        f"Invalid {key}={raw!r} (allowed: {', '.join(sorted(allowed))}); "
+        f"falling back to {default!r}"
+    )
+    # config is imported before logging is configured, so keep the message for
+    # main() to re-log once the log file exists (a windowed build has no console).
+    CONFIG_WARNINGS.append(message)
+    logging.getLogger(__name__).warning(message)
+    return default
 
 def _safe_float(key: str, default: float, min_val: float = None, max_val: float = None) -> float:
     raw = os.getenv(key)
@@ -160,6 +186,12 @@ AUTO_SYNC_CHECK_INTERVAL_SECONDS = _safe_int("AUTO_SYNC_CHECK_INTERVAL_SECONDS",
 # Minimum number of pending scans required to trigger auto-sync
 # Set to 1 to sync as soon as any scan is pending
 AUTO_SYNC_MIN_PENDING_SCANS = _safe_int("AUTO_SYNC_MIN_PENDING_SCANS", 1, min_val=1, max_val=10000)
+
+# Overall time budget (seconds) for the sync-pending-scans step of shutdown.
+# Once exceeded, no further batches are started; remaining scans stay pending
+# (and are still included in the export). Checked between batches, so one
+# in-flight request may overrun it by up to its own network timeout.
+SHUTDOWN_SYNC_DEADLINE_SECONDS = _safe_int("SHUTDOWN_SYNC_DEADLINE_SECONDS", 30, min_val=1, max_val=600)
 
 # Show status message when auto-sync starts
 AUTO_SYNC_SHOW_START_MESSAGE = os.getenv("AUTO_SYNC_SHOW_START_MESSAGE", "True").lower() in ("true", "1", "yes")
@@ -278,7 +310,7 @@ DUPLICATE_BADGE_TIME_WINDOW_SECONDS = _safe_int("DUPLICATE_BADGE_TIME_WINDOW_SEC
 # 'warn': Accept scan + show yellow warning alert (default)
 # 'block': Reject duplicate scan + show red error alert
 # 'silent': Accept scan + no alert shown (for testing)
-DUPLICATE_BADGE_ACTION = os.getenv("DUPLICATE_BADGE_ACTION", "warn").lower()
+DUPLICATE_BADGE_ACTION = _safe_choice("DUPLICATE_BADGE_ACTION", "warn", {"warn", "block", "silent"})
 
 # Duration in milliseconds to show duplicate badge alert before auto-dismiss
 DUPLICATE_BADGE_ALERT_DURATION_MS = _safe_int("DUPLICATE_BADGE_ALERT_DURATION_MS", 3000, min_val=500, max_val=30000)

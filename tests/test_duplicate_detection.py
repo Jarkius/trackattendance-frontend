@@ -286,6 +286,24 @@ class TestDuplicateDetectionBlockMode(unittest.TestCase):
     @patch.dict(os.environ, {
         'DUPLICATE_BADGE_DETECTION_ENABLED': 'True',
         'DUPLICATE_BADGE_ACTION': 'block',
+        'DUPLICATE_BADGE_TIME_WINDOW_SECONDS': '90',
+    })
+    def test_block_response_includes_window_seconds(self):
+        """Block-mode rejection reports the configured window."""
+        import importlib
+        import config
+        importlib.reload(config)
+        service = _create_service(self.db_path, self.employee_path, self.export_dir)
+        try:
+            service.register_scan("TEST001")
+            result = service.register_scan("TEST001")
+            self.assertEqual(result.get("duplicateWindowSeconds"), 90)
+        finally:
+            service.close()
+
+    @patch.dict(os.environ, {
+        'DUPLICATE_BADGE_DETECTION_ENABLED': 'True',
+        'DUPLICATE_BADGE_ACTION': 'block',
         'DUPLICATE_BADGE_TIME_WINDOW_SECONDS': '60',
     })
     def test_block_mode_preserves_original(self):
@@ -383,6 +401,7 @@ class TestDuplicateDetectionWarnMode(unittest.TestCase):
 
             # Should have warning flag for UI (yellow alert)
             self.assertTrue(result.get("is_duplicate", False))
+            self.assertEqual(result.get("duplicateWindowSeconds"), 60)
         finally:
             service.close()
 

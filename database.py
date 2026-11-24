@@ -10,6 +10,33 @@ from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+# Zero-width characters that scanners/spreadsheets sometimes leave in IDs.
+_ID_INVISIBLE_CHARS = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
+
+
+def clean_badge_id(value: object) -> str:
+    """Display form of a badge/Legacy ID: whitespace (incl. NBSP) and zero-width chars removed at the ends."""
+    if value is None:
+        return ""
+    return str(value).translate(_ID_INVISIBLE_CHARS).replace("\u00a0", " ").strip()
+
+
+def normalize_walkin_name(value: object) -> str:
+    """Dedupe key for walk-in names typed at the kiosk: clean, collapse runs
+    of whitespace and lower-case, so "Somchai" and "somchai " are one person."""
+    return " ".join(clean_badge_id(value).split()).lower()
+
+
+def normalize_badge_id(value: object) -> str:
+    """Comparison key for badge and Legacy IDs.
+
+    The single rule used at roster import, scan lookup, duplicate checks and
+    reporting joins: clean_badge_id() then upper-case (case-insensitive match,
+    same as the SQL ``COLLATE NOCASE`` comparisons). Stored values keep their
+    original spelling; only comparisons use this key.
+    """
+    return clean_badge_id(value).upper()
+
 logger = logging.getLogger(__name__)
 
 ISO_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"  # UTC format with Z suffix
@@ -98,12 +125,16 @@ class DatabaseManager:
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status ON scans(sync_status);
+                CREATE INDEX IF NOT EXISTS idx_scans_synced_at ON scans(synced_at);
                 CREATE INDEX IF NOT EXISTS idx_scans_badge_station_time_nocase ON scans(badge_id COLLATE NOCASE, station_name COLLATE NOCASE, scanned_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_scans_legacy_station_time_nocase ON scans(legacy_id COLLATE NOCASE, station_name COLLATE NOCASE, scanned_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_scans_sync_status_time ON scans(sync_status, scanned_at);
                 CREATE INDEX IF NOT EXISTS idx_scans_station_name ON scans(station_name);
                 CREATE INDEX IF NOT EXISTS idx_scans_scanned_at ON scans(scanned_at);
                 CREATE INDEX IF NOT EXISTS idx_employees_sl_l1_desc ON employees(sl_l1_desc);
+                CREATE INDEX IF NOT EXISTS idx_scans_employee_key_nocase ON scans(COALESCE(legacy_id, badge_id) COLLATE NOCASE);
+                -- Lets scans-driven joins probe employees by legacy_id case-insensitively.
+                CREATE INDEX IF NOT EXISTS idx_employees_legacy_nocase ON employees(legacy_id COLLATE NOCASE);
 
                 CREATE TABLE IF NOT EXISTS roster_meta (
                     key TEXT PRIMARY KEY,
@@ -189,7 +220,7 @@ class DatabaseManager:
     def bulk_insert_employees(self, employees: Iterable[EmployeeRecord]) -> int:
         rows = [
             (
-                employee.legacy_id.strip(),
+                clean_badge_id(employee.legacy_id),
                 employee.full_name.strip(),
                 employee.sl_l1_desc.strip(),
                 employee.position_desc.strip(),
@@ -205,12 +236,38 @@ class DatabaseManager:
             )
         return len(rows)
 
+    def replace_employees(self, employees: Iterable[EmployeeRecord]) -> int:
+        """Swap the whole roster in one transaction; returns rows actually stored.
+
+        If anything fails part-way, the previous roster is left untouched instead
+        of an empty table (which would turn every scan into an unknown badge).
+        """
+        rows = [
+            (
+                clean_badge_id(employee.legacy_id),
+                employee.full_name.strip(),
+                employee.sl_l1_desc.strip(),
+                employee.position_desc.strip(),
+                employee.email.strip() if employee.email else "",
+            )
+            for employee in employees
+        ]
+        with self._connection:
+            self._connection.execute("DELETE FROM employees")
+            self._connection.executemany(
+                "INSERT OR IGNORE INTO employees(legacy_id, full_name, sl_l1_desc, position_desc, email)"
+                " VALUES(?, ?, ?, ?, ?)",
+                rows,
+            )
+            stored = self._connection.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+        return int(stored)
+
     def load_employee_cache(self) -> Dict[str, EmployeeRecord]:
         cursor = self._connection.execute(
             "SELECT legacy_id, full_name, sl_l1_desc, position_desc, email FROM employees"
         )
         return {
-            row["legacy_id"]: EmployeeRecord(
+            normalize_badge_id(row["legacy_id"]): EmployeeRecord(
                 legacy_id=row["legacy_id"],
                 full_name=row["full_name"],
                 sl_l1_desc=row["sl_l1_desc"],
@@ -548,52 +605,117 @@ class DatabaseManager:
             )
         return cursor.rowcount
 
+    def requeue_failed_scans(self) -> int:
+        """Move every 'failed' scan back to 'pending' so the next sync retries it.
+
+        Called once at startup on the main thread. A scan the server genuinely
+        rejects is bisected back to 'failed' in that run and is not retried again
+        until the next startup, so a truly bad event costs a handful of requests
+        per launch, not per sync cycle. Returns the number of rows re-queued.
+        """
+        with self._connection:
+            cursor = self._connection.execute(
+                """
+                UPDATE scans
+                SET sync_status = 'pending'
+                WHERE sync_status = 'failed'
+                """
+            )
+        return cursor.rowcount
+
     def get_sync_statistics(self) -> Dict[str, Any]:
-        """Get sync statistics for UI display."""
-        cursor = self._connection.execute(
-            """
-            SELECT
-                COUNT(*) FILTER (WHERE sync_status = 'pending') as pending,
-                COUNT(*) FILTER (WHERE sync_status = 'synced') as synced,
-                COUNT(*) FILTER (WHERE sync_status = 'failed') as failed,
-                MAX(synced_at) as last_sync_time
-            FROM scans
-            """
-        )
-        row = cursor.fetchone()
+        """Get sync statistics for UI display.
+
+        Counts come from a GROUP BY over the covering idx_scans_sync_status
+        index and the last sync time from MAX() on idx_scans_synced_at, so
+        neither reads the scans table itself (this runs after every scan and
+        on each auto-sync tick).
+        """
+        counts = {"pending": 0, "synced": 0, "failed": 0}
+        for row in self._connection.execute(
+            "SELECT sync_status, COUNT(*) AS n FROM scans GROUP BY sync_status"
+        ):
+            if row["sync_status"] in counts:
+                counts[row["sync_status"]] = int(row["n"] or 0)
+        last = self._connection.execute(
+            "SELECT MAX(synced_at) AS last_sync_time FROM scans"
+        ).fetchone()
         return {
-            "pending": int(row["pending"] or 0),
-            "synced": int(row["synced"] or 0),
-            "failed": int(row["failed"] or 0),
-            "last_sync_time": row["last_sync_time"],
+            "pending": counts["pending"],
+            "synced": counts["synced"],
+            "failed": counts["failed"],
+            "last_sync_time": last["last_sync_time"],
         }
 
     def get_scans_by_bu(self) -> list[dict]:
         """Get unique scanned badge count grouped by BU using local data."""
+        # Joins are driven from scans (CROSS JOIN fixes the order in SQLite) so each
+        # scan is one indexed probe into employees; driving from employees cannot use
+        # an index for this NOCASE expression and costs scans x employees.
+        scanned_by_bu = {
+            row["bu_name"]: row["scanned"]
+            for row in self._connection.execute("""
+                SELECT e.sl_l1_desc AS bu_name, COUNT(DISTINCT e.legacy_id) AS scanned
+                FROM scans s
+                CROSS JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
+                GROUP BY e.sl_l1_desc
+            """)
+        }
         cursor = self._connection.execute("""
-            SELECT
-                e.sl_l1_desc AS bu_name,
-                COUNT(DISTINCT e.legacy_id) AS registered,
-                COUNT(DISTINCT s.badge_id) AS scanned
-            FROM employees e
-            LEFT JOIN scans s ON e.legacy_id = s.badge_id
-            GROUP BY e.sl_l1_desc
-            ORDER BY e.sl_l1_desc
+            SELECT sl_l1_desc AS bu_name, COUNT(DISTINCT legacy_id) AS registered
+            FROM employees
+            GROUP BY sl_l1_desc
+            ORDER BY sl_l1_desc
         """)
         return [
-            {"bu_name": row["bu_name"], "registered": row["registered"], "scanned": row["scanned"]}
+            {
+                "bu_name": row["bu_name"],
+                "registered": row["registered"],
+                "scanned": scanned_by_bu.get(row["bu_name"], 0),
+            }
             for row in cursor.fetchall()
         ]
 
     def count_unmatched_scanned_badges(self) -> int:
         """Count distinct badge_ids in scans that don't match any employee."""
         cursor = self._connection.execute("""
-            SELECT COUNT(DISTINCT s.badge_id) AS cnt
+            SELECT COUNT(DISTINCT UPPER(s.badge_id)) AS cnt
             FROM scans s
-            LEFT JOIN employees e ON s.badge_id = e.legacy_id
+            LEFT JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
             WHERE e.legacy_id IS NULL
         """)
         return int(cursor.fetchone()["cnt"] or 0)
+
+    def get_attendance_buckets(self) -> dict:
+        """Distinct counts for the three attendance buckets from local scans.
+
+        registered_attended: employees matched by COALESCE(legacy_id, badge_id).
+        walkins: unmatched manual scans (typed names), de-duplicated by
+            normalize_walkin_name.
+        unknown_badges: unmatched non-manual scans, by normalize_badge_id.
+        """
+        registered = int(self._connection.execute("""
+            SELECT COUNT(DISTINCT e.legacy_id) AS cnt
+            FROM scans s
+            CROSS JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
+        """).fetchone()["cnt"] or 0)
+        walkins: set[str] = set()
+        unknown: set[str] = set()
+        for row in self._connection.execute("""
+            SELECT s.badge_id AS badge_id, COALESCE(s.scan_source, 'manual') AS scan_source
+            FROM scans s
+            LEFT JOIN employees e ON e.legacy_id = COALESCE(s.legacy_id, s.badge_id) COLLATE NOCASE
+            WHERE e.legacy_id IS NULL
+        """):
+            if row["scan_source"] == "manual":
+                walkins.add(normalize_walkin_name(row["badge_id"]))
+            else:
+                unknown.add(normalize_badge_id(row["badge_id"]))
+        return {
+            "registered_attended": registered,
+            "walkins": len(walkins),
+            "unknown_badges": len(unknown),
+        }
 
     def clear_all_scans(self) -> int:
         """Clear all scan records from local database. Preserves station name. Returns scan count deleted."""

@@ -65,6 +65,9 @@ class TestDashboardDataFetching(unittest.TestCase):
         mock_response.json.return_value = {
             "total_scans": 100,
             "unique_badges": 50,
+            "matched_unique": 50,
+            "walkin_unique": 0,
+            "unknown_badge_unique": 0,
             "stations": [
                 {"name": "Station1", "scans": 60, "unique": 30, "last_scan": "2024-01-01T10:30:00Z"},
                 {"name": "Station2", "scans": 40, "unique": 20, "last_scan": "2024-01-01T11:00:00Z"},
@@ -155,6 +158,9 @@ class TestDashboardDataFetching(unittest.TestCase):
         mock_response.json.return_value = {
             "total_scans": 10,
             "unique_badges": 2,
+            "matched_unique": 2,
+            "walkin_unique": 0,
+            "unknown_badge_unique": 0,
             "stations": []
         }
         mock_get.return_value = mock_response
@@ -184,6 +190,121 @@ class TestDashboardDataFetching(unittest.TestCase):
 
         self.assertEqual(result["attendance_rate"], 0.0)
         self.assertEqual(result["registered"], 0)
+
+
+def _stats_response(payload):
+    response = Mock()
+    response.status_code = 200
+    response.json.return_value = payload
+    return response
+
+
+class TestAttendanceBuckets(unittest.TestCase):
+    """#109: rate = registered attended / registered; walk-ins and unknown
+    badge scans are reported separately and never inflate the rate."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.db = DatabaseManager(Path(self.temp_dir) / "test.db")
+        self.db.set_station_name("TestStation")
+        self.employees = [
+            EmployeeRecord(f"E{i:03d}", f"Emp {i}", "IT" if i % 2 else "HR", "Staff")
+            for i in range(10)
+        ]
+        self.db.bulk_insert_employees(self.employees)
+        self.service = DashboardService(self.db, "http://test.example.com", "k")
+
+    def tearDown(self):
+        self.db.close()
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _record_ten_matched_two_walkins_one_garbled(self):
+        for emp in self.employees:
+            self.db.record_scan(emp.legacy_id, "TestStation", emp, scan_source="badge")
+        self.db.record_scan("Somchai", "TestStation", None, scan_source="manual")
+        self.db.record_scan("somchai ", "TestStation", None, scan_source="manual")
+        self.db.record_scan("Malee  Sook", "TestStation", None, scan_source="manual")
+        self.db.record_scan("#GARBLED", "TestStation", None, scan_source="badge")
+
+    @patch('dashboard.requests.get')
+    def test_cloud_fields_used(self, mock_get):
+        mock_get.return_value = _stats_response({
+            "total_scans": 40, "unique_badges": 13,
+            "matched_unique": 10, "walkin_unique": 2, "unknown_badge_unique": 1,
+            "stations": [], "business_units": [],
+        })
+        result = self.service.get_dashboard_data()
+        self.assertEqual(result["scanned"], 10)
+        self.assertEqual(result["attendance_rate"], 100.0)
+        self.assertEqual(result["walkins"], 2)
+        self.assertEqual(result["unknown_badges"], 1)
+        self.assertEqual(result["total_present"], 12)
+        self.assertEqual(result["source"], "cloud")
+
+    @patch('dashboard.requests.get')
+    def test_old_server_falls_back_to_bu_sum(self, mock_get):
+        mock_get.return_value = _stats_response({
+            "total_scans": 40, "unique_badges": 13,
+            "stations": [],
+            "business_units": [
+                {"name": "IT", "registered": 5, "unique": 5},
+                {"name": "HR", "registered": 5, "unique": 5},
+                {"name": "Unmatched", "registered": 0, "unique": 3},
+            ],
+        })
+        result = self.service.get_dashboard_data()
+        self.assertEqual(result["scanned"], 10)
+        self.assertEqual(result["attendance_rate"], 100.0)
+        self.assertIsNone(result["walkins"])
+        self.assertIsNone(result["unknown_badges"])
+        self.assertEqual(result["total_present"], 10)
+
+    @patch('dashboard.requests.get')
+    def test_old_server_without_business_units_does_not_crash(self, mock_get):
+        mock_get.return_value = _stats_response({"total_scans": 5, "unique_badges": 5})
+        result = self.service.get_dashboard_data()
+        self.assertEqual(result["scanned"], 0)
+        self.assertIsNone(result["walkins"])
+
+    @patch('dashboard.requests.get')
+    def test_rate_capped_at_100_with_warning(self, mock_get):
+        mock_get.return_value = _stats_response({
+            "total_scans": 50, "matched_unique": 12, "walkin_unique": 0,
+            "unknown_badge_unique": 0, "stations": [], "business_units": [],
+        })
+        with self.assertLogs('dashboard', level='WARNING') as logs:
+            result = self.service.get_dashboard_data()
+        self.assertEqual(result["attendance_rate"], 100.0)
+        self.assertTrue(any("capping" in m for m in logs.output))
+
+    @patch('dashboard.requests.get')
+    def test_local_fallback_when_cloud_unavailable(self, mock_get):
+        import requests
+        mock_get.side_effect = requests.exceptions.ConnectionError()
+        self._record_ten_matched_two_walkins_one_garbled()
+
+        result = self.service.get_dashboard_data()
+
+        self.assertEqual(result["scanned"], 10)
+        self.assertEqual(result["attendance_rate"], 100.0)
+        self.assertEqual(result["walkins"], 2)  # Somchai/"somchai " collapse; Malee Sook
+        self.assertEqual(result["source"], "local")  # UI labels it "This station only"
+        self.assertEqual(result["unknown_badges"], 1)
+        self.assertEqual(result["total_present"], 12)
+
+    def test_local_buckets_badge_and_lookup_same_person_once(self):
+        emp = self.employees[0]
+        self.db.record_scan("105193T", "TestStation", emp, scan_source="badge")
+        self.db.record_scan(emp.legacy_id.lower(), "TestStation", emp, scan_source="manual")
+        buckets = self.db.get_attendance_buckets()
+        self.assertEqual(buckets["registered_attended"], 1)
+
+    def test_local_walkin_dedupe_case_and_spaces(self):
+        self.db.record_scan("Somchai", "TestStation", None, scan_source="manual")
+        self.db.record_scan("somchai ", "TestStation", None, scan_source="manual")
+        self.db.record_scan("SOMCHAI", "TestStation", None, scan_source="manual")
+        self.assertEqual(self.db.get_attendance_buckets()["walkins"], 1)
 
 
 class TestDashboardRunNetworkCallInjection(unittest.TestCase):
@@ -519,6 +640,72 @@ class TestDashboardExport(unittest.TestCase):
         ]
         self.assertEqual(len(data_rows), 0)
 
+    def _export_sheets(self, scans):
+        with patch('dashboard.requests.get') as mock_get:
+            mock_get.return_value = _stats_response({"scans": scans})
+            result = self.service.export_to_excel(dashboard_data={
+                "registered": 2, "scanned": 0, "total_scans": len(scans),
+                "attendance_rate": 0.0, "stations": [], "business_units": [],
+            })
+        self.assertTrue(result["ok"], result.get("message"))
+        from openpyxl import load_workbook
+        return load_workbook(result["file_path"])
+
+    @staticmethod
+    def _scan(badge, legacy, source, matched, at="2026-01-01T08:00:00Z", station="StationA"):
+        return {"badge_id": badge, "legacy_id": legacy, "station_name": station,
+                "scanned_at": at, "matched": matched, "scan_source": source}
+
+    def test_export_buckets_agree_across_sheets(self):
+        """Badge + lookup of TEST001 = 1 person on Summary, BU and Dedup;
+        walk-ins ("Somchai"/"somchai ") = 1 and are not in Not Yet Scanned;
+        the garbled badge is unknown, not a person."""
+        wb = self._export_sheets([
+            self._scan("105193T", "TEST001", "badge", True),
+            self._scan("test001", "test001", "manual", True, at="2026-01-01T08:10:00Z", station="StationB"),
+            self._scan("Somchai", None, "manual", False, at="2026-01-01T09:00:00Z"),
+            self._scan("somchai ", None, "manual", False, at="2026-01-01T09:05:00Z", station="StationB"),
+            self._scan("#GARBLED", None, "badge", False),
+        ])
+
+        summary = {r[0]: r[1] for r in wb["Summary"].iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(summary["Registered Attended"], 1)
+        self.assertEqual(summary["Walk-ins"], 1)
+        self.assertEqual(summary["Unknown Badge Scans (needs review)"], 1)
+        self.assertEqual(summary["Total Present"], 2)
+        self.assertEqual(summary["Attendance Rate"], "50.0%")
+
+        bu = {r[0]: r for r in wb["By Business Unit"].iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(bu["IT"][2], 1)
+        self.assertEqual(sum(r[2] for n, r in bu.items() if n != "(Unmatched)"), 1)
+        self.assertEqual(bu["(Unmatched)"][2], 1)
+
+        ws = wb["Deduplicated Attendance"]
+        ids = [r[0] for r in ws.iter_rows(min_row=2, values_only=True)
+               if r[0] not in (None, "Unique Attendees:", "Cross-Station Duplicates:")]
+        self.assertEqual(ids, ["TEST001"])
+
+        not_scanned = list(wb["Not Yet Scanned"].iter_rows(min_row=2, values_only=True))
+        self.assertNotIn("TEST001", [r[0] for r in not_scanned])
+        self.assertIn("TEST002", [r[0] for r in not_scanned])
+        self.assertNotIn("Somchai", [r[1] for r in not_scanned])
+
+        walk = list(wb["Walk-ins"].iter_rows(min_row=2, values_only=True))
+        self.assertEqual(len(walk), 1)
+        self.assertEqual(walk[0][0], "Somchai")  # as typed, earliest scan
+        self.assertEqual(walk[0][1], "StationA")
+
+    def test_export_rate_never_exceeds_100(self):
+        wb = self._export_sheets([
+            self._scan("TEST001", "TEST001", "badge", True),
+            self._scan("TEST002", "TEST002", "badge", True),
+            self._scan("Walk In", None, "manual", False),
+            self._scan("BAD1", None, "badge", False),
+        ])
+        summary = {r[0]: r[1] for r in wb["Summary"].iter_rows(min_row=2, values_only=True)}
+        self.assertEqual(summary["Attendance Rate"], "100.0%")
+        self.assertEqual(summary["Total Present"], 3)
+
     @patch('dashboard.requests.get')
     def test_export_connection_error(self, mock_get):
         """Test export handles connection error."""
@@ -554,6 +741,37 @@ class TestDashboardExport(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["message"], "No scan data to export")
         self.assertTrue(result.get("noData", False))
+
+    def _export_with_total(self, mock_get, total):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "total_records": total,
+            "scans": [{
+                "badge_id": "TEST001", "legacy_id": "TEST001",
+                "station_name": "TestStation",
+                "scanned_at": "2026-01-01T08:00:00Z",
+                "matched": True, "scan_source": "badge",
+            }],
+        }
+        mock_get.return_value = mock_response
+        return self.service.export_to_excel()
+
+    @patch('dashboard.requests.get')
+    def test_export_warns_when_possibly_truncated(self, mock_get):
+        """total_records at the server's 100000 cap logs a truncation warning."""
+        with self.assertLogs('dashboard', level='WARNING') as cm:
+            self._export_with_total(mock_get, 100000)
+        self.assertTrue(any("truncated" in m for m in cm.output))
+
+    @patch('dashboard.requests.get')
+    def test_export_no_truncation_warning_below_cap(self, mock_get):
+        """total_records just below the cap logs no truncation warning."""
+        with self.assertLogs('dashboard', level='WARNING') as cm:
+            import logging
+            logging.getLogger('dashboard').warning("sentinel")
+            self._export_with_total(mock_get, 99999)
+        self.assertFalse(any("truncated" in m for m in cm.output))
 
     @patch('dashboard.requests.get')
     def test_export_api_error(self, mock_get):

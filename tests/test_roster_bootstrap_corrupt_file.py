@@ -65,13 +65,14 @@ class TestRosterBootstrapCorruptFile(unittest.TestCase):
         importlib.reload(config)
 
     def test_corrupt_file_with_strict_validation_does_not_crash(self):
-        """The default path (ROSTER_STRICT_VALIDATION=True) already catches
-        this via validate_roster_headers() — confirms it stays that way."""
+        """The default path (ROSTER_STRICT_VALIDATION=True) catches this via
+        validate_roster_headers(); the skip is now surfaced as a roster error
+        (#105) rather than silently ignored."""
         os.environ["ROSTER_STRICT_VALIDATION"] = "True"
         self._reload_config()
         try:
             service = self._make_service()
-            self.assertIsNone(service._roster_error)  # caught+skipped before raising
+            self.assertIsNotNone(service._roster_error)  # strict skip is surfaced
             service.close()
         finally:
             os.environ.pop("ROSTER_STRICT_VALIDATION", None)

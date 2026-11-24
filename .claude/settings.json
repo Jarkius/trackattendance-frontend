@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "ask": [
+      "Edit(README.md)",
+      "Edit(docs/**)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/skill-router.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -216,6 +216,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const dashboardRegistered = document.getElementById('dashboard-registered');
     const dashboardScanned = document.getElementById('dashboard-scanned');
     const dashboardRate = document.getElementById('dashboard-rate');
+    const dashboardWalkins = document.getElementById('dashboard-walkins');
+    const dashboardWalkinsStat = document.getElementById('dashboard-walkins-stat');
+    const dashboardUnknown = document.getElementById('dashboard-unknown');
+    const dashboardUnknownStat = document.getElementById('dashboard-unknown-stat');
     const dashboardStationsBody = document.getElementById('dashboard-stations-body');
     const dashboardBuBody = document.getElementById('dashboard-bu-body');
     const dashboardUpdated = document.getElementById('dashboard-updated');
@@ -642,6 +646,26 @@ ${destination}` : message;
         }, 80);
     };
 
+    // A printable keystroke is part of a new scan: dismiss any duplicate alert
+    // (never blocks or drops the key) and, when the key landed outside the
+    // barcode input, append it to the input synchronously and focus it with no
+    // delay. Returns true if the key was captured into the input.
+    // Reusable by other key handlers (e.g. the lookup overlay).
+    const captureStrayScanKey = (event) => {
+        if (!event || typeof event.key !== 'string' || event.key.length !== 1) return false;
+        if (event.ctrlKey || event.metaKey || event.altKey) return false;
+        if (debugMode || debugConsole._visible || dashboardOpen) return false;
+        if (barcodeInput.disabled || !document.body.contains(barcodeInput)) return false;
+        if (typeof isDuplicateOverlayOpen === 'function' && isDuplicateOverlayOpen()) {
+            dismissDuplicateOverlay();
+        }
+        if (event.target === barcodeInput) return false;  // native typing handles it
+        event.preventDefault();
+        barcodeInput.focus();
+        barcodeInput.value += event.key;
+        return true;
+    };
+
     // Short synthesized alert tone for rejected/blocked scans — plays via the
     // Web Audio API (no MP3 asset, no Python bridge round-trip) so it's fully
     // independent of the VoicePlayer used for success greetings. Two quick
@@ -684,7 +708,6 @@ ${destination}` : message;
         }
         duplicateOverlay.classList.remove('duplicate-overlay--visible');
         duplicateOverlay.setAttribute('aria-hidden', 'true');
-        barcodeInput.disabled = false;
         returnFocusToInput();
     };
     const isDuplicateOverlayOpen = () => {
@@ -723,10 +746,10 @@ ${destination}` : message;
         // Update styling based on error state
         duplicateOverlay.classList.toggle('duplicate-overlay--error', isError);
 
-        // Show the overlay and disable barcode input to prevent further scans
+        // Show the overlay. The barcode input stays enabled so the next
+        // scanner burst is never dropped; a new scan keystroke dismisses it.
         duplicateOverlay.classList.add('duplicate-overlay--visible');
         duplicateOverlay.setAttribute('aria-hidden', 'false');
-        barcodeInput.disabled = true;
 
         // Audible cue for rejected/blocked scans (error state only — the
         // yellow "accepted but flagged" warn case stays silent).
@@ -741,7 +764,6 @@ ${destination}` : message;
                 duplicateOverlayTimeout = null;
                 duplicateOverlay.classList.remove('duplicate-overlay--visible');
                 duplicateOverlay.setAttribute('aria-hidden', 'true');
-                barcodeInput.disabled = false;  // Re-enable input after overlay dismisses
                 returnFocusToInput();
             }, duration);
         }
@@ -1288,13 +1310,30 @@ ${destination}` : message;
             if (!bridge.submit_manual_scan) return;
             bridge.submit_manual_scan(originalQuery, legacyId, (response) => {
                 handleScanResponse(response);
-                barcodeInput.value = '';
+                // No clear here: the input was already cleared when the lookup
+                // started, and the next scan may have begun before this reply.
                 returnFocusToInput();
             });
         });
     };
 
     // ── Scan handling ────────────────────────────────────────────────────
+
+    // "60" -> "1 minute", "30" -> "30 seconds", "300" -> "5 minutes", "90" -> "1 min 30 sec"
+    const formatDuplicateWindow = (seconds) => {
+        const total = Math.round(Number(seconds));
+        if (!Number.isFinite(total) || total <= 0) return '';
+        if (total < 60) return `${total} second${total === 1 ? '' : 's'}`;
+        const mins = Math.floor(total / 60);
+        const secs = total % 60;
+        if (secs === 0) return `${mins} minute${mins === 1 ? '' : 's'}`;
+        return `${mins} min ${secs} sec`;
+    };
+    window.__formatDuplicateWindow = formatDuplicateWindow;
+    const duplicateWindowMessage = (response, fallback) => {
+        const text = formatDuplicateWindow(response?.duplicateWindowSeconds);
+        return text ? `Scanned within ${text}` : fallback;
+    };
 
     const handleScanResponse = (response) => {
         if (!response || response.ok === false) {
@@ -1305,7 +1344,7 @@ ${destination}` : message;
                 window.__handleDuplicateBadge({
                     badgeId: response.badgeId || 'Unknown',
                     fullName: response.fullName || 'Badge blocked',
-                    message: message,
+                    message: duplicateWindowMessage(response, message),
                     isError: true,  // Red error styling for block mode
                     alertDurationMs: duplicateBadgeAlertDurationMs,
                 });
@@ -1345,7 +1384,7 @@ ${destination}` : message;
             window.__handleDuplicateBadge({
                 badgeId: response.badgeId || 'Unknown',
                 fullName: response.fullName || 'Unknown',
-                message: 'Scanned within 5 minutes',
+                message: duplicateWindowMessage(response, 'Scanned within the duplicate window'),
                 isError: false,  // Yellow warning styling for warn mode
                 alertDurationMs: duplicateBadgeAlertDurationMs,
             });
@@ -1619,8 +1658,21 @@ ${destination}` : message;
             const rate = data?.attendance_rate ?? 0;
             dashboardRate.textContent = `${rate.toFixed(1)}%`;
         }
+        // Walk-ins and unknown badge scans sit outside the rate; hide when unavailable (null)
+        const setOptionalStat = (stat, valueEl, value) => {
+            if (!stat || !valueEl) return;
+            const available = value !== null && value !== undefined;
+            stat.style.display = available ? '' : 'none';
+            if (available) valueEl.textContent = Number(value).toLocaleString();
+        };
+        setOptionalStat(dashboardWalkinsStat, dashboardWalkins, data?.walkins);
+        setOptionalStat(dashboardUnknownStat, dashboardUnknown, data?.unknown_badges);
         if (dashboardUpdated) {
-            dashboardUpdated.textContent = data?.last_updated || '--';
+            const updated = data?.last_updated || '--';
+            // Cloud unreachable: the figures come from this station's own scans.
+            dashboardUpdated.textContent = data?.source === 'local'
+                ? `${updated} · This station only (cloud unavailable)`
+                : updated;
         }
 
         // Update station cards
@@ -2955,6 +3007,8 @@ ${destination}` : message;
         adminCameraSelect.innerHTML = '<option value="-1">Scanning...</option>';
         bridge.enumerate_cameras((result) => {
             console.info('[Camera] enumerate_cameras result:', JSON.stringify(result));
+            // A probe is already running; its own reply will fill the list.
+            if (result && result.busy) return;
             adminCameraSelect.innerHTML = '';
             if (result && result.ok && result.cameras && result.cameras.length > 0) {
                 result.cameras.forEach((cam) => {
@@ -3129,6 +3183,22 @@ ${destination}` : message;
         const inOverlay = (adminOverlay && adminOverlay.contains(event.target))
             || (dashboardOverlay && dashboardOverlay.contains(event.target))
             || (lookupOverlay && lookupOverlay.contains(event.target));
+        // A scanner burst while the lookup overlay is open starts a fresh scan:
+        // close the overlay and move the first character into the barcode
+        // input, so the burst's Enter submits via the normal path instead of
+        // activating the focused "Record Scan" button. Space is left alone so
+        // it still activates a focused button; arrows/Enter/Tab are not
+        // printable single keys and keep their lookup behavior.
+        if (isLookupOverlayOpen()
+            && !(adminOverlay && adminOverlay.contains(event.target))
+            && event.key.length === 1 && event.key !== ' '
+            && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            const typingInInput = event.target === barcodeInput;
+            if (captureStrayScanKey(event) || typingInInput) {
+                hideLookupOverlay();
+                return;
+            }
+        }
         // On the plain scan screen (no overlay open), Tab has nothing to
         // move to — the header icons aren't natively tabbable — so the
         // browser just blurs the barcode input with nothing catching the
@@ -3140,8 +3210,14 @@ ${destination}` : message;
             returnFocusToInput();
             return;
         }
-        if (!inOverlay && event.target !== barcodeInput && event.key.length === 1) {
-            returnFocusToInput();
+        if (!inOverlay && event.target === barcodeInput) {
+            captureStrayScanKey(event);  // only dismisses a duplicate alert
+        } else if (!inOverlay && event.key.length === 1) {
+            const lookupOpen = isLookupOverlayOpen();
+            const adminOpen = adminOverlay && adminOverlay.classList.contains('admin-overlay--visible');
+            if (lookupOpen || adminOpen || !captureStrayScanKey(event)) {
+                returnFocusToInput();
+            }
         }
     });
     const debouncedRefreshConnection = debounce(() => {

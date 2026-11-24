@@ -305,6 +305,55 @@ class TestDuplicateActionConfig(unittest.TestCase):
 
             self.assertEqual(config.DUPLICATE_BADGE_ACTION, "block")
 
+    def _action_with(self, value):
+        with patch.dict(os.environ, {"CLOUD_API_KEY": "test-key", "DUPLICATE_BADGE_ACTION": value}):
+            import importlib
+            import config
+            importlib.reload(config)
+            return config.DUPLICATE_BADGE_ACTION
+
+    def test_action_whitespace_is_stripped(self):
+        """'block ' is treated as 'block'."""
+        self.assertEqual(self._action_with("block "), "block")
+
+    def test_action_typo_falls_back_to_warn_with_warning(self):
+        """'blok' falls back to 'warn' and logs a warning."""
+        with self.assertLogs("config", level="WARNING") as cm:
+            self.assertEqual(self._action_with("blok"), "warn")
+        self.assertTrue(any("DUPLICATE_BADGE_ACTION" in m for m in cm.output))
+        import config
+        # Kept for main() to re-log after logging is configured.
+        self.assertTrue(any("DUPLICATE_BADGE_ACTION" in m for m in config.CONFIG_WARNINGS))
+
+
+class TestShutdownSyncDeadlineConfig(unittest.TestCase):
+    """SHUTDOWN_SYNC_DEADLINE_SECONDS parsing (default 30, bounded 1-600)."""
+
+    def _load(self, value):
+        import importlib
+        import config
+        env = {"CLOUD_API_KEY": "test-key"}
+        if value is not None:
+            env["SHUTDOWN_SYNC_DEADLINE_SECONDS"] = value
+        with patch.dict(os.environ, env, clear=False):
+            if value is None:
+                os.environ.pop("SHUTDOWN_SYNC_DEADLINE_SECONDS", None)
+            importlib.reload(config)
+            return config.SHUTDOWN_SYNC_DEADLINE_SECONDS
+
+    def test_default_is_30(self):
+        self.assertEqual(self._load(None), 30)
+
+    def test_override(self):
+        self.assertEqual(self._load("12"), 12)
+
+    def test_clamped_to_bounds(self):
+        self.assertEqual(self._load("0"), 1)
+        self.assertEqual(self._load("99999"), 600)
+
+    def test_invalid_falls_back_to_default(self):
+        self.assertEqual(self._load("abc"), 30)
+
 
 def main():
     """Run tests with summary."""
@@ -321,6 +370,7 @@ def main():
     suite.addTests(loader.loadTestsFromTestCase(TestBooleanParsing))
     suite.addTests(loader.loadTestsFromTestCase(TestConfigurationValues))
     suite.addTests(loader.loadTestsFromTestCase(TestDuplicateActionConfig))
+    suite.addTests(loader.loadTestsFromTestCase(TestShutdownSyncDeadlineConfig))
 
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)

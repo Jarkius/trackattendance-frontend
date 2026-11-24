@@ -40,7 +40,7 @@ if getattr(sys, 'frozen', False):
             os.environ['REQUESTS_CA_BUNDLE'] = cert_path
             print(f"[SSL] Using certifi: {cert_path}")
 
-from PyQt6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
+from PyQt6.QtCore import QCoreApplication, QEventLoop, QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -129,6 +129,73 @@ DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
 LOGGER = logging.getLogger(__name__)
+
+
+def pause_with_event_loop(milliseconds: int) -> None:
+    """Wait without blocking the GUI thread's event loop.
+
+    Replaces time.sleep() on the Qt main thread: a nested QEventLoop keeps
+    painting/processing events (so a runJavaScript() overlay update becomes
+    visible) for the duration. Falls back to time.sleep when no Qt
+    application exists (tests), where there is nothing to repaint.
+    """
+    if QCoreApplication.instance() is None:
+        time.sleep(milliseconds / 1000.0)
+        return
+    loop = QEventLoop()
+    QTimer.singleShot(milliseconds, loop.quit)
+    loop.exec()
+
+
+def sync_pending_until_deadline(
+    sync_service,
+    deadline_seconds: float,
+    run_network_call=call_without_freezing_ui,
+    clock=time.monotonic,
+) -> dict:
+    """Shutdown sync batch loop, bounded by an overall deadline.
+
+    SQLite snapshot/apply stay on the calling (main) thread; only the
+    network-only batch call goes through ``run_network_call``. The deadline is
+    checked before each batch, so scans left over stay 'pending' (and are
+    still exported). Returns {"synced", "failed", "deadline_hit"}.
+    """
+    start = clock()
+    total_synced = 0
+    total_failed = 0
+    deadline_hit = False
+
+    def past_deadline() -> bool:
+        return clock() - start >= deadline_seconds
+
+    while True:
+        if past_deadline():
+            deadline_hit = True
+            break
+        batch_scans = sync_service.db.fetch_pending_scans(limit=sync_service.batch_size)
+        if not batch_scans:
+            break
+        station_name = sync_service.db.get_station_name() or "UnknownStation"
+        batch_result = run_network_call(
+            lambda: sync_service.sync_scan_batch_network_only(
+                batch_scans, station_name, should_stop=past_deadline
+            )
+        )
+        synced_ids = batch_result.get('synced_ids', [])
+        failed_ids = batch_result.get('failed_ids', [])
+        if synced_ids:
+            sync_service.db.mark_scans_as_synced(synced_ids)
+        if failed_ids:
+            sync_service.db.mark_scans_as_failed(failed_ids, batch_result.get('error') or 'Sync failed')
+        total_synced += len(synced_ids)
+        total_failed += len(failed_ids)
+        if batch_result.get('pending_ids') or (not synced_ids and not failed_ids):
+            # Something in this batch could not be resolved (auth, network, server,
+            # or the deadline). The next fetch would return the same scans, so stop
+            # instead of re-posting them; they stay pending and are exported.
+            deadline_hit = deadline_hit or past_deadline()
+            break
+    return {"synced": total_synced, "failed": total_failed, "deadline_hit": deadline_hit}
 
 
 class AutoSyncManager(QObject):
@@ -645,6 +712,8 @@ _debug_log_buffer = DebugLogBuffer(capacity=200)
 class Api(QObject):
     """Expose desktop controls to the embedded web UI."""
 
+    _camera_probe_running = False  # set while enumerate_cameras probes devices
+
     # Use QVariant so QWebChannel can deliver payloads to JS reliably
     connection_status_changed = pyqtSignal("QVariant")
 
@@ -1136,47 +1205,11 @@ class Api(QObject):
         LOGGER.info("[Camera] get_camera_status: %s", result)
         return result
 
-    @pyqtSlot(result="QVariant")
-    def enumerate_cameras(self) -> dict:
-        """Probe camera indices 0-10, return list of available cameras."""
-        LOGGER.info("[Camera] enumerate_cameras called")
-        cameras = []
-        try:
-            import cv2
-        except ImportError:
-            return {"ok": False, "cameras": [], "message": "OpenCV not available"}
-
-        active_id = config.CAMERA_DEVICE_ID
-        active_running = (self._proximity_manager
-                          and self._proximity_manager._running)
-
-        for i in range(4):  # macOS/Windows rarely have more than 3 cameras
-            # Skip probing the active camera if it's running (exclusive access on Windows)
-            if i == active_id and active_running:
-                cameras.append({"index": i, "name": f"Camera {i} (active)"})
-                continue
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                # Some USB/external cameras need a few reads to warm up
-                ret = False
-                for _ in range(3):
-                    ret, _ = cap.read()
-                    if ret:
-                        break
-                if ret:
-                    backend = cap.getBackendName() if hasattr(cap, 'getBackendName') else ""
-                    label = f"Camera {i}"
-                    if backend:
-                        label += f" ({backend})"
-                    cameras.append({"index": i, "name": label})
-                cap.release()
-
-        LOGGER.info("[Camera] enumerate_cameras result: %d cameras found, selected=%d", len(cameras), active_id)
-        return {"ok": True, "cameras": cameras, "selected": active_id}
-
     @pyqtSlot(int, result="QVariant")
     def admin_select_camera(self, index: int) -> dict:
         """Select camera by device index. Restarts camera if running. Persisted."""
+        if self._camera_probe_running:
+            return {"ok": False, "busy": True, "message": "Camera scan in progress, try again"}
         index = max(0, min(10, index))
         config.CAMERA_DEVICE_ID = index
         self._save_setting("camera_device_id", str(index))
@@ -1215,17 +1248,37 @@ class Api(QObject):
 
     @pyqtSlot(result="QVariant")
     def enumerate_cameras(self) -> dict:
-        """Probe camera indices 0-10, return list of available cameras."""
-        cameras = []
+        """Probe camera indices 0-10, return list of available cameras.
+
+        The probe opens and reads each device, which can take seconds, so it
+        runs via call_without_freezing_ui. It touches no SQLite state; the
+        config/proximity-manager values it needs are read here first.
+        """
         try:
             import cv2
         except ImportError:
             return {"ok": False, "cameras": [], "message": "OpenCV not available"}
 
+        # The nested event loop keeps slots live, so a second click (or a camera
+        # change) can arrive mid-probe. One probe at a time: concurrent probes
+        # contend for the same devices, which Windows opens exclusively.
+        if self._camera_probe_running:
+            return {"ok": False, "busy": True, "cameras": [], "message": "Camera scan already in progress"}
         active_id = config.CAMERA_DEVICE_ID
-        active_running = (self._proximity_manager
-                          and self._proximity_manager._running)
+        active_running = bool(self._proximity_manager
+                              and self._proximity_manager._running)
+        self._camera_probe_running = True
+        try:
+            return call_without_freezing_ui(
+                lambda: self._probe_cameras(cv2, active_id, active_running)
+            )
+        finally:
+            self._camera_probe_running = False
 
+    @staticmethod
+    def _probe_cameras(cv2, active_id: int, active_running: bool) -> dict:
+        """Blocking camera probe (worker-thread safe: no SQLite, no Qt)."""
+        cameras = []
         for i in range(11):
             # Skip probing the active camera if it's running (exclusive access on Windows)
             if i == active_id and active_running:
@@ -1243,45 +1296,6 @@ class Api(QObject):
                 cap.release()
 
         return {"ok": True, "cameras": cameras, "selected": active_id}
-
-    @pyqtSlot(int, result="QVariant")
-    def admin_select_camera(self, index: int) -> dict:
-        """Select camera by device index. Restarts camera if running. Persisted."""
-        index = max(0, min(10, index))
-        config.CAMERA_DEVICE_ID = index
-        self._save_setting("camera_device_id", str(index))
-
-        if self._proximity_manager:
-            was_running = self._proximity_manager._running
-            self._proximity_manager._camera_id = index
-            if was_running:
-                self._proximity_manager.stop()
-                # Delay restart to let old camera fully release
-                import threading
-                threading.Thread(
-                    target=self._deferred_camera_restart,
-                    daemon=True, name="camera-restart",
-                ).start()
-
-        LOGGER.info("[Admin] Camera selected: index %d", index)
-        return {"ok": True, "index": index}
-
-    def _deferred_camera_restart(self):
-        """Wait briefly, then restart camera on main thread."""
-        time.sleep(0.5)
-        from PyQt6.QtCore import QMetaObject, Qt
-        QMetaObject.invokeMethod(
-            self, "_do_camera_restart",
-            Qt.ConnectionType.QueuedConnection,
-        )
-
-    @pyqtSlot()
-    def _do_camera_restart(self):
-        """Restart camera on main thread after device change."""
-        if self._proximity_manager and not self._proximity_manager._running:
-            started = self._proximity_manager.start()
-            LOGGER.info("[Admin] Camera restart after device change: %s",
-                        "ok" if started else "failed")
 
     @pyqtSlot(result="QVariant")
     def toggle_camera(self) -> dict:
@@ -1360,6 +1374,8 @@ class Api(QObject):
         # Auto-export backup before clearing
         backup_path = ""
         try:
+            # Synchronous on purpose: a nested event loop here would let submit_scan
+            # record a scan after the backup snapshot that clear_all_scans() then deletes.
             export_result = self._service.export_scans()
             if export_result.get("ok"):
                 backup_path = export_result.get("absolutePath", "")
@@ -1452,6 +1468,8 @@ class Api(QObject):
         # Auto-export backup
         backup_path = ""
         try:
+            # Synchronous on purpose: a nested event loop here would let submit_scan
+            # record a scan after the backup snapshot that clear_all_scans() then deletes.
             export_result = self._service.export_scans()
             if export_result.get("ok"):
                 backup_path = export_result.get("absolutePath", "")
@@ -2288,6 +2306,8 @@ class Api(QObject):
                     self._auto_sync_manager.reset_after_barrier()
                 self._reset_manual_sync_state()
             try:
+                # Synchronous on purpose: a nested event loop here would let submit_scan
+                # record a scan after the backup snapshot that clear_all_scans() then deletes.
                 self._service.export_scans()
                 LOGGER.info("[Sync] Backup exported before remote clear")
             except Exception as e:
@@ -2566,6 +2586,8 @@ def main() -> None:
     from logging_config import setup_logging
     setup_logging()
     logging.getLogger(__name__).info("TrackAttendance v%s starting", __version__)
+    for message in getattr(config, "CONFIG_WARNINGS", []):
+        logging.getLogger("config").warning(message)
 
     app = QApplication.instance()
     if app is None:
@@ -2585,6 +2607,17 @@ def main() -> None:
             f"Employee roster has issues:\n\n{service._roster_error}\n\n"
             "The application will continue but roster data may be incomplete.",
         )
+
+    if getattr(service, '_roster_warning', None):
+        QMessageBox.warning(None, "Roster Warning", service._roster_warning)
+
+    # Recover scans parked as 'failed' by earlier versions or transient errors (#101).
+    # Runs once, on the main thread, before any sync job can start.
+    try:
+        requeued = service._db.requeue_failed_scans()
+        LOGGER.info("Startup: re-queued %d failed scan(s) as pending", requeued)
+    except Exception as exc:
+        LOGGER.warning("Startup: could not re-queue failed scans: %s", exc)
 
     # Initialize sync service for cloud integration (only if API key is available)
     sync_service = None
@@ -2839,7 +2872,7 @@ def main() -> None:
                         }
                         payload_js = json.dumps(auth_error_payload)
                         view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
-                        time.sleep(0.5)
+                        pause_with_event_loop(500)
                     else:
                         # Show "syncing" overlay
                         sync_payload = {
@@ -2867,29 +2900,17 @@ def main() -> None:
                         # Only sync_scan_batch_network_only() (network-only, no
                         # self.db access) is wrapped; SQLite snapshot/apply stay
                         # on this (main) thread before/after each wrapped call.
-                        total_synced = 0
-                        total_failed = 0
-                        while True:
-                            batch_scans = sync_service.db.fetch_pending_scans(limit=sync_service.batch_size)
-                            if not batch_scans:
-                                break
-                            station_name = sync_service.db.get_station_name() or "UnknownStation"
-                            batch_result = call_without_freezing_ui(
-                                lambda: sync_service.sync_scan_batch_network_only(batch_scans, station_name)
+                        loop_result = sync_pending_until_deadline(
+                            sync_service, config.SHUTDOWN_SYNC_DEADLINE_SECONDS
+                        )
+                        total_synced = loop_result["synced"]
+                        total_failed = loop_result["failed"]
+                        deadline_hit = loop_result["deadline_hit"]
+                        if deadline_hit:
+                            LOGGER.warning(
+                                "[Shutdown] Sync deadline (%ss) reached; remaining scans stay pending",
+                                config.SHUTDOWN_SYNC_DEADLINE_SECONDS,
                             )
-                            synced_ids = batch_result.get('synced_ids', [])
-                            failed_ids = batch_result.get('failed_ids', [])
-                            if synced_ids:
-                                sync_service.db.mark_scans_as_synced(synced_ids)
-                            if failed_ids:
-                                sync_service.db.mark_scans_as_failed(failed_ids, batch_result.get('error') or 'Sync failed')
-                            total_synced += len(synced_ids)
-                            total_failed += len(failed_ids)
-                            if not synced_ids and not failed_ids:
-                                # No progress this batch (all pending_ids, e.g.
-                                # a 401/retry-exhaustion) — stop rather than
-                                # loop forever on the same unresolved scans.
-                                break
 
                         synced_count = total_synced
                         failed_count = total_failed
@@ -2906,6 +2927,8 @@ def main() -> None:
                         else:
                             sync_msg = 'No scans synced. Proceeding with export...'
                             sync_ok = True
+                        if deadline_hit:
+                            sync_msg = f'Sync time limit reached. {sync_msg}'
 
                         # Show brief sync result (don't wait for user confirmation)
                         sync_done_payload = {
@@ -2921,7 +2944,7 @@ def main() -> None:
                         view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
 
                         # Brief delay to show sync result (500ms)
-                        time.sleep(0.5)
+                        pause_with_event_loop(500)
             except Exception as exc:
                 # Sync failed - log error but continue with export
                 error_payload = {
@@ -2935,7 +2958,7 @@ def main() -> None:
                 }
                 payload_js = json.dumps(error_payload)
                 view.page().runJavaScript(f"window.__handleSyncExportShutdown({payload_js});")
-                time.sleep(0.5)
+                pause_with_event_loop(500)
             finally:
                 # Resume the coordinator regardless of sync outcome — the app is
                 # about to close, but resuming keeps state consistent in the rare

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,13 +13,84 @@ from typing import Dict, List, Optional
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
+
+from excel_safety import neutralize_formulas
 from PyQt6.QtWidgets import QInputDialog, QMessageBox, QWidget
 
-from database import DatabaseManager, EmployeeRecord, ScanRecord, ISO_TIMESTAMP_FORMAT
+from database import (
+    DatabaseManager, EmployeeRecord, ScanRecord, ISO_TIMESTAMP_FORMAT,
+    clean_badge_id, normalize_badge_id,
+)
 
 LOGGER = logging.getLogger(__name__)
 REQUIRED_COLUMNS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
+OPTIONAL_EMAIL_COLUMN = "Email"
 EXAMPLE_WORKBOOK_NAME = "exampleof_employee.xlsx"
+
+# Invisible characters that Excel/copy-paste commonly leave in header cells.
+_INVISIBLE_HEADER_CHARS = dict.fromkeys(
+    map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None
+)
+
+
+def _clean_header(value: object) -> str:
+    """Display form of a header cell: no zero-width chars, NBSP as space, trimmed."""
+    if value is None:
+        return ""
+    text = str(value).translate(_INVISIBLE_HEADER_CHARS).replace("\u00a0", " ")
+    return " ".join(text.split())
+
+
+def _normalise_header(value: object) -> str:
+    """Comparison key for a header cell (cleaned and case-insensitive)."""
+    return _clean_header(value).casefold()
+
+
+def map_roster_headers(header_row) -> Dict[str, int]:
+    """Map canonical column names (required + optional Email) to column indices.
+
+    Shared by validate_roster_headers and the roster import so both agree on
+    what counts as a matching header. First matching column wins.
+    """
+    by_key: Dict[str, int] = {}
+    for idx, cell in enumerate(header_row):
+        key = _normalise_header(cell)
+        if key and key not in by_key:
+            by_key[key] = idx
+    mapping: Dict[str, int] = {}
+    for canonical in [*REQUIRED_COLUMNS, OPTIONAL_EMAIL_COLUMN]:
+        idx = by_key.get(_normalise_header(canonical))
+        if idx is not None:
+            mapping[canonical] = idx
+    return mapping
+
+
+def _one_line(message: str) -> str:
+    return " ".join(message.split())
+
+
+def _legacy_id_from_cell(cell) -> tuple[str, bool]:
+    """Read a Legacy ID cell. Returns (id_text, lost_leading_zeros_risk).
+
+    Numeric cells lose leading zeros in Excel. When the cell's number format is
+    all zeros (e.g. ``00000``) the value is zero-padded to that width. Any other
+    numeric cell keeps ``str(int)`` and is flagged so the operator gets a warning.
+    Integral floats are treated as ints.
+    """
+    value = getattr(cell, "value", None)
+    if value is None:
+        return "", False
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return clean_badge_id(value), False
+    if isinstance(value, float):
+        if not value.is_integer():
+            return clean_badge_id(value), False
+        value = int(value)
+    text = str(value)
+    fmt = getattr(cell, "number_format", None) or ""
+    if value >= 0 and re.fullmatch(r"0+", fmt):
+        return text.zfill(len(fmt)), False
+    return text, True
 
 
 DISPLAY_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -39,6 +111,7 @@ class AttendanceService:
         self._export_directory.mkdir(parents=True, exist_ok=True)
         self._employee_headers: List[str] = list(REQUIRED_COLUMNS)
         self._employee_cache: Dict[str, EmployeeRecord] = {}
+        self._roster_warning: Optional[str] = None
         self._station_name: Optional[str] = self._db.get_station_name()
 
         try:
@@ -49,6 +122,7 @@ class AttendanceService:
         else:
             self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
+        self._roster_warning = self._db.get_roster_meta("roster_warning") or None
         self._sync_service = None  # Set via set_sync_service() for immediate-write sync
         self._sync_coordinator = None  # Set via set_sync_service() for immediate-write sync
 
@@ -88,20 +162,20 @@ class AttendanceService:
             if not header_row or all(cell is None for cell in header_row):
                 return False, "Roster file has no headers (first row is empty)"
 
-            # Extract non-empty headers
+            # Extract non-empty headers (cleaned display form)
             actual_headers = {
-                str(name).strip() for name in header_row
-                if name and str(name).strip()
+                _clean_header(name) for name in header_row
+                if _clean_header(name)
             }
 
-            # Check for required columns
-            from config import REQUIRED_ROSTER_COLUMNS
-            missing = [col for col in REQUIRED_ROSTER_COLUMNS if col not in actual_headers]
+            # Check for required columns (same normalisation as the import)
+            mapping = map_roster_headers(header_row)
+            missing = [col for col in REQUIRED_COLUMNS if col not in mapping]
 
             if missing:
                 msg = f"Roster missing required columns:\n\n"
                 msg += f"Missing: {', '.join(missing)}\n\n"
-                msg += f"Required: {', '.join(REQUIRED_ROSTER_COLUMNS)}\n\n"
+                msg += f"Required: {', '.join(REQUIRED_COLUMNS)}\n\n"
                 msg += f"Found: {', '.join(sorted(actual_headers)) if actual_headers else '(none)'}"
                 return False, msg
 
@@ -146,7 +220,10 @@ class AttendanceService:
                 LOGGER.error("Roster validation failed: %s", validation_msg)
                 if ROSTER_STRICT_VALIDATION:
                     LOGGER.error("Strict validation enabled - skipping import")
-                    return
+                    raise ValueError(
+                        f"Roster not imported. {_one_line(validation_msg)} "
+                        f"Fix {self._employee_workbook_path.name} and restart the application."
+                    )
             else:
                 LOGGER.warning("Roster validation skipped (disabled): %s", validation_msg)
 
@@ -166,48 +243,62 @@ class AttendanceService:
             ) from e
         try:
             sheet = workbook.active
-            header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True))
-            ordered_headers = [
-                str(name).strip()
-                for name in header_row
-                if name and str(name).strip()
-            ]
+            header_row = next(sheet.iter_rows(min_row=1, max_row=1, values_only=True), None)
+            if not header_row:
+                raise ValueError(
+                    f"Roster not imported: {self._employee_workbook_path.name} has no header row. "
+                    f"Fix the file and restart the application."
+                )
+            ordered_headers = [_clean_header(name) for name in header_row if _clean_header(name)]
             if ordered_headers:
                 self._employee_headers = ordered_headers
-            header_to_index = {name: idx for idx, name in enumerate(header_row) if name}
+            header_to_index = map_roster_headers(header_row)
             missing = [name for name in REQUIRED_COLUMNS if name not in header_to_index]
             if missing:
                 LOGGER.error("Employee workbook missing columns: %s", ", ".join(missing))
-                return
+                raise ValueError(
+                    f"Roster not imported: missing required column(s): {', '.join(missing)}. "
+                    f"Fix {self._employee_workbook_path.name} and restart the application."
+                )
 
             # Detect optional columns present in this workbook
-            email_index = header_to_index.get("Email")
+            email_index = header_to_index.get(OPTIONAL_EMAIL_COLUMN)
 
             seen_ids: dict[str, int] = {}  # legacy_id → first row number
             duplicates: list[dict] = []  # detailed duplicate info
             employees: List[EmployeeRecord] = []
             row_num = 1  # header is row 1
-            for row in sheet.iter_rows(min_row=2, values_only=True):
+            legacy_col = header_to_index["Legacy ID"]
+            # Widths of numeric-format IDs, and the widest all-digit ID of any kind.
+            # A numeric ID can only have lost leading zeros if it is shorter than that.
+            numeric_widths: List[int] = []
+            widest_digit_id = 0
+            for row_cells in sheet.iter_rows(min_row=2):
                 row_num += 1
-                legacy_id_raw = row[header_to_index["Legacy ID"]] if header_to_index["Legacy ID"] < len(row) else None
-                if legacy_id_raw is None:
+                row = tuple(getattr(c, "value", None) for c in row_cells)
+                if legacy_col >= len(row_cells):
                     continue
-                legacy_id = str(legacy_id_raw).strip()
+                legacy_id, numeric_risk = _legacy_id_from_cell(row_cells[legacy_col])
                 if not legacy_id:
                     continue
+                if numeric_risk:
+                    numeric_widths.append(len(legacy_id))
+                if legacy_id.isascii() and legacy_id.isdigit():
+                    widest_digit_id = max(widest_digit_id, len(legacy_id))
+                id_key = normalize_badge_id(legacy_id)
                 full_name = _safe_string(row[header_to_index["Full Name"]] if header_to_index["Full Name"] < len(row) else None)
                 sl_l1_desc = _safe_string(row[header_to_index["SL L1 Desc"]] if header_to_index["SL L1 Desc"] < len(row) else None)
-                if legacy_id in seen_ids:
+                if id_key in seen_ids:
                     duplicates.append({
                         "legacy_id": legacy_id,
                         "full_name": full_name,
                         "business_unit": sl_l1_desc,
                         "row": row_num,
-                        "first_row": seen_ids[legacy_id],
+                        "first_row": seen_ids[id_key],
                     })
                     LOGGER.warning(
                         "Roster: duplicate Legacy ID %s on row %d (first seen row %d) — %s [%s], skipped",
-                        legacy_id, row_num, seen_ids[legacy_id], full_name, sl_l1_desc,
+                        legacy_id, row_num, seen_ids[id_key], full_name, sl_l1_desc,
                     )
                     continue
                 position_desc = _safe_string(row[header_to_index["Position Desc"]] if header_to_index["Position Desc"] < len(row) else None)
@@ -221,7 +312,7 @@ class AttendanceService:
                         email=email,
                     )
                 )
-                seen_ids[legacy_id] = row_num
+                seen_ids[id_key] = row_num
             # Abort import if duplicates found — admin must fix the roster first
             if duplicates:
                 LOGGER.error(
@@ -236,15 +327,40 @@ class AttendanceService:
                     f"Fix employee.xlsx and restart the application."
                 )
 
-            if employees:
-                # Clear old employees and reimport
-                self._db.clear_employees()
-                inserted = self._db.bulk_insert_employees(employees)
-                self._db.set_roster_hash(current_hash)
-                self._db.set_roster_meta("file_mtime", current_mtime)
-                LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
-                # Roster BU counts will be pushed to cloud after first
-                # successful health check (see main.py Api._run_check)
+            if not employees:
+                raise ValueError(
+                    f"Roster not imported: {self._employee_workbook_path.name} has no valid "
+                    f"employee rows (every Legacy ID is empty). "
+                    f"Fix the file and restart the application."
+                )
+
+            # Clear old employees and reimport. The hash/mtime are stored only
+            # after a successful import, so a fixed file is re-imported.
+            try:
+                inserted = self._db.replace_employees(employees)
+            except sqlite3.DatabaseError as e:
+                # The previous roster is still in place (the replace is one transaction).
+                raise ValueError(
+                    f"Roster not imported: database error while saving employees ({e}). "
+                    f"The previous roster is still in use. Restart the application to retry."
+                ) from e
+            self._db.set_roster_hash(current_hash)
+            self._db.set_roster_meta("file_mtime", current_mtime)
+            numeric_unpadded = sum(1 for w in numeric_widths if w < widest_digit_id)
+            if numeric_unpadded:
+                warning = (
+                    f"{numeric_unpadded} numeric Legacy ID cell(s) in "
+                    f"{self._employee_workbook_path.name} use a number format that does not keep "
+                    f"leading zeros, so IDs such as 00123 may have been stored as 123. "
+                    f"Format the Legacy ID column as Text (or as 00000) and re-save the roster."
+                )
+                LOGGER.warning("Roster: %s", warning)
+            else:
+                warning = ""
+            self._db.set_roster_meta("roster_warning", warning)
+            LOGGER.info("Imported %s employees from workbook (hash: %s)", inserted, current_hash[:12])
+            # Roster BU counts will be pushed to cloud after first
+            # successful health check (see main.py Api._run_check)
         finally:
             workbook.close()
 
@@ -271,6 +387,7 @@ class AttendanceService:
                 for col in ws.columns:
                     max_len = max((len(str(cell.value or "")) for cell in col), default=10)
                     ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 40)
+                neutralize_formulas(wb)
                 wb.save(path)
             finally:
                 wb.close()
@@ -309,6 +426,7 @@ class AttendanceService:
             for row in sample_rows:
                 sheet.append(row)
 
+            neutralize_formulas(workbook)
             workbook.save(path)
         finally:
             workbook.close()
@@ -501,7 +619,7 @@ class AttendanceService:
 
         # For lookup: user typed a name but selected an employee — resolve by legacy_id
         # For badge/manual: resolve by the scan value itself
-        lookup_key = lookup_legacy_id if lookup_legacy_id else sanitized
+        lookup_key = normalize_badge_id(lookup_legacy_id if lookup_legacy_id else sanitized)
         employee = self._employee_cache.get(lookup_key)
 
         # Check for duplicate badge scan (Issue #20)
@@ -531,6 +649,7 @@ class AttendanceService:
                     "status": "duplicate_rejected",
                     "message": f"Duplicate: Badge {sanitized} scanned within {config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS} seconds",
                     "is_duplicate": True,
+                    "duplicateWindowSeconds": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
                     "badgeId": sanitized,
                     "fullName": employee.full_name if employee else "Unknown",
                 }
@@ -613,10 +732,19 @@ class AttendanceService:
             "totalScansOverall": self._db.count_scans_total(),
             "scanHistory": [_scan_to_dict(scan) for scan in history],
             "is_duplicate": show_duplicate_alert,  # Only true for 'warn' mode
+            "duplicateWindowSeconds": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
         }
         return payload
 
-    def export_scans(self) -> Dict[str, object]:
+    def export_scans(self, run_blocking=None) -> Dict[str, object]:
+        """Write all scans to an Excel file.
+
+        The SQLite read always happens on the calling thread (sqlite3
+        connections are thread-affine). When ``run_blocking`` is given, only
+        the workbook build/save -- which touches no database -- is passed to
+        it (e.g. ``call_without_freezing_ui``) so the GUI thread stays
+        responsive for large histories.
+        """
         scans = self._db.fetch_all_scans()
         if not scans:
             return {
@@ -626,6 +754,20 @@ class AttendanceService:
                 "records": 0,
             }
         export_path = self._build_export_path()
+        if run_blocking is None:
+            self._write_export_workbook(scans, export_path)
+        else:
+            run_blocking(lambda: self._write_export_workbook(scans, export_path))
+        return {
+            "ok": True,
+            "fileName": export_path.name,
+            "absolutePath": str(export_path),
+            "records": len(scans),
+        }
+
+    @staticmethod
+    def _write_export_workbook(scans, export_path: Path) -> None:
+        """Build and save the workbook. Pure CPU/file I/O, no database access."""
         workbook = Workbook()
         try:
             sheet = workbook.active
@@ -662,15 +804,10 @@ class AttendanceService:
                             continue
                         max_length = max(max_length, len(str(value)))
                 sheet.column_dimensions[get_column_letter(col_idx)].width = min(max_length + 2, 60)
+            neutralize_formulas(workbook)
             workbook.save(export_path)
         finally:
             workbook.close()
-        return {
-            "ok": True,
-            "fileName": export_path.name,
-            "absolutePath": str(export_path),
-            "records": len(scans),
-        }
 
     def _build_export_path(self) -> Path:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

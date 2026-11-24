@@ -15,6 +15,8 @@ The dashboard shows:
 from __future__ import annotations
 
 import logging
+from database import normalize_badge_id, normalize_walkin_name
+from excel_safety import neutralize_formulas
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
@@ -25,6 +27,78 @@ if TYPE_CHECKING:
     from database import DatabaseManager
 
 logger = logging.getLogger(__name__)
+
+# Server caps GET /v1/dashboard/export at this many rows (no pagination).
+EXPORT_SERVER_LIMIT = 100000
+
+
+def classify_export_scan(employee_found: bool, scan_source: Optional[str], cloud_matched: bool = False) -> str:
+    """Attendance bucket for one export row: registered, walkin or unknown.
+
+    A scan the cloud matched counts as registered even if this station's roster
+    lacks the person, so the export agrees with the dashboard. A missing or empty
+    scan_source means "manual", matching the server default and the local query.
+    """
+    if employee_found or cloud_matched:
+        return "registered"
+    return "walkin" if (scan_source or "manual") == "manual" else "unknown"
+
+
+def bucket_export_scans(enriched_scans: List[dict]) -> Dict[str, Any]:
+    """Count the three attendance buckets from enriched export rows.
+
+    Registered employees are keyed by normalised legacy_id (a badge scan and a
+    lookup of the same person are one person); walk-ins by normalised typed
+    name (earliest scan kept); unknown badges by normalised badge value.
+    """
+    registered: set = set()
+    walkins: Dict[str, dict] = {}
+    unknown: set = set()
+    for row in enriched_scans:
+        kind = row["_kind"]
+        if kind == "registered":
+            registered.add(normalize_badge_id(row["Legacy ID"]))
+        elif kind == "walkin":
+            key = normalize_walkin_name(row["Scan Value"])
+            current = walkins.get(key)
+            if current is None or row["_ScannedAtDt"] < current["_ScannedAtDt"]:
+                walkins[key] = row
+        else:
+            unknown.add(normalize_badge_id(row["Scan Value"]))
+    return {"registered": registered, "walkins": walkins, "unknown": unknown}
+
+
+def compute_bu_breakdown(enriched_scans: List[dict], employee_cache: Dict[str, Any]) -> List[dict]:
+    """Per-BU attended counts for the export. Employees count once by
+    normalised legacy_id; walk-ins are excluded (own sheet); unknown badges
+    form the trailing "(Unmatched)" row."""
+    from collections import defaultdict
+    bu_scanned = defaultdict(set)
+    unknown = set()
+    for row in enriched_scans:
+        kind = row.get("_kind")
+        if kind == "registered":
+            bu = row["SL L1 Desc"]
+            bu_key = bu if bu and bu != "--" else "(No BU)"
+            bu_scanned[bu_key].add(normalize_badge_id(row["Legacy ID"]))
+        elif kind == "unknown":
+            unknown.add(normalize_badge_id(row["Scan Value"]))
+
+    bu_registered = defaultdict(int)
+    for emp in employee_cache.values():
+        bu_registered[emp.sl_l1_desc or "(No BU)"] += 1
+
+    bu_export = []
+    for bu_name in sorted(set(bu_scanned) | set(bu_registered)):
+        registered = bu_registered.get(bu_name, 0)
+        scanned = len(bu_scanned.get(bu_name, set()))
+        rate = round((scanned / registered) * 100, 1) if registered > 0 else 0.0
+        bu_export.append({"bu_name": bu_name, "registered": registered,
+                          "scanned": scanned, "attendance_rate": rate})
+    if unknown:
+        bu_export.append({"bu_name": "(Unmatched)", "registered": 0,
+                          "scanned": len(unknown), "attendance_rate": 0.0})
+    return bu_export
 
 
 class DashboardService:
@@ -107,7 +181,10 @@ class DashboardService:
         Returns:
             Dictionary containing:
             - registered: int (employee count from local SQLite)
-            - scanned: int (unique badges from cloud)
+            - scanned: int (registered employees attended, the rate numerator)
+            - walkins: int | None (typed names of people not in the roster)
+            - unknown_badges: int | None (unmatched badge scans, need review)
+            - total_present: int (scanned + walkins)
             - total_scans: int (total scans from cloud)
             - attendance_rate: float (percentage)
             - stations: list of station data
@@ -118,6 +195,9 @@ class DashboardService:
         result = {
             "registered": 0,
             "scanned": 0,
+            "walkins": None,
+            "unknown_badges": None,
+            "total_present": 0,
             "total_scans": 0,
             "attendance_rate": 0.0,
             "stations": [],
@@ -136,6 +216,7 @@ class DashboardService:
 
         # Get cloud scan data from API
         cloud_bus = []  # BU data from cloud (all stations combined)
+        stats_ok = False
         try:
             response = self._run_network_call(lambda: requests.get(
                 f"{self._api_url}/v1/dashboard/stats",
@@ -146,8 +227,19 @@ class DashboardService:
             if response.status_code == 200:
                 data = response.json()
                 result["total_scans"] = data.get("total_scans", 0)
-                result["scanned"] = data.get("unique_badges", 0)
                 cloud_bus = data.get("business_units", [])
+                if "matched_unique" in data:
+                    result["scanned"] = int(data.get("matched_unique") or 0)
+                    result["walkins"] = int(data.get("walkin_unique") or 0)
+                    result["unknown_badges"] = int(data.get("unknown_badge_unique") or 0)
+                else:
+                    # Old server: no bucket fields. unique_badges includes
+                    # unmatched badges, so sum the matched BUs instead.
+                    result["scanned"] = sum(
+                        int(bu.get("unique", 0) or 0) for bu in cloud_bus
+                        if str(bu.get("name", "")).strip("() ").lower() != "unmatched"
+                    )
+                stats_ok = True
                 result["stations"] = sorted([
                     {
                         "name": s.get("name", "--"),
@@ -181,11 +273,32 @@ class DashboardService:
             result["error"] = f"API error: {e}"
             logger.error(f"Dashboard: Unexpected error: {e}")
 
-        # Calculate attendance rate
+        result["source"] = "cloud" if stats_ok else "none"
+        if not stats_ok:
+            # Cloud unavailable: same three buckets from this station's SQLite.
+            # Marked "local" so the UI says these cover this station only.
+            try:
+                local = self._db_manager.get_attendance_buckets()
+                result["scanned"] = local["registered_attended"]
+                result["walkins"] = local["walkins"]
+                result["unknown_badges"] = local["unknown_badges"]
+                result["source"] = "local"
+            except Exception as e:
+                logger.error(f"Dashboard: Failed to compute local attendance buckets: {e}")
+
+        result["total_present"] = result["scanned"] + (result["walkins"] or 0)
+
+        # Attendance rate = registered attended / registered, never above 100%
         if result["registered"] > 0:
-            result["attendance_rate"] = round(
-                (result["scanned"] / result["registered"]) * 100, 1
-            )
+            rate = round((result["scanned"] / result["registered"]) * 100, 1)
+            if rate > 100:
+                logger.warning(
+                    "Dashboard: attended (%d) exceeds registered (%d); capping rate at 100%% "
+                    "(cloud roster summary may be stale)",
+                    result["scanned"], result["registered"],
+                )
+                rate = 100.0
+            result["attendance_rate"] = rate
 
         # Get BU breakdown from cloud API (aggregates all stations)
         # Falls back to local SQLite if cloud data unavailable
@@ -313,6 +426,14 @@ class DashboardService:
             data = response.json()
             scans = data.get("scans", [])
 
+            total_records = data.get("total_records", len(scans))
+            if max(total_records, len(scans)) >= EXPORT_SERVER_LIMIT:
+                logger.warning(
+                    "Export returned %d records, at the server limit of %d; "
+                    "the export may be truncated",
+                    max(total_records, len(scans)), EXPORT_SERVER_LIMIT,
+                )
+
             if not scans:
                 result["message"] = "No scan data to export"
                 result["noData"] = True
@@ -353,7 +474,7 @@ class DashboardService:
                 # Use legacy_id from cloud meta if available, otherwise try badge_id
                 legacy_id = scan.get("legacy_id") if isinstance(scan, dict) else None
                 lookup_key = legacy_id or badge_id
-                employee = employee_cache.get(lookup_key)
+                employee = employee_cache.get(normalize_badge_id(lookup_key))
                 if employee:
                     full_name = employee.full_name
                     business_unit = employee.sl_l1_desc or "--"
@@ -363,8 +484,9 @@ class DashboardService:
                     business_unit = "--"
                     position = "--"
 
-                scan_source = scan.get("scan_source", "manual") if isinstance(scan, dict) else "manual"
+                scan_source = (scan.get("scan_source") if isinstance(scan, dict) else None) or "manual"
                 enriched_scans.append({
+                    "_kind": classify_export_scan(employee is not None, scan_source, bool(matched)),
                     "Scan Value": badge_id,
                     "Legacy ID": employee.legacy_id if employee else (legacy_id or ""),
                     "Full Name": full_name,
@@ -377,7 +499,12 @@ class DashboardService:
                     "Scan Source": scan_source,
                 })
 
-            df = pd.DataFrame(enriched_scans)
+            for row in enriched_scans:
+                row["_ScannedAtDt"] = self._parse_datetime_for_sort(row["Scanned At"])
+
+            columns = ["Scan Value", "Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Email", "Station", "Scanned At", "Matched", "Scan Source"]
+            df = pd.DataFrame(enriched_scans)[columns] if enriched_scans else pd.DataFrame(columns=columns)
+            buckets = bucket_export_scans(enriched_scans)
 
             # Create Excel workbook
             wb = Workbook()
@@ -388,7 +515,6 @@ class DashboardService:
             header_fill = PatternFill(start_color="86bc25", end_color="86bc25", fill_type="solid")
             header_font = Font(bold=True, color="FFFFFF")
 
-            columns = ["Scan Value", "Legacy ID", "Full Name", "SL L1 Desc", "Position Desc", "Email", "Station", "Scanned At", "Matched", "Scan Source"]
             for col_idx, col_name in enumerate(columns, start=1):
                 cell = ws.cell(row=1, column=col_idx, value=col_name)
                 cell.fill = header_fill
@@ -424,11 +550,23 @@ class DashboardService:
             ws_summary["B1"].font = header_font
             ws_summary["B1"].fill = header_fill
 
+            # Buckets come from the export rows themselves so Summary, By
+            # Business Unit, Deduplicated and Walk-ins always agree.
+            attended = len(buckets["registered"])
+            walkin_count = len(buckets["walkins"])
+            registered_total = dashboard_data["registered"]
+            export_rate = (
+                min(round(attended / registered_total * 100, 1), 100.0)
+                if registered_total > 0 else 0.0
+            )
             summary_data = [
-                ("Registered Employees", dashboard_data["registered"]),
-                ("Unique Badges Scanned", dashboard_data["scanned"]),
+                ("Registered Employees", registered_total),
+                ("Registered Attended", attended),
+                ("Walk-ins", walkin_count),
+                ("Unknown Badge Scans (needs review)", len(buckets["unknown"])),
+                ("Total Present", attended + walkin_count),
                 ("Total Scans", dashboard_data["total_scans"]),
-                ("Attendance Rate", f"{dashboard_data['attendance_rate']}%"),
+                ("Attendance Rate", f"{export_rate}%"),
                 ("Report Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             ]
 
@@ -436,7 +574,7 @@ class DashboardService:
                 ws_summary.cell(row=row_idx, column=1, value=label)
                 ws_summary.cell(row=row_idx, column=2, value=value)
 
-            ws_summary.column_dimensions["A"].width = 25
+            ws_summary.column_dimensions["A"].width = 36
             ws_summary.column_dimensions["B"].width = 20
 
             # Add station breakdown sheet
@@ -459,32 +597,9 @@ class DashboardService:
                     max_length = max(len(str(cell.value or "")) for cell in col)
                     ws_stations.column_dimensions[col[0].column_letter].width = max_length + 2
 
-            # Add BU breakdown sheet — computed from enriched scan data
-            # for consistency with "All Scans" sheet (fixes #52: stale cloud BU data)
-            from collections import defaultdict
-            bu_scanned = defaultdict(set)  # BU name → set of unique badge_ids
-            for row in enriched_scans:
-                badge_id = row["Scan Value"]
-                bu = row["SL L1 Desc"]
-                bu_key = bu if bu and bu != "--" else "(Unmatched)"
-                bu_scanned[bu_key].add(badge_id)
-
-            bu_registered = defaultdict(int)
-            for emp in employee_cache.values():
-                bu_registered[emp.sl_l1_desc or "(Unmatched)"] += 1
-
-            all_bus = sorted(set(bu_scanned.keys()) | set(bu_registered.keys()))
-            bu_export = []
-            for bu_name in all_bus:
-                if bu_name == "(Unmatched)":
-                    continue  # append last
-                registered = bu_registered.get(bu_name, 0)
-                scanned = len(bu_scanned.get(bu_name, set()))
-                rate = round((scanned / registered) * 100, 1) if registered > 0 else 0.0
-                bu_export.append({"bu_name": bu_name, "registered": registered, "scanned": scanned, "attendance_rate": rate})
-            if "(Unmatched)" in bu_scanned:
-                bu_export.append({"bu_name": "(Unmatched)", "registered": 0,
-                                  "scanned": len(bu_scanned["(Unmatched)"]), "attendance_rate": 0.0})
+            # Add BU breakdown sheet - computed from enriched scan data
+            # (fixes #52) and counted by normalised legacy_id (#109).
+            bu_export = compute_bu_breakdown(enriched_scans, employee_cache)
 
             if bu_export:
                 ws_bu = wb.create_sheet("By Business Unit")
@@ -512,13 +627,11 @@ class DashboardService:
             # reprinted-badge scan can have badge_id != the employee's actual
             # legacy_id, which previously caused employees who HAD scanned to
             # still show up here as "not yet scanned".
-            scanned_legacy_ids = {
-                (scan.get("legacy_id") or scan.get("badge_id")) if isinstance(scan, dict) else scan[0]
-                for scan in scans
-            }
+            # Only registered-employee scans count: walk-ins and unknown
+            # badges are not roster members, and ids compare normalised.
             not_scanned = [
                 emp for emp in employee_cache.values()
-                if emp.legacy_id not in scanned_legacy_ids
+                if normalize_badge_id(emp.legacy_id) not in buckets["registered"]
             ]
             not_scanned.sort(key=lambda e: (e.sl_l1_desc or "", e.full_name or ""))
 
@@ -567,21 +680,19 @@ class DashboardService:
             # ~1,500 scans at that event) that catching them here, after the
             # fact, is a better trade than blocking every scan on a network
             # call to catch them a few seconds sooner.
-            matched_scans = [row for row in enriched_scans if row["Legacy ID"]]
-            for row in matched_scans:
-                row["_ScannedAtDt"] = self._parse_datetime_for_sort(row["Scanned At"])
+            matched_scans = [row for row in enriched_scans if row["_kind"] == "registered"]
 
             by_legacy_id: Dict[str, List[dict]] = {}
             for row in matched_scans:
-                by_legacy_id.setdefault(row["Legacy ID"], []).append(row)
+                by_legacy_id.setdefault(normalize_badge_id(row["Legacy ID"]), []).append(row)
 
             dedup_rows = []
-            for legacy_id, rows in by_legacy_id.items():
+            for _key, rows in by_legacy_id.items():
                 rows_sorted = sorted(rows, key=lambda r: r["_ScannedAtDt"])
                 first = rows_sorted[0]
                 stations = sorted({str(r["Station"]) for r in rows})
                 dedup_rows.append({
-                    "Legacy ID": legacy_id,
+                    "Legacy ID": first["Legacy ID"],
                     "Full Name": first["Full Name"],
                     "SL L1 Desc": first["SL L1 Desc"],
                     "Position Desc": first["Position Desc"],
@@ -639,7 +750,26 @@ class DashboardService:
                 f"{cross_station_count} cross-station duplicates"
             )
 
+            # Walk-ins: typed names of people missing from the roster, one row
+            # per distinct name. Never part of "Not Yet Scanned" or the rate.
+            ws_walkins = wb.create_sheet("Walk-ins")
+            walkin_headers = ["Name (as typed)", "Station", "First Scanned At"]
+            for col_idx, col_name in enumerate(walkin_headers, start=1):
+                cell = ws_walkins.cell(row=1, column=col_idx, value=col_name)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+            walkin_rows = sorted(buckets["walkins"].values(), key=lambda r: r["_ScannedAtDt"])
+            for row_idx, row in enumerate(walkin_rows, start=2):
+                ws_walkins.cell(row=row_idx, column=1, value=row["Scan Value"])
+                ws_walkins.cell(row=row_idx, column=2, value=row["Station"])
+                ws_walkins.cell(row=row_idx, column=3, value=row["Scanned At"])
+            for col in ws_walkins.columns:
+                max_length = max(len(str(cell.value or "")) for cell in col)
+                ws_walkins.column_dimensions[col[0].column_letter].width = max_length + 2
+
             # Save file
+            neutralize_formulas(wb)
             wb.save(file_path)
             result["ok"] = True
             result["message"] = f"Exported {len(df)} scans to Excel"
