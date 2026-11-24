@@ -2,6 +2,27 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.1.11 (2026-11-24)
+
+Audit fixes for issues #101–#112 (PR #113). Spec and tickets: `docs/specs/audit-fixes-2026-11.md`. Needs API PR #28 (`Jarkius/trackattendance-api`) for the walk-in and unknown-badge figures; against an older API the dashboard falls back to the BU sum.
+
+### Fixed
+
+- **Attendance rate could exceed 100%.** It counted every unique scanned value, including typed walk-in names and garbled badges. The rate now counts only registered employees. Walk-ins (manual entries of people not in the roster) and unknown badge scans are shown as separate figures on the dashboard and in the export (new "Walk-ins" sheet). Walk-in names are deduplicated after ignoring case and extra spaces, and they still sync to the cloud so multi-station reports include them.
+- **One bad scan could block a station's sync.** A batch the server rejects (400/422/413) is now split until only the bad scans fail. Timeouts and auth errors leave scans pending, and failed scans are retried at startup. Shutdown sync honours a deadline (`SHUTDOWN_SYNC_DEADLINE_SECONDS`, default 30).
+- **Same badge counted as different people.** Badge IDs are normalised (invisible characters stripped, case ignored), and numeric IDs that Excel stripped leading zeros from are restored from the cell format. The roster import warns when IDs look truncated.
+- **Scanner keystrokes lost** while a duplicate alert or the name-lookup box was open.
+- **Roster import could leave the kiosk with an empty roster** on a database error. The old roster is now replaced in one transaction; on failure the previous roster stays in use and an error is shown.
+- **Excel exports could contain live formulas.** Typed text starting with `=` is now always stored as text.
+- **Invalid `DUPLICATE_BADGE_ACTION`** now falls back to `warn` and is logged. Config warnings raised before logging starts are now written to the log.
+- **"Detect cameras" could run twice at once** when clicked again during a probe.
+
+### Changed
+
+- Reporting queries (scans joined to roster) are indexed: 10k employees × 10k scans dropped from 7–18 s to 3–7 ms.
+- When the cloud is unreachable, the dashboard labels its numbers "This station only (cloud unavailable)".
+- `docs/API.md` export section matches the server (no pagination, `limit` max 100000).
+
 ## v2.1.10 (2026-11-16)
 
 ### Added

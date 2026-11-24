@@ -180,6 +180,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.1.11** — Audit fixes #101–#112: attendance rate counts registered employees only (walk-ins and unknown badges reported separately, rate capped at 100%); failed scans retried and bad batches isolated instead of blocking sync; badge IDs normalised (case, invisible characters, lost leading zeros); scanner keystrokes no longer dropped during alerts or the lookup box; Excel exports can't run formulas; reporting queries indexed (10k×10k: seconds → milliseconds)
 - **v2.1.10** — Added app version display (window title, tiny corner label on the main screen, Admin Panel footer, startup log line) backed by a single `version.py`; added `build.bat` for one-step builds
 - **v2.1.9** — Fixed the admin Volume slider being capped by Windows' own system volume (one station's was left at 36%, so the slider's 100% still sounded quiet) — the slider now drives the actual Windows system volume directly, not just this app's own relative gain
 - **v2.1.8** — Fixed barcode scanner double-fires corrupting badge values (input field now clears before the scan bridge call, not after); retired Live Sync's real-time cross-station blocking duplicate check (violated offline-first, was the direct cause of the corruption above); added a "Deduplicated Attendance" sheet to the Excel export to catch cross-station duplicates after the fact instead
