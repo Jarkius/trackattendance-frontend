@@ -64,3 +64,6 @@ plugins/camera/greetings/__pycache__/
 .omc/
 .omx/
 logs/cloudrun-*.json
+
+# Raw TTS/voice source takes (app plays from assets/voices/)
+/voices/
