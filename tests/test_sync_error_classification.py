@@ -306,5 +306,70 @@ class TestRequeueFailedScans(unittest.TestCase):
         self.assertEqual(self.db.requeue_failed_scans(), 0)
 
 
+@patch("sync.time.sleep")
+class TestSystemicRejection(unittest.TestCase):
+    @patch("sync.requests.post")
+    def test_everything_rejected_stays_pending_not_failed(self, mock_post, _sleep):
+        mock_post.return_value = MockResponse(422)  # e.g. a bad server deploy
+        scans = [_make_scan(i) for i in range(1, 21)]
+
+        result = _service().sync_scan_batch_network_only(scans, "S")
+
+        self.assertEqual(result["failed_ids"], [])
+        self.assertEqual(result["synced_ids"], [])
+        self.assertEqual(sorted(result["pending_ids"]), list(range(1, 21)))
+        self.assertIsNotNone(result["error"])
+
+    @patch("sync.requests.post")
+    def test_few_rejections_with_no_success_still_fail(self, mock_post, _sleep):
+        mock_post.return_value = MockResponse(400)
+        result = _service().sync_scan_batch_network_only([_make_scan(1), _make_scan(2)], "S")
+        self.assertEqual(sorted(result["failed_ids"]), [1, 2])
+
+    @patch("sync.requests.post")
+    def test_rejections_alongside_successes_still_fail(self, mock_post, _sleep):
+        post, _ = _server_rejecting({f"B{i}" for i in range(1, 9)})
+        mock_post.side_effect = post
+        scans = [_make_scan(i) for i in range(1, 11)]
+        result = _service().sync_scan_batch_network_only(scans, "S")
+        self.assertEqual(len(result["failed_ids"]), 8)
+        self.assertEqual(sorted(result["synced_ids"]), [9, 10])
+
+
+class TestSyncOneBatchSharesRules(unittest.TestCase):
+    """_sync_one_batch must not use its own (older) failure rules."""
+
+    def _service_with_db(self, n=3):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        db = DatabaseManager(Path(tmp.name) / "t.db")
+        self.addCleanup(db.close)
+        db.set_station_name("S")
+        for i in range(n):
+            db.record_scan(f"B{i}", "S", None, "2026-11-24T01:00:0%dZ" % i)
+        svc = SyncService(db=db, api_url="http://x", api_key="k", batch_size=50)
+        return svc, db
+
+    @patch("sync.time.sleep")
+    @patch("sync.requests.post")
+    def test_403_keeps_pending(self, mock_post, _sleep):
+        mock_post.return_value = MockResponse(403)
+        svc, db = self._service_with_db()
+        out = svc._sync_one_batch()
+        self.assertEqual(out["failed"], 0)
+        self.assertEqual(db.get_sync_statistics()["pending"], 3)
+
+    @patch("sync.time.sleep")
+    @patch("sync.requests.post")
+    def test_one_bad_event_fails_only_itself(self, mock_post, _sleep):
+        post, _ = _server_rejecting({"B1"})
+        mock_post.side_effect = post
+        svc, db = self._service_with_db()
+        out = svc._sync_one_batch()
+        stats = db.get_sync_statistics()
+        self.assertEqual((out["synced"], out["failed"]), (2, 1))
+        self.assertEqual((stats["synced"], stats["failed"], stats["pending"]), (2, 1, 0))
+
+
 if __name__ == "__main__":
     unittest.main()
