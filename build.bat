@@ -17,7 +17,8 @@ if not exist "%PY%" (
     exit /b 1
 )
 
-for /f %%v in ('"%PY%" -c "from version import __version__; print(__version__)"') do set "VER=%%v"
+:: %PY% is a relative path with no spaces; quoting it here breaks for /f (cmd strips the outer quotes).
+for /f "usebackq delims=" %%v in (`%PY% -c "from version import __version__; print(__version__)"`) do set "VER=%%v"
 echo Building TrackAttendance v%VER%...
 
 "%PY%" -m PyInstaller TrackAttendance.spec --noconfirm

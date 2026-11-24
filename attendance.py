@@ -128,8 +128,53 @@ class AttendanceService:
             self._roster_error = None
         self._employee_cache = self._db.load_employee_cache()
         self._roster_warning = self._db.get_roster_meta("roster_warning") or None
+        zero_warning = self._leading_zero_mismatch_warning()
+        if zero_warning:
+            LOGGER.warning("Roster: %s", zero_warning)
+            self._roster_warning = (
+                f"{self._roster_warning}\n\n{zero_warning}" if self._roster_warning else zero_warning
+            )
         self._sync_service = None  # Set via set_sync_service() for immediate-write sync
         self._sync_coordinator = None  # Set via set_sync_service() for immediate-write sync
+
+    def _zero_stripped_roster_index(self) -> Dict[str, str]:
+        """Roster IDs keyed by their form without leading zeros ("00123" and "123" -> "123")."""
+        index: Dict[str, str] = {}
+        for key in self._employee_cache:
+            stripped = key.lstrip("0")
+            if stripped and key.isascii() and key.isdigit():
+                index.setdefault(stripped, key)
+        return index
+
+    def _leading_zero_mismatch_warning(self) -> str:
+        """Warn when scanned badges miss the roster only because of leading zeros.
+
+        Direct evidence that the roster's Legacy IDs lost (or gained) zero padding,
+        which the import-time width check cannot see when every ID has the same
+        stored width. Returns "" when nothing is wrong or there is no roster/scans.
+        """
+        if not self._employee_cache:
+            return ""
+        index = self._zero_stripped_roster_index()
+        if not index:
+            return ""
+        examples: List[str] = []
+        seen = set()
+        for badge in self._db.fetch_distinct_badge_ids():
+            key = normalize_badge_id(badge)
+            if key in self._employee_cache or key in seen:
+                continue
+            if key.isascii() and key.isdigit() and index.get(key.lstrip("0")) not in (None, key):
+                seen.add(key)
+                if len(examples) < 3:
+                    examples.append(f"{key} vs roster {index[key.lstrip('0')]}")
+        if not seen:
+            return ""
+        return (
+            f"{len(seen)} scanned badge ID(s) do not match the roster but match an ID that "
+            f"differs only by leading zeros (e.g. {'; '.join(examples)}). "
+            f"Format the Legacy ID column as Text (or as 00000) and re-save the roster."
+        )
 
     def set_sync_service(self, sync_service, coordinator=None) -> None:
         """Attach SyncService for immediate per-scan cloud upload.
@@ -634,6 +679,13 @@ class AttendanceService:
         # For badge/manual: resolve by the scan value itself
         lookup_key = normalize_badge_id(lookup_legacy_id if lookup_legacy_id else sanitized)
         employee = self._employee_cache.get(lookup_key)
+        if employee is None and lookup_key.isascii() and lookup_key.isdigit():
+            near = self._zero_stripped_roster_index().get(lookup_key.lstrip("0"))
+            if near and near != lookup_key:
+                LOGGER.warning(
+                    "Scan %s is not in the roster but %s is: IDs differ only by leading zeros "
+                    "(check the roster's Legacy ID column format)", lookup_key, near,
+                )
 
         # Check for duplicate badge scan (Issue #20)
         # Check both raw input AND resolved Legacy ID to catch same employee

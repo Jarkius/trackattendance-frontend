@@ -204,8 +204,8 @@ class TestSyncAuthDuringSync(unittest.TestCase):
         self.assertEqual(stats["pending"], 1)
 
     @patch('sync.requests.post')
-    def test_sync_403_marks_failed(self, mock_post):
-        """Test 403 during sync marks scans as failed."""
+    def test_sync_403_keeps_scans_pending(self, mock_post):
+        """403 is a proxy/config problem, not a verdict on the events (#101): keep pending."""
         mock_post.return_value = MockResponse(status_code=403, text="Forbidden")
 
         service = self._create_sync_service()
@@ -213,11 +213,11 @@ class TestSyncAuthDuringSync(unittest.TestCase):
 
         self.assertEqual(mock_post.call_count, 1)
         self.assertEqual(result["synced"], 0)
-        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["failed"], 0)
 
-        # Scans should be marked as failed
         stats = self.db.get_sync_statistics()
-        self.assertEqual(stats["failed"], 1)
+        self.assertEqual(stats["failed"], 0)
+        self.assertEqual(stats["pending"], 1)
 
     @patch('sync.requests.post')
     def test_auth_error_message_propagated(self, mock_post):

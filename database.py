@@ -613,6 +613,12 @@ class DatabaseManager:
             )
         return cursor.rowcount
 
+    def fetch_distinct_badge_ids(self) -> List[str]:
+        """Every distinct badge_id ever scanned on this station (for roster sanity checks)."""
+        return [row[0] for row in self._connection.execute(
+            "SELECT DISTINCT badge_id FROM scans WHERE badge_id IS NOT NULL"
+        )]
+
     def requeue_failed_scans(self) -> int:
         """Move every 'failed' scan back to 'pending' so the next sync retries it.
 

@@ -151,7 +151,7 @@ the UI thread pumped while it waited.
 
 ## 7. Packaging & Runtime Assets
 
-- **Icon & Spec:** `assets/track_attendance.ico`, `TrackAttendance.spec` configure PyInstaller builds.
+- **Icon & Spec:** `assets/greendot.ico`, `TrackAttendance.spec` configure PyInstaller builds.
 - **Embedded assets:** `web/` and `assets/` are bundled so the executable can run without network access.
 - **Operational data:** `data/` and `exports/` stay outside the bundle; they are created/ignored at runtime to protect sensitive information.
 - **Voice override:** When frozen, the app checks for a `voices/` directory next to the exe. If found with MP3 files, those are used instead of the bundled `assets/voices/`. Same pattern applies to `greetings/` for camera greeting audio. This allows customising audio without recompiling.

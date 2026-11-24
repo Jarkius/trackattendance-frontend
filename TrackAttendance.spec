@@ -75,7 +75,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Workspace\\Dev\\Python\\greendot.ico'],
+    icon=['assets/greendot.ico'],
 )
 
 coll = COLLECT(
