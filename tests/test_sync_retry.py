@@ -146,8 +146,8 @@ class TestSyncRetryLogic(unittest.TestCase):
     # =========================================================================
 
     @patch('sync.requests.post')
-    def test_http_403_marks_failed(self, mock_post):
-        """Test HTTP 403 marks scans as failed (non-retryable)."""
+    def test_http_403_keeps_scans_pending(self, mock_post):
+        """HTTP 403 is a proxy/config problem, not a verdict on the events (#101): keep pending."""
         mock_post.return_value = MockResponse(status_code=403, text="Forbidden")
 
         service = self._create_sync_service(max_attempts=3)
@@ -156,12 +156,11 @@ class TestSyncRetryLogic(unittest.TestCase):
         # Should only be called once (no retry for 4xx errors)
         self.assertEqual(mock_post.call_count, 1)
         self.assertEqual(result["synced"], 0)
-        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["failed"], 0)
 
-        # Scans should be marked as failed
         stats = self.db.get_sync_statistics()
-        self.assertEqual(stats["failed"], 1)
-        self.assertEqual(stats["pending"], 0)
+        self.assertEqual(stats["failed"], 0)
+        self.assertEqual(stats["pending"], 1)
 
     # =========================================================================
     # HTTP 400 Bad Request Tests (No Retry)
@@ -372,8 +371,8 @@ class TestSyncRetryLogic(unittest.TestCase):
     # =========================================================================
 
     @patch('sync.requests.post')
-    def test_other_request_exception_marks_failed(self, mock_post):
-        """Test other RequestException marks scans as failed."""
+    def test_other_request_exception_keeps_scans_pending(self, mock_post):
+        """Other RequestException is transient (#101): not retried this cycle, scans stay pending."""
         mock_post.side_effect = requests.exceptions.RequestException("Unknown error")
 
         service = self._create_sync_service(max_attempts=3)
@@ -381,10 +380,11 @@ class TestSyncRetryLogic(unittest.TestCase):
 
         # Should only try once for generic RequestException (non-retryable)
         self.assertEqual(mock_post.call_count, 1)
-        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["failed"], 0)
 
         stats = self.db.get_sync_statistics()
-        self.assertEqual(stats["failed"], 1)
+        self.assertEqual(stats["failed"], 0)
+        self.assertEqual(stats["pending"], 1)
 
     # =========================================================================
     # Empty Pending Scans Test
