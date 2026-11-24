@@ -840,7 +840,7 @@ class AttendanceService:
 
             export_headers = [
                 "Scan Value", "Legacy ID", "Full Name",
-                "SL L1 Desc", "Position Desc", "Email",
+                "SL L1 Desc", "Position Desc", "Career Level", "Email",
                 "Station", "Scanned At", "Matched", "Scan Source",
             ]
             sheet.append(export_headers)
@@ -853,6 +853,7 @@ class AttendanceService:
                     record.employee_full_name or "",
                     record.sl_l1_desc or "",
                     record.position_desc or "",
+                    record.career_level or "",
                     record.email or "",
                     record.station_name or "",
                     _format_timestamp(record.scanned_at),
