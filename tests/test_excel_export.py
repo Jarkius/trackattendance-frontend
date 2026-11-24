@@ -123,6 +123,7 @@ class TestExcelExportBasic(unittest.TestCase):
             self.assertIn("Station", headers)
             self.assertIn("Scanned At", headers)
             self.assertIn("Scan Source", headers)
+            self.assertIn("Career Level", headers)
 
             wb.close()
         finally:
@@ -489,11 +490,12 @@ class TestExcelExportEdgeCases(unittest.TestCase):
             wb = load_workbook(result["absolutePath"])
             ws = wb.active
 
+            headers = [c.value for c in ws[1]]
             # Find the unmatched row
             for row in ws.iter_rows(min_row=2, values_only=True):
                 if row[0] == "UNKNOWN123":
-                    # Matched (col 8) should be "No"
-                    self.assertEqual(row[8], "No")
+                    matched_idx = headers.index("Matched")
+                    self.assertEqual(row[matched_idx], "No")
                     break
 
             wb.close()

@@ -81,6 +81,7 @@ class ScanRecord:
     sync_status: str = "pending"
     synced_at: Optional[str] = None
     sync_error: Optional[str] = None
+    career_level: Optional[str] = None  # looked up from the roster; only set by fetch_all_scans
 
 
 class DatabaseManager:
@@ -406,11 +407,13 @@ class DatabaseManager:
     def fetch_all_scans(self) -> List[ScanRecord]:
         cursor = self._connection.execute(
             """
-            SELECT id, badge_id, scanned_at, station_name,
-                   employee_full_name, legacy_id, sl_l1_desc, position_desc,
-                   email, scan_source, sync_status, synced_at, sync_error
-            FROM scans
-            ORDER BY scanned_at ASC
+            SELECT s.id, s.badge_id, s.scanned_at, s.station_name,
+                   s.employee_full_name, s.legacy_id, s.sl_l1_desc, s.position_desc,
+                   s.email, s.scan_source, s.sync_status, s.synced_at, s.sync_error,
+                   e.career_level AS career_level
+            FROM scans s
+            LEFT JOIN employees e ON e.legacy_id = s.legacy_id
+            ORDER BY s.scanned_at ASC
             """
         )
         return [
@@ -428,6 +431,7 @@ class DatabaseManager:
                 sync_status=row["sync_status"],
                 synced_at=row["synced_at"],
                 sync_error=row["sync_error"],
+                career_level=row["career_level"],
             )
             for row in cursor.fetchall()
         ]
