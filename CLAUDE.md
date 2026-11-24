@@ -136,6 +136,10 @@ Syncs to `trackattendance-api` (separate repo: `Jarkius/trackattendance-api`)
   Requires the saas repo checked out as a sibling directory (default:
   `../trackattendance-saas`; override with `TRACKATTENDANCE_SAAS_DIR`).
 
+## Skills
+
+Start any task beyond a one-line edit by invoking `engineering-orchestrator` (`.claude/skills/engineering-orchestrator/SKILL.md`). It states the chosen workflow, routes to the project skills in `.claude/skills/`, and maps common request types to global skills. Decision rules live in `.claude/rules/engineering-decision-protocol.md`.
+
 ## Notes
 
 - Time zone: GMT+7 (Bangkok)
