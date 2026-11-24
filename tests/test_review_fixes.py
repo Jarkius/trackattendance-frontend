@@ -93,6 +93,53 @@ class TestNumericIdWarning(unittest.TestCase):
         self.assertTrue(svc._roster_warning)
         self.assertIn("1 numeric", svc._roster_warning)
 
+    def _paths(self, rows):
+        from attendance import AttendanceService  # noqa: F401
+        d = Path(tempfile.mkdtemp())
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"])
+        for r in rows:
+            ws.append(r)
+        wb.save(d / "employee.xlsx")
+        return dict(database_path=d / "db.db", employee_workbook_path=d / "employee.xlsx",
+                    export_directory=d / "exp")
+
+    def test_scanned_badge_matching_roster_only_by_zeros_warns_on_next_start(self):
+        from attendance import AttendanceService
+        # Uniform width, so the import-time width check cannot see the problem.
+        paths = self._paths([[123, "A", "BU", "P"], [456, "B", "BU", "P"]])
+        svc = AttendanceService(**paths)
+        self.assertFalse(svc._roster_warning)
+        svc._db.set_station_name("T")
+        svc._station_name = "T"
+        with self.assertLogs("attendance", level="WARNING") as logs:
+            svc.register_scan("00123", scan_source="scanner")
+        self.assertTrue(any("leading zeros" in m for m in logs.output))
+
+        svc2 = AttendanceService(**paths)
+        self.assertIn("leading zeros", svc2._roster_warning)
+        self.assertIn("00123", svc2._roster_warning)
+        self.assertIn("1 scanned badge", svc2._roster_warning)
+
+    def test_unrelated_unmatched_badge_does_not_warn(self):
+        from attendance import AttendanceService
+        paths = self._paths([[123, "A", "BU", "P"]])
+        svc = AttendanceService(**paths)
+        svc._db.set_station_name("T")
+        svc._station_name = "T"
+        svc.register_scan("99999", scan_source="scanner")
+        self.assertFalse(AttendanceService(**paths)._roster_warning)
+
+    def test_exactly_matching_scan_does_not_warn(self):
+        from attendance import AttendanceService
+        paths = self._paths([["00123", "A", "BU", "P"]])
+        svc = AttendanceService(**paths)
+        svc._db.set_station_name("T")
+        svc._station_name = "T"
+        svc.register_scan("00123", scan_source="scanner")
+        self.assertFalse(AttendanceService(**paths)._roster_warning)
+
 
 if __name__ == "__main__":
     unittest.main()
