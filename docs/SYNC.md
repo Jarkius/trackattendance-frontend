@@ -99,7 +99,7 @@ duplicates out of ~1,500 scans that event, all cleanly resolved after the
 fact).
 
 **Replacement**: cross-station duplicates are now caught entirely after
-the fact, in the Excel export's "Deduplicated Attendance" sheet (see
+the fact, in the Excel export's "Unique Scans (Per Day)" and "Lucky Draw" sheets (the former "Deduplicated Attendance" sheet was removed in the Career Level change) (see
 `DashboardService.export_to_excel()` in `dashboard.py`) — first-scan-wins
 per employee, with every cross-station duplicate flagged and its full
 station history shown. No network call sits in the scan path anymore;

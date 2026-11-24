@@ -23,8 +23,13 @@ from database import (
 )
 
 LOGGER = logging.getLogger(__name__)
+# Bump when the set of roster columns stored in `employees` changes, so a roster
+# imported by an older build is re-imported once even if employee.xlsx is
+# byte-identical (v2: Career Level; v3: re-import after v2 stored it empty).
+ROSTER_IMPORT_VERSION = "3"
 REQUIRED_COLUMNS = ["Legacy ID", "Full Name", "SL L1 Desc", "Position Desc"]
 OPTIONAL_EMAIL_COLUMN = "Email"
+OPTIONAL_CAREER_LEVEL_COLUMN = "Career Level"
 EXAMPLE_WORKBOOK_NAME = "exampleof_employee.xlsx"
 
 # Invisible characters that Excel/copy-paste commonly leave in header cells.
@@ -47,7 +52,7 @@ def _normalise_header(value: object) -> str:
 
 
 def map_roster_headers(header_row) -> Dict[str, int]:
-    """Map canonical column names (required + optional Email) to column indices.
+    """Map canonical column names (required + optional Email/Career Level) to column indices.
 
     Shared by validate_roster_headers and the roster import so both agree on
     what counts as a matching header. First matching column wins.
@@ -58,7 +63,7 @@ def map_roster_headers(header_row) -> Dict[str, int]:
         if key and key not in by_key:
             by_key[key] = idx
     mapping: Dict[str, int] = {}
-    for canonical in [*REQUIRED_COLUMNS, OPTIONAL_EMAIL_COLUMN]:
+    for canonical in [*REQUIRED_COLUMNS, OPTIONAL_EMAIL_COLUMN, OPTIONAL_CAREER_LEVEL_COLUMN]:
         idx = by_key.get(_normalise_header(canonical))
         if idx is not None:
             mapping[canonical] = idx
@@ -194,15 +199,16 @@ class AttendanceService:
         current_mtime = str(self._employee_workbook_path.stat().st_mtime)
         stored_mtime = self._db.get_roster_meta("file_mtime")
         stored_hash = self._db.get_roster_hash()
+        import_current = self._db.get_roster_meta("import_version") == ROSTER_IMPORT_VERSION
 
-        if stored_mtime == current_mtime and stored_hash and self._db.employees_loaded():
+        if import_current and stored_mtime == current_mtime and stored_hash and self._db.employees_loaded():
             LOGGER.info("Roster unchanged (mtime match), skipping reimport")
             return
 
         # Mtime changed (or first run) — compute hash to confirm
         current_hash = self._hash_file(self._employee_workbook_path)
 
-        if stored_hash == current_hash and self._db.employees_loaded():
+        if import_current and stored_hash == current_hash and self._db.employees_loaded():
             # File was touched but content unchanged — update mtime cache
             self._db.set_roster_meta("file_mtime", current_mtime)
             LOGGER.info("Roster unchanged (hash match, mtime updated), skipping reimport")
@@ -263,6 +269,7 @@ class AttendanceService:
 
             # Detect optional columns present in this workbook
             email_index = header_to_index.get(OPTIONAL_EMAIL_COLUMN)
+            career_level_index = header_to_index.get(OPTIONAL_CAREER_LEVEL_COLUMN)
 
             seen_ids: dict[str, int] = {}  # legacy_id → first row number
             duplicates: list[dict] = []  # detailed duplicate info
@@ -303,6 +310,9 @@ class AttendanceService:
                     continue
                 position_desc = _safe_string(row[header_to_index["Position Desc"]] if header_to_index["Position Desc"] < len(row) else None)
                 email = _safe_string(row[email_index] if email_index is not None and email_index < len(row) else None)
+                career_level = _normalize_career_level(
+                    row[career_level_index] if career_level_index is not None and career_level_index < len(row) else None
+                )
                 employees.append(
                     EmployeeRecord(
                         legacy_id=legacy_id,
@@ -310,6 +320,7 @@ class AttendanceService:
                         sl_l1_desc=sl_l1_desc,
                         position_desc=position_desc,
                         email=email,
+                        career_level=career_level,
                     )
                 )
                 seen_ids[id_key] = row_num
@@ -346,6 +357,7 @@ class AttendanceService:
                 ) from e
             self._db.set_roster_hash(current_hash)
             self._db.set_roster_meta("file_mtime", current_mtime)
+            self._db.set_roster_meta("import_version", ROSTER_IMPORT_VERSION)
             numeric_unpadded = sum(1 for w in numeric_widths if w < widest_digit_id)
             if numeric_unpadded:
                 warning = (
@@ -844,6 +856,15 @@ def _fuzzy_word_score(query_words: list, name_words: list) -> float:
         best = max(SequenceMatcher(None, qw, nw).ratio() for nw in name_words)
         total += best
     return total / len(query_words)
+
+
+def _normalize_career_level(value: Optional[object]) -> str:
+    """Career Level as a clean string: 5, 5.0 and "5" all become "5"."""
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    return str(value).strip()
 
 
 def _safe_string(value: Optional[object]) -> str:
