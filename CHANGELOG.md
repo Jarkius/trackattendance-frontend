@@ -19,6 +19,11 @@ Audit fixes for issues #101–#112 (PR #113). Spec and tickets: `docs/specs/audi
 
 ### Changed
 
+- **Event voice clips:**
+  - A `voices\` folder next to the exe, or next to `main.py` when running from source, now replaces the bundled clips in both modes. Before, it was only checked in the built exe.
+  - `.wav` clips are played as well as `.mp3`.
+  - `build.bat` ships the repo's `voices\` folder with the build.
+- **The example roster** (`data\exampleof_employee.xlsx`) includes an optional `Career Level` column, 0–9. The import ignores it for now. Delete the old example to regenerate it.
 - Reporting queries (scans joined to roster) are indexed: 10k employees × 10k scans dropped from 7–18 s to 3–7 ms.
 - When the cloud is unreachable, the dashboard labels its numbers "This station only (cloud unavailable)".
 - `docs/API.md` export section matches the server (no pagination, `limit` max 100000).

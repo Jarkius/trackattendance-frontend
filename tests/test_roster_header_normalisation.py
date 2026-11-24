@@ -192,3 +192,46 @@ class TestRosterHeaderNormalisation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(AVAILABLE, "PyQt6/openpyxl not installed")
+class TestExampleRosterWorkbook(unittest.TestCase):
+    """The onboarding example must show the Career Level column and still import cleanly."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.services = []
+
+    def tearDown(self):
+        for svc in self.services:
+            try:
+                svc.close()
+            except Exception:
+                pass
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _service(self, workbook_name):
+        svc = AttendanceService(
+            database_path=Path(self.temp_dir) / f"{workbook_name}.db",
+            employee_workbook_path=Path(self.temp_dir) / workbook_name,
+            export_directory=Path(self.temp_dir) / "exports",
+        )
+        self.services.append(svc)
+        return svc
+
+    def test_example_has_career_level_and_imports(self):
+        from openpyxl import load_workbook
+
+        example = self._service("missing.xlsx").ensure_example_employee_workbook()
+        wb = load_workbook(example)
+        rows = list(wb.active.iter_rows(values_only=True))
+        wb.close()
+        headers = list(rows[0])
+        self.assertIn("Career Level", headers)
+        levels = [row[headers.index("Career Level")] for row in rows[1:]]
+        self.assertTrue(levels and all(str(v) in {str(n) for n in range(10)} for v in levels), levels)
+
+        shutil.copy(example, Path(self.temp_dir) / "employee.xlsx")
+        svc = self._service("employee.xlsx")
+        self.assertIsNone(svc._roster_error)
+        self.assertEqual(svc._db.count_employees(), len(rows) - 1)

@@ -10,9 +10,18 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 LOGGER = logging.getLogger(__name__)
 
+VOICE_EXTENSIONS = {".mp3", ".wav"}
+
+
+def find_voice_files(directory: Path) -> list[Path]:
+    """Playable voice clips (.mp3/.wav, any case) directly inside directory, sorted."""
+    if not directory.is_dir():
+        return []
+    return sorted(p for p in directory.iterdir() if p.is_file() and p.suffix.lower() in VOICE_EXTENSIONS)
+
 
 class VoicePlayer:
-    """Plays a random MP3 voice clip on successful badge scans."""
+    """Plays a random voice clip (.mp3 or .wav) on successful badge scans."""
 
     def __init__(self, voices_dir: Path, enabled: bool = True, volume: float = 1.0):
         self.voices_dir = voices_dir
@@ -38,9 +47,9 @@ class VoicePlayer:
         if not self.voices_dir.exists():
             LOGGER.warning("Voices directory not found: %s", self.voices_dir)
             return
-        self.voice_files = sorted(self.voices_dir.glob("*.mp3"))
+        self.voice_files = find_voice_files(self.voices_dir)
         if not self.voice_files:
-            LOGGER.warning("No MP3 files found in: %s", self.voices_dir)
+            LOGGER.warning("No .mp3/.wav voice files found in: %s", self.voices_dir)
 
     def _pick_random(self) -> Path:
         """Pick a random voice file, avoiding consecutive repeats when possible."""

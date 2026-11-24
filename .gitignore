@@ -23,6 +23,9 @@ Backup/
 data/*
 !data/.gitkeep
 
+# Per-event voice clips (override assets/voices; shipped by build.bat)
+voices/
+
 # Logs (keep structure, ignore contents)
 logs/**/*.log
 logs/**/*.png
