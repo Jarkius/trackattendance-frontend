@@ -27,6 +27,13 @@ if errorlevel 1 (
 )
 
 copy /y deploy.bat "dist\TrackAttendance\deploy.bat" >nul
+
+:: Event voice clips: a repo-root voices\ folder (.mp3/.wav) is shipped next to the
+:: exe, where it replaces the bundled assets\voices.
+if exist "voices\" (
+    xcopy /e /i /y /q "voices" "dist\TrackAttendance\voices\" >nul
+    echo Included event voices\ folder.
+)
 echo.
 echo Built TrackAttendance v%VER% -^> dist\TrackAttendance
 

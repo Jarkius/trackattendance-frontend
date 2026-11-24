@@ -19,6 +19,16 @@ Audit fixes for issues #101–#112 (PR #113). Spec and tickets: `docs/specs/audi
 
 ### Changed
 
+- **Event voice clips:**
+  - A `voices\` folder next to the exe, or next to `main.py` when running from source, now replaces the bundled clips in both modes. Before, it was only checked in the built exe.
+  - `.wav` clips are played as well as `.mp3`.
+  - `build.bat` ships the repo's `voices\` folder with the build.
+- **Career Level, Lucky Draw and Unique Scans** (PR #115):
+  - The roster has an optional `Career Level` column (0 = Intern … 9 = Partner). An unchanged roster is re-imported once to pick it up.
+  - The dashboard export has a **Lucky Draw** sheet: one row per registered attendee, no Email, Career Level 0 and 9 left out.
+  - It also has a **Unique Scans (Per Day)** sheet: one row per employee per day, keeping that day's first scan.
+  - These two sheets replace the old "Deduplicated Attendance" sheet.
+- **The example roster** (`data\exampleof_employee.xlsx`) shows the `Career Level` column. Delete the old example to regenerate it.
 - Reporting queries (scans joined to roster) are indexed: 10k employees × 10k scans dropped from 7–18 s to 3–7 ms.
 - When the cloud is unreachable, the dashboard labels its numbers "This station only (cloud unavailable)".
 - `docs/API.md` export section matches the server (no pagination, `limit` max 100000).

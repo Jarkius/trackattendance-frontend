@@ -47,7 +47,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 import requests
 
 from attendance import AttendanceService
-from audio import VoicePlayer
+from audio import VoicePlayer, find_voice_files
 from sync import SyncService, BackgroundSyncCoordinator
 from dashboard import DashboardService
 from qt_bridge import call_without_freezing_ui
@@ -112,15 +112,14 @@ DATABASE_PATH = DATA_DIRECTORY / "database.db"
 EMPLOYEE_WORKBOOK_PATH = DATA_DIRECTORY / "employee.xlsx"
 UI_INDEX_HTML = RESOURCE_ROOT / "web" / "index.html"
 def _voices_dir() -> Path:
-    """Resolve voices directory with fallback chain.
+    """Resolve the voices directory.
 
-    Frozen exe: voices/ next to .exe (override) → bundled in assets/voices (fallback)
-    Dev mode:   assets/voices/ (as-is)
+    A voices/ folder next to the .exe (or next to main.py in dev mode) that holds at
+    least one .mp3/.wav replaces the bundled assets/voices clips entirely.
     """
-    if getattr(sys, 'frozen', False):
-        override = EXEC_ROOT / "voices"
-        if override.is_dir() and any(override.glob("*.mp3")):
-            return override
+    override = EXEC_ROOT / "voices"
+    if find_voice_files(override):
+        return override
     return RESOURCE_ROOT / "assets" / "voices"
 
 VOICES_DIRECTORY = _voices_dir()

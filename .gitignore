@@ -23,6 +23,10 @@ Backup/
 data/*
 !data/.gitkeep
 
+# Per-event voice clips: change them per event without committing. A voices/
+# folder with .mp3/.wav clips replaces assets/voices; build.bat ships it.
+/voices/
+
 # Logs (keep structure, ignore contents)
 logs/**/*.log
 logs/**/*.png
@@ -64,6 +68,3 @@ plugins/camera/greetings/__pycache__/
 .omc/
 .omx/
 logs/cloudrun-*.json
-
-# Raw TTS/voice source takes (app plays from assets/voices/)
-/voices/
