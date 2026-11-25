@@ -82,8 +82,9 @@ class ProximityGreetingManager:
 
             # Verify we can actually read a frame (USB cameras may need warm-up)
             ret = False
+            first_frame = None
             for _ in range(3):
-                ret, _ = self._cap.read()
+                ret, first_frame = self._cap.read()
                 if ret:
                     break
             if not ret:
@@ -91,6 +92,24 @@ class ProximityGreetingManager:
                 self._cap.release()
                 self._cap = None
                 return False
+
+            # What the camera really delivers: requested size is only a hint, and a
+            # near-black mean brightness means a covered lens, privacy shutter or wrong device.
+            try:
+                from media_diagnostics import video_input_names
+                names = video_input_names()
+                name = names[self._camera_id] if self._camera_id < len(names) else "name unknown"
+                fh, fw = first_frame.shape[:2]
+                LOGGER.info(
+                    "[Proximity] Camera %d opened: %s, %s, requested %dx%d, actual %dx%d, "
+                    "mean brightness %.0f/255, min face size %.0f%% of width (= %d px)",
+                    self._camera_id, name, self._cap.getBackendName(),
+                    self._resolution[0], self._resolution[1], fw, fh,
+                    float(first_frame.mean()), self._min_size_pct * 100,
+                    int(fw * self._min_size_pct),
+                )
+            except Exception as exc:  # diagnostics only
+                LOGGER.debug("[Proximity] Camera info unavailable: %s", exc)
 
             self._detector = ProximityDetector(
                 cooldown=self._cooldown,
@@ -204,6 +223,9 @@ class ProximityGreetingManager:
         if present == self._last_presence:
             return
         self._last_presence = present
+        LOGGER.info("[Proximity] Presence -> %s (screensaver %s)",
+                    "present" if present else "empty",
+                    "notified" if self._presence_callback is not None else "not wired")
         if self._presence_callback is not None:
             try:
                 self._presence_callback(present)
@@ -217,6 +239,11 @@ class ProximityGreetingManager:
         overlay_interval = 0.2  # ~5 FPS for preview (saves CPU + avoids GC pressure)
         last_overlay_time = 0.0
         prev_state = "empty"
+        # Once a minute: proof the loop is alive and frames flow, plus read failures
+        heartbeat_every = 60.0
+        heartbeat_at = time.time() + heartbeat_every
+        frames_read = 0
+        read_failures = 0
 
         while self._running:
             if self._cap is None or not self._cap.isOpened():
@@ -225,8 +252,20 @@ class ProximityGreetingManager:
 
             ret, frame = self._cap.read()
             if not ret:
+                read_failures += 1
                 time.sleep(0.1)
                 continue
+            frames_read += 1
+
+            if time.time() >= heartbeat_at:
+                heartbeat_at = time.time() + heartbeat_every
+                LOGGER.info("[Proximity] Heartbeat: camera %d, %d frames read, %d read failures, "
+                            "state=%s, brightness %.0f/255",
+                            self._camera_id, frames_read, read_failures,
+                            self._detector.presence_state if self._detector else "?",
+                            float(frame.mean()))
+                frames_read = 0
+                read_failures = 0
 
             # Capture refs to avoid race with stop() on main thread
             detector = self._detector

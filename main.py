@@ -53,6 +53,7 @@ from sync import SyncService, BackgroundSyncCoordinator
 from dashboard import DashboardService
 from qt_bridge import call_without_freezing_ui
 import config
+import media_diagnostics
 from version import __version__
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
@@ -726,6 +727,9 @@ class Api(QObject):
     # True when the camera sees someone in front of the station, False when they leave.
     # Emitted from the camera thread; Qt delivers it to the UI thread (queued).
     presence_changed = pyqtSignal(bool)
+    # Camera detection actually started/stopped outside a toggle_camera() reply (startup
+    # starts it after the page has already asked for the state, device change restarts it)
+    camera_running_changed = pyqtSignal(bool)
 
     def __init__(
         self,
@@ -1231,7 +1235,11 @@ class Api(QObject):
                     daemon=True, name="camera-restart",
                 ).start()
 
-        LOGGER.info("[Admin] Camera selected: index %d", index)
+        names = media_diagnostics.video_input_names()
+        LOGGER.info("[Admin] Camera selected: index %d (%s), detection %s",
+                    index, names[index] if index < len(names) else "name unknown",
+                    "restarting" if self._proximity_manager and self._proximity_manager._running
+                    else "not running")
         return {"ok": True, "index": index}
 
     def _deferred_camera_restart(self):
@@ -1250,6 +1258,7 @@ class Api(QObject):
             started = self._proximity_manager.start()
             LOGGER.info("[Admin] Camera restart after device change: %s",
                         "ok" if started else "failed")
+            self.camera_running_changed.emit(bool(started))
 
     @pyqtSlot(result="QVariant")
     def enumerate_cameras(self) -> dict:
@@ -1272,35 +1281,63 @@ class Api(QObject):
         active_id = config.CAMERA_DEVICE_ID
         active_running = bool(self._proximity_manager
                               and self._proximity_manager._running)
+        # Qt device names are read here, on the GUI thread; the probe thread only gets the list.
+        names = media_diagnostics.video_input_names()
         self._camera_probe_running = True
         try:
-            return call_without_freezing_ui(
-                lambda: self._probe_cameras(cv2, active_id, active_running)
+            result = call_without_freezing_ui(
+                lambda: self._probe_cameras(cv2, active_id, active_running, names)
             )
         finally:
             self._camera_probe_running = False
+        if isinstance(result, dict) and "cameras" in result:
+            LOGGER.info("[Camera] Scan: found %s | skipped %s | Windows lists %s | active index %d (%s)",
+                        [c["name"] for c in result["cameras"]] or "none",
+                        result.get("skipped") or "none", names or "no names available",
+                        active_id, "running" if active_running else "not running")
+        return result
 
     @staticmethod
-    def _probe_cameras(cv2, active_id: int, active_running: bool) -> dict:
+    def _probe_cameras(cv2, active_id: int, active_running: bool, names=None) -> dict:
         """Blocking camera probe (worker-thread safe: no SQLite, no Qt)."""
+        names = names or []
         cameras = []
+        skipped = []   # {index: why}, so "my camera is missing" can be answered from the log
         for i in range(11):
+            friendly = names[i] if i < len(names) else ""
             # Skip probing the active camera if it's running (exclusive access on Windows)
             if i == active_id and active_running:
-                cameras.append({"index": i, "name": f"Camera {i} (active)"})
+                label = f"Camera {i} (active)"
+                if friendly:
+                    label = f"Camera {i}: {friendly} (active)"
+                cameras.append({"index": i, "name": label})
                 continue
             cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                if ret:
-                    backend = cap.getBackendName() if hasattr(cap, 'getBackendName') else ""
-                    label = f"Camera {i}"
-                    if backend:
-                        label += f" ({backend})"
-                    cameras.append({"index": i, "name": label})
+            if not cap.isOpened():
+                if friendly:  # Windows lists a device at this index but OpenCV can't open it
+                    skipped.append(f"{i}:{friendly} (cannot open - in use by another app or driver problem)")
                 cap.release()
+                continue
+            ret, frame = cap.read()
+            if ret:
+                backend = cap.getBackendName() if hasattr(cap, 'getBackendName') else ""
+                label = f"Camera {i}"
+                if friendly:
+                    label += f": {friendly}"
+                try:
+                    h, w = frame.shape[:2]
+                    label += f" {w}x{h}"
+                except Exception:
+                    pass
+                if backend:
+                    label += f" ({backend})"
+                cameras.append({"index": i, "name": label})
+            else:
+                skipped.append(f"{i}:{friendly or 'unnamed'} (opened but no frame)")
+            cap.release()
 
-        return {"ok": True, "cameras": cameras, "selected": active_id}
+        return {"ok": True, "cameras": cameras, "selected": active_id,
+                "skipped": skipped, "devices": names}
 
     @pyqtSlot(result="QVariant")
     def toggle_camera(self) -> dict:
@@ -2057,6 +2094,20 @@ class Api(QObject):
         self._save_setting("hold_scans", policy)
         LOGGER.info("[Admin] Hold scans set to %s", policy)
         return {"ok": True, "value": policy}
+
+    _CLIENT_LOG_CATEGORIES = ("screensaver", "camera", "audio")
+
+    @pyqtSlot(str, str)
+    def log_client_event(self, category: str, message: str) -> None:
+        """Write a diagnostic line from the web UI to the app log (screensaver, audio, camera).
+
+        The page is trusted but the bridge is a boundary: only known categories, one line,
+        capped length, no format-string handling.
+        """
+        if category not in self._CLIENT_LOG_CATEGORIES:
+            return
+        text = " ".join("".join(ch if ch.isprintable() else " " for ch in str(message)).split())[:300]
+        LOGGER.info("[UI:%s] %s", category, text)
 
     @pyqtSlot(str, result="QVariant")
     def admin_set_screensaver_camera(self, camera: str) -> dict:
@@ -2937,6 +2988,9 @@ def main() -> None:
                         LOGGER.info("[Proximity] Greeting active on camera %d", config.CAMERA_DEVICE_ID)
                     else:
                         LOGGER.warning("[Proximity] Camera not available. App continues normally.")
+                    # The page read the camera state before this start; tell it the real one
+                    if isinstance(_api, Api):
+                        _api.camera_running_changed.emit(bool(started))
         try:
             view.loadFinished.disconnect(_start_services_on_load)
         except TypeError:
@@ -3183,6 +3237,11 @@ def main() -> None:
             LOGGER.info("Screen lock prevention enabled (SetThreadExecutionState)")
         except Exception as exc:
             LOGGER.warning("Failed to prevent screen lock: %s", exc)
+
+    # Which cameras/speakers the OS offers right now, and any hot-plug while running.
+    # Keep a reference so the watcher is not garbage-collected.
+    media_diagnostics.log_media_snapshot("Startup")
+    app._media_watcher = media_diagnostics.MediaDeviceWatcher(app)
 
     try:
         sys.exit(app.exec())

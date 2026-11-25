@@ -389,7 +389,7 @@
                     <div class="adm-toggle-row" style="margin-bottom:8px;">
                         <span class="adm-toggle-row__label">Device</span>
                         <div style="display:flex;gap:6px;flex:1;align-items:center;">
-                            <select id="admin-camera-select" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem;background:#fff;color:#333;">
+                            <select id="admin-camera-select" class="browser-default" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem;background:#fff;color:#333;">
                                 <option value="-1">Click refresh to scan</option>
                             </select>
                             <button class="adm-btn adm-btn--secondary" id="admin-camera-refresh-btn" type="button" style="font-size:12px;padding:5px 8px;white-space:nowrap;" title="Scan for cameras">
@@ -495,12 +495,16 @@
                         <button class="adm-toggle" id="admin-screensaver-sound-toggle" type="button"></button>
                     </div>
                     <div id="admin-screensaver-camera-row">
-                        <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Camera <span style="font-weight:400;color:#999;">(wake = person closes the video; sound = person turns sound on)</span></p>
+                        <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Camera</p>
                         <div class="adm-opt-group">
-                            <button class="adm-opt adm-ss-camera-opt" data-val="off" type="button">Off</button>
-                            <button class="adm-opt adm-ss-camera-opt" data-val="wake" type="button">Wake</button>
-                            <button class="adm-opt adm-ss-camera-opt" data-val="sound" type="button">Sound</button>
+                            <button class="adm-opt adm-ss-camera-opt" data-val="off" type="button"
+                                    data-hint="Camera not used. The video plays until someone touches the screen or scans.">Off</button>
+                            <button class="adm-opt adm-ss-camera-opt" data-val="wake" type="button"
+                                    data-hint="When the camera detects a person, the video closes and the scan screen is ready. It returns after they leave.">Wake</button>
+                            <button class="adm-opt adm-ss-camera-opt" data-val="sound" type="button"
+                                    data-hint="The video keeps playing silently. When the camera detects a person, the sound fades in; it fades out after they leave.">Sound</button>
                         </div>
+                        <p id="admin-ss-camera-hint" style="font-size:0.72rem;color:#999;margin:6px 0 0;"></p>
                     </div>
                     <div class="adm-toggle-row" style="margin-top:16px;">
                         <span class="adm-toggle-row__label">Hold Screen (pre-event)</span>

@@ -71,6 +71,10 @@ class ProximityDetector:
         self._detection_callbacks: List[Callable[[], None]] = []
         self._last_detection_method: Optional[str] = None
         self._last_faces: Optional[list] = None  # face rectangles for overlay
+        # Faces YuNet saw but rejected as too small: (widest px, frame px, score). Logged
+        # throttled, so "camera works but never detects me" shows the real cause in the log.
+        self._last_reject: Optional[tuple] = None
+        self._last_reject_log = 0.0
 
         # Detection backends
         self._yunet = None
@@ -191,6 +195,8 @@ class ProximityDetector:
         if valid:
             self._last_faces = valid
             return True
+        widest = max(faces, key=lambda f: f[2])
+        self._last_reject = (int(widest[2]), w, float(widest[-1]))
         return False
 
     def _detect_haar_face(self, frame: np.ndarray) -> bool:
@@ -311,6 +317,7 @@ class ProximityDetector:
         # Chain: YuNet face → upper body → frontal face Haar → motion
         person_in_frame = False
         self._last_faces = None
+        self._last_reject = None
 
         if self._use_yunet:
             if self._detect_yunet_face(det_frame):
@@ -382,6 +389,14 @@ class ProximityDetector:
 
         # No person in frame — reset consecutive counter
         self._consecutive_detections = 0
+
+        # A face was seen but is too small to count: say so (at most every 5 s)
+        if self._last_reject is not None and current_time - self._last_reject_log >= 5.0:
+            self._last_reject_log = current_time
+            fw, frame_w, score = self._last_reject
+            LOGGER.info("[Proximity] Face seen but too small: %d px = %.0f%% of frame width "
+                        "(needs >= %.0f%%, score %.2f) - step closer or lower CAMERA_MIN_SIZE_PCT",
+                        fw, 100.0 * fw / frame_w, self.min_size_pct * 100, score)
 
         # Check if absent long enough to reset presence state
         if self._presence_state == "present":

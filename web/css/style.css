@@ -1104,10 +1104,12 @@ body.dashboard-open {
     gap: 32px;
 }
 
+/* Number on top, its label underneath */
 .dash__stat {
     display: flex;
-    align-items: baseline;
-    gap: 8px;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
 }
 
 .dash__stat-value {
@@ -1115,6 +1117,7 @@ body.dashboard-open {
     font-weight: 700;
     color: #1D1D1D;
     font-variant-numeric: tabular-nums;
+    line-height: 1;
 }
 
 .dash__stat-label {
@@ -1583,6 +1586,9 @@ body.dashboard-open {
 }
 .adm-opt:hover { background: #d0d0d0; }
 .adm-opt.active { border-color: #86bc25; background: rgba(134,188,37,0.12); color: #86bc25; font-weight: 600; }
+.adm-opt:disabled { opacity: 0.45; cursor: not-allowed; }
+.adm-opt:disabled:hover { background: #e0e0e0; }
+.adm-opt.active:disabled:hover { background: rgba(134,188,37,0.12); }
 
 /* ---- Admin Status Text ---- */
 .adm-status {
