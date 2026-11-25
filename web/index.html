@@ -17,6 +17,11 @@
 </head>
 
 <body class="party-bg">
+    <!-- Idle screensaver: video loads only while shown; any input dismisses it -->
+    <div id="screensaver" class="screensaver" aria-hidden="true">
+        <video id="screensaver-video" loop playsinline preload="none" data-src="videos/checkin-guide.webm"></video>
+        <img id="screensaver-image" alt="" src="images/checkin-key-visual.jpg">
+    </div>
     <header>
         <div class="header-inner">
             <h1>Station : <span id="station-name">--</span></h1>
@@ -467,6 +472,49 @@
                     <div class="adm-toggle-row" style="margin-top:8px;">
                         <span class="adm-toggle-row__label">Background Image</span>
                         <button class="adm-toggle" id="admin-party-bg-toggle" type="button"></button>
+                    </div>
+                    <div class="adm-toggle-row" style="margin-top:8px;">
+                        <span class="adm-toggle-row__label">Idle Video Screensaver</span>
+                        <button class="adm-toggle" id="admin-screensaver-toggle" type="button"></button>
+                    </div>
+                    <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Screensaver shows</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-ss-content-opt" data-val="video" type="button">Video</button>
+                        <button class="adm-opt adm-ss-content-opt" data-val="image" type="button">Image</button>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Start After</span>
+                        <div class="adm-slider-wrap" data-default="60" data-min="5" data-max="300" data-key="screensaver_idle_s">
+                            <input type="range" class="adm-slider" id="admin-screensaver-idle-slider" min="5" max="300" value="60" step="5" style="--fill:18.6%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.186;" title="Default: 60s"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-screensaver-idle-value">60 sec</span>
+                    </div>
+                    <div class="adm-toggle-row" style="margin-top:8px;">
+                        <span class="adm-toggle-row__label">Screensaver Sound</span>
+                        <button class="adm-toggle" id="admin-screensaver-sound-toggle" type="button"></button>
+                    </div>
+                    <div id="admin-screensaver-camera-row">
+                        <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Camera <span style="font-weight:400;color:#999;">(wake = person closes the video; sound = person turns sound on)</span></p>
+                        <div class="adm-opt-group">
+                            <button class="adm-opt adm-ss-camera-opt" data-val="off" type="button">Off</button>
+                            <button class="adm-opt adm-ss-camera-opt" data-val="wake" type="button">Wake</button>
+                            <button class="adm-opt adm-ss-camera-opt" data-val="sound" type="button">Sound</button>
+                        </div>
+                    </div>
+                    <div class="adm-toggle-row" style="margin-top:16px;">
+                        <span class="adm-toggle-row__label">Hold Screen (pre-event)</span>
+                        <button class="adm-toggle" id="admin-hold-toggle" type="button"></button>
+                    </div>
+                    <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Hold shows <span style="font-weight:400;color:#999;">(Esc releases it for good; Ctrl+Shift+H turns it back on)</span></p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-hold-content-opt" data-val="image" type="button">Image</button>
+                        <button class="adm-opt adm-hold-content-opt" data-val="video" type="button">Video</button>
+                    </div>
+                    <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Scans while held <span style="font-weight:400;color:#999;">(accept = recorded, result shown, then back to hold)</span></p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-hold-scans-opt" data-val="accept" type="button">Accept</button>
+                        <button class="adm-opt adm-hold-scans-opt" data-val="block" type="button">Block</button>
                     </div>
                 </div>
                 <div class="adm-section">

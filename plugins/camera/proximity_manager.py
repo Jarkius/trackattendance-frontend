@@ -34,6 +34,7 @@ class ProximityGreetingManager:
         min_size_pct: float = 0.20,
         haar_min_neighbors: int = 5,
         detection_scale: float = 1.0,
+        presence_callback=None,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
@@ -48,6 +49,9 @@ class ProximityGreetingManager:
         self._detection_scale = detection_scale
         self._show_overlay = show_overlay
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
+        # Called as presence_callback(bool) from the camera thread on present/empty changes
+        self._presence_callback = presence_callback
+        self._last_presence = False
 
         self._cap = None  # cv2.VideoCapture
         self._detector = None  # ProximityDetector
@@ -195,6 +199,17 @@ class ProximityGreetingManager:
         if self._greeting_player:
             self._greeting_player.play_random()
 
+    def _notify_presence(self, present: bool) -> None:
+        """Report presence changes (independent of greeting suppression)."""
+        if present == self._last_presence:
+            return
+        self._last_presence = present
+        if self._presence_callback is not None:
+            try:
+                self._presence_callback(present)
+            except Exception as exc:
+                LOGGER.warning("[Proximity] Presence callback failed: %s", exc)
+
     def _camera_loop(self) -> None:
         """Read frames and feed to ProximityDetector + overlay (runs in daemon thread)."""
         import cv2
@@ -228,6 +243,7 @@ class ProximityGreetingManager:
             # During scan-busy window, show "empty" (green) regardless of detection
             # to match actual greeting behavior (suppressed while queue active)
             raw_state = detector.presence_state
+            self._notify_presence(raw_state == "present")
             cur_state = "empty" if time.time() < self._busy_until else raw_state
             if cur_state != prev_state:
                 prev_state = cur_state
@@ -263,6 +279,7 @@ class ProximityGreetingManager:
     def stop(self) -> None:
         """Stop camera — immediate UI cleanup, deferred resource release."""
         self._running = False
+        self._notify_presence(False)  # camera off: nobody is "present" any more
 
         # Hide overlay but keep reference alive — camera thread may have
         # queued invokeMethod calls that need a live QObject to land on.

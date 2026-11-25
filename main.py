@@ -44,6 +44,7 @@ from PyQt6.QtCore import QCoreApplication, QEventLoop, QEasingCurve, QObject, QP
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings
 import requests
 
 from attendance import AttendanceService
@@ -722,6 +723,10 @@ class Api(QObject):
     # _on_manual_sync_result() for the full async ack+signal contract.
     sync_now_completed = pyqtSignal("QVariant")
 
+    # True when the camera sees someone in front of the station, False when they leave.
+    # Emitted from the camera thread; Qt delivers it to the UI thread (queued).
+    presence_changed = pyqtSignal(bool)
+
     def __init__(
         self,
         service: AttendanceService,
@@ -773,6 +778,7 @@ class Api(QObject):
             "haar_min_neighbors": config.CAMERA_HAAR_MIN_NEIGHBORS,
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
+            "screensaver_idle_s": config.SCREENSAVER_IDLE_SECONDS,
         }
         # Emit initial state so the UI can bind immediately
         QTimer.singleShot(0, lambda: self.connection_status_changed.emit(self._last_connection_result))
@@ -1592,6 +1598,14 @@ class Api(QObject):
             "monitoring_mode": config.CLOUD_READ_ONLY,
             "immediate_sync_enabled": config.IMMEDIATE_SYNC_ENABLED,
             "show_party_background": config.SHOW_PARTY_BACKGROUND,
+            "screensaver_enabled": config.SCREENSAVER_ENABLED,
+            "screensaver_idle_seconds": config.SCREENSAVER_IDLE_SECONDS,
+            "screensaver_muted": config.SCREENSAVER_MUTED,
+            "screensaver_content": config.SCREENSAVER_CONTENT,
+            "hold_enabled": config.HOLD_ENABLED,
+            "hold_content": config.HOLD_CONTENT,
+            "hold_scans": config.HOLD_SCANS,
+            "screensaver_camera": config.SCREENSAVER_CAMERA,
             "log_level": config.LOGGING_LEVEL,
             "console_logging": config.LOGGING_CONSOLE,
             "debug_panel": _debug_log_buffer in logging.getLogger().handlers,
@@ -1828,6 +1842,41 @@ class Api(QObject):
         if v is not None:
             config.SHOW_PARTY_BACKGROUND = v.lower() in ("true", "1")
             count += 1
+        v = db.get_meta("setting:screensaver_enabled")
+        if v is not None:
+            config.SCREENSAVER_ENABLED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:screensaver_idle_seconds")
+        if v is not None:
+            try:
+                config.SCREENSAVER_IDLE_SECONDS = max(5, min(600, int(float(v))))
+                count += 1
+            except ValueError:
+                LOGGER.warning("Ignoring invalid saved screensaver_idle_seconds: %r", v)
+        v = db.get_meta("setting:screensaver_muted")
+        if v is not None:
+            config.SCREENSAVER_MUTED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:screensaver_content")
+        if v in ("video", "image"):
+            config.SCREENSAVER_CONTENT = v
+            count += 1
+        v = db.get_meta("setting:hold_enabled")
+        if v is not None:
+            config.HOLD_ENABLED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:hold_content")
+        if v in ("image", "video"):
+            config.HOLD_CONTENT = v
+            count += 1
+        v = db.get_meta("setting:hold_scans")
+        if v in ("accept", "block"):
+            config.HOLD_SCANS = v
+            count += 1
+        v = db.get_meta("setting:screensaver_camera")
+        if v in ("off", "wake", "sound"):
+            config.SCREENSAVER_CAMERA = v
+            count += 1
         # API key from SQLite (Option B: allows setting key without .env)
         if not config.CLOUD_API_KEY:
             v = db.get_meta("setting:cloud_api_key")
@@ -1945,6 +1994,79 @@ class Api(QObject):
         self._save_setting("show_party_background", str(enabled))
         LOGGER.info("[Admin] Party background %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_screensaver(self, enabled: bool) -> dict:
+        """Toggle the idle video screensaver. Persisted across restarts."""
+        config.SCREENSAVER_ENABLED = enabled
+        self._save_setting("screensaver_enabled", str(enabled))
+        LOGGER.info("[Admin] Screensaver %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_screensaver_idle(self, seconds: int) -> dict:
+        """Set seconds of inactivity before the screensaver starts. Persisted."""
+        seconds = max(5, min(600, seconds))
+        config.SCREENSAVER_IDLE_SECONDS = seconds
+        self._save_setting("screensaver_idle_seconds", str(seconds))
+        LOGGER.info("[Admin] Screensaver idle time set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_screensaver_muted(self, muted: bool) -> dict:
+        """Mute/unmute the screensaver video. Persisted across restarts."""
+        config.SCREENSAVER_MUTED = muted
+        self._save_setting("screensaver_muted", str(muted))
+        LOGGER.info("[Admin] Screensaver %s", "muted" if muted else "sound on")
+        return {"ok": True, "value": muted}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_screensaver_content(self, content: str) -> dict:
+        """What the idle screensaver shows: 'video' or 'image'. Persisted."""
+        if content not in ("video", "image"):
+            return {"ok": False, "message": "Invalid content"}
+        config.SCREENSAVER_CONTENT = content
+        self._save_setting("screensaver_content", content)
+        LOGGER.info("[Admin] Screensaver content set to %s", content)
+        return {"ok": True, "value": content}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_hold(self, enabled: bool) -> dict:
+        """Turn the pre-event hold screen on/off. Esc on the kiosk turns it off for good. Persisted."""
+        config.HOLD_ENABLED = enabled
+        self._save_setting("hold_enabled", str(enabled))
+        LOGGER.info("[Admin] Hold screen %s", "ON" if enabled else "released")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_hold_content(self, content: str) -> dict:
+        """What the hold screen shows: 'image' or 'video'. Persisted."""
+        if content not in ("image", "video"):
+            return {"ok": False, "message": "Invalid content"}
+        config.HOLD_CONTENT = content
+        self._save_setting("hold_content", content)
+        LOGGER.info("[Admin] Hold content set to %s", content)
+        return {"ok": True, "value": content}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_hold_scans(self, policy: str) -> dict:
+        """Scans while the hold screen is up: 'accept' (record + show result) or 'block'. Persisted."""
+        if policy not in ("accept", "block"):
+            return {"ok": False, "message": "Invalid policy"}
+        config.HOLD_SCANS = policy
+        self._save_setting("hold_scans", policy)
+        LOGGER.info("[Admin] Hold scans set to %s", policy)
+        return {"ok": True, "value": policy}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_screensaver_camera(self, camera: str) -> dict:
+        """How the camera drives the video: 'off', 'wake' or 'sound'. Persisted."""
+        if camera not in ("off", "wake", "sound"):
+            return {"ok": False, "message": "Invalid camera mode"}
+        config.SCREENSAVER_CAMERA = camera
+        self._save_setting("screensaver_camera", camera)
+        LOGGER.info("[Admin] Screensaver camera mode set to %s", camera)
+        return {"ok": True, "value": camera}
 
     @pyqtSlot(str, result="QVariant")
     def admin_set_log_level(self, level: str) -> dict:
@@ -2207,6 +2329,14 @@ class Api(QObject):
             "ENABLE_FADE_ANIMATION": config.ENABLE_FADE_ANIMATION,
             "SHOW_PARTY_BACKGROUND": config.SHOW_PARTY_BACKGROUND,
             "CONFETTI_ENABLED": config.CONFETTI_ENABLED,
+            "SCREENSAVER_ENABLED": config.SCREENSAVER_ENABLED,
+            "SCREENSAVER_IDLE_SECONDS": config.SCREENSAVER_IDLE_SECONDS,
+            "SCREENSAVER_MUTED": config.SCREENSAVER_MUTED,
+            "SCREENSAVER_CONTENT": config.SCREENSAVER_CONTENT,
+            "HOLD_ENABLED": config.HOLD_ENABLED,
+            "HOLD_CONTENT": config.HOLD_CONTENT,
+            "HOLD_SCANS": config.HOLD_SCANS,
+            "SCREENSAVER_CAMERA": config.SCREENSAVER_CAMERA,
             "AUTO_EXPORT_ON_SHUTDOWN": config.AUTO_EXPORT_ON_SHUTDOWN,
             "DUPLICATE_BADGE_DETECTION_ENABLED": config.DUPLICATE_BADGE_DETECTION_ENABLED,
             "DUPLICATE_BADGE_TIME_WINDOW_SECONDS": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
@@ -2513,6 +2643,10 @@ def initialize_app(
 
     view = QWebEngineView()
     view.page().setBackgroundColor(Qt.GlobalColor.transparent)
+    # The idle screensaver video autoplays with no user gesture
+    view.settings().setAttribute(
+        QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False
+    )
 
     animation = QPropertyAnimation(window, b"windowOpacity")
     animation.setDuration(400)
@@ -2720,6 +2854,13 @@ def main() -> None:
                     min_size_pct=config.CAMERA_MIN_SIZE_PCT,
                     haar_min_neighbors=config.CAMERA_HAAR_MIN_NEIGHBORS,
                     detection_scale=config.CAMERA_DETECTION_SCALE,
+                    # Gated at call time so the admin toggle takes effect without a restart
+                    presence_callback=(
+                        (lambda present: api_object.presence_changed.emit(present)
+                         if config.SCREENSAVER_CAMERA != "off" else None)
+                        if isinstance(api_object, Api)
+                        else None
+                    ),
                 )
                 LOGGER.info("[Proximity] Plugin loaded")
                 # Wire proximity manager into the API so scans suppress greetings

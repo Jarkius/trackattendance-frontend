@@ -281,6 +281,37 @@ ENABLE_FADE_ANIMATION = os.getenv("ENABLE_FADE_ANIMATION", "True").lower() in ("
 # Party/Event background image
 SHOW_PARTY_BACKGROUND = os.getenv("SHOW_PARTY_BACKGROUND", "True").lower() in ("true", "1", "yes")
 
+# Full-screen display (still image web/images/checkin-key-visual.jpg, or the video loop
+# web/videos/checkin-guide.webm). Two independent uses; all of it is also in the admin panel.
+#
+# 1) IDLE SCREENSAVER (during the event)  - SCREENSAVER_ENABLED
+#    After SCREENSAVER_IDLE_SECONDS without input the content appears; any key/click/touch/
+#    mouse move closes it, and it comes back after the next idle period.
+#    SCREENSAVER_CAMERA (needs ENABLE_CAMERA_DETECTION):
+#       off    ignore the camera
+#       wake   a person walking up closes it and it won't restart while someone is there
+#       sound  video keeps looping; sound fades in when a person is seen, out when they leave
+#
+# 2) HOLD SCREEN (before the event opens)  - HOLD_ENABLED
+#    Appears at once and stays. Esc releases it FOR GOOD (saved; it does not come back on a
+#    timeout or after a reboot). Ctrl+Shift+H, or the admin toggle, turns it on again.
+#    HOLD_SCANS: accept = a badge scan is recorded, its normal result is shown for a few
+#                seconds, then the hold screen returns;  block = scans are ignored.
+def _choice(name: str, default: str, allowed: tuple) -> str:
+    value = os.getenv(name, default).strip().lower()
+    return value if value in allowed else default
+
+
+SCREENSAVER_ENABLED = os.getenv("SCREENSAVER_ENABLED", "False").lower() in ("true", "1", "yes")
+SCREENSAVER_CONTENT = _choice("SCREENSAVER_CONTENT", "video", ("video", "image"))
+SCREENSAVER_CAMERA = _choice("SCREENSAVER_CAMERA", "wake", ("off", "wake", "sound"))
+SCREENSAVER_IDLE_SECONDS = max(5, int(os.getenv("SCREENSAVER_IDLE_SECONDS", "60")))
+# True = play the video silently
+SCREENSAVER_MUTED = os.getenv("SCREENSAVER_MUTED", "False").lower() in ("true", "1", "yes")
+HOLD_ENABLED = os.getenv("HOLD_ENABLED", "False").lower() in ("true", "1", "yes")
+HOLD_CONTENT = _choice("HOLD_CONTENT", "image", ("image", "video"))
+HOLD_SCANS = _choice("HOLD_SCANS", "accept", ("accept", "block"))
+
 # Confetti burst on a successful (matched, non-duplicate) scan. Off by default
 # so the new visual doesn't surprise anyone until explicitly enabled.
 CONFETTI_ENABLED = os.getenv("CONFETTI_ENABLED", "False").lower() in ("true", "1", "yes")
