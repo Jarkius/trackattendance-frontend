@@ -54,6 +54,7 @@ from dashboard import DashboardService
 from qt_bridge import call_without_freezing_ui
 import config
 import media_diagnostics
+import screensaver_media
 from version import __version__
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
@@ -125,6 +126,11 @@ def _voices_dir() -> Path:
     return RESOURCE_ROOT / "assets" / "voices"
 
 VOICES_DIRECTORY = _voices_dir()
+
+# Full-screen display content: media/ next to the .exe (per event, not committed) first,
+# then the neutral defaults bundled in assets/media. See screensaver_media.py.
+EVENT_MEDIA_DIRECTORY = EXEC_ROOT / "media"
+BUILTIN_MEDIA_DIRECTORY = RESOURCE_ROOT / "assets" / "media"
 
 DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
@@ -2094,6 +2100,19 @@ class Api(QObject):
         self._save_setting("hold_scans", policy)
         LOGGER.info("[Admin] Hold scans set to %s", policy)
         return {"ok": True, "value": policy}
+
+    @pyqtSlot(result="QVariant")
+    def get_screensaver_media(self) -> dict:
+        """Video/image candidates for the full-screen display, event media/ folder first.
+
+        The page tries each list in order and keeps the first file its engine can play.
+        """
+        media = screensaver_media.resolve_screensaver_media(
+            EVENT_MEDIA_DIRECTORY, BUILTIN_MEDIA_DIRECTORY)
+        LOGGER.info("[Media] Screensaver candidates (%s): %s",
+                    EVENT_MEDIA_DIRECTORY, screensaver_media.describe(media))
+        media["folder"] = str(EVENT_MEDIA_DIRECTORY)
+        return media
 
     _CLIENT_LOG_CATEGORIES = ("screensaver", "camera", "audio")
 

@@ -20,6 +20,7 @@ a = Analysis(
         ('.env', '.'),
         ('web', 'web'),
         ('assets/voices', 'assets/voices'),
+        ('assets/media', 'assets/media'),  # neutral screensaver defaults; event files go in media/
         ('plugins/camera/models', 'plugins/camera/models'),
         ('plugins/camera/greetings', 'plugins/camera/greetings'),
     ] + certifi_datas + haar_datas,

@@ -281,8 +281,9 @@ ENABLE_FADE_ANIMATION = os.getenv("ENABLE_FADE_ANIMATION", "True").lower() in ("
 # Party/Event background image
 SHOW_PARTY_BACKGROUND = os.getenv("SHOW_PARTY_BACKGROUND", "True").lower() in ("true", "1", "yes")
 
-# Full-screen display (still image web/images/checkin-key-visual.jpg, or the video loop
-# web/videos/checkin-guide.webm). Two independent uses; all of it is also in the admin panel.
+# Full-screen display (a still image or a video loop). Files come from media/ next to the
+# .exe (per event; newest file first), else the neutral defaults in assets/media; see
+# screensaver_media.py. Two independent uses; all of it is also in the admin panel.
 #
 # 1) IDLE SCREENSAVER (during the event)  - SCREENSAVER_ENABLED
 #    After SCREENSAVER_IDLE_SECONDS without input the content appears; any key/click/touch/

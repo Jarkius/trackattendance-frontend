@@ -2337,6 +2337,11 @@ ${destination}` : message;
     const screensaver = (() => {
         const el = document.getElementById('screensaver');
         const video = document.getElementById('screensaver-video');
+        const image = document.getElementById('screensaver-image');
+        // File URLs that passed the startup playability check (setMedia); null = none usable.
+        // mediaReady stays false until that check finishes, so nothing shows half-loaded.
+        const media = { video: null, image: null };
+        let mediaReady = false;
         const HOLD_RETURN_MS = 8000;   // how long a scan's result stays up before the hold returns
         const cfg = { enabled: false, content: 'video', idleMs: 60000, muted: false,
                       camera: 'wake', cameraAvailable: true, cameraRunning: true,
@@ -2364,7 +2369,14 @@ ${destination}` : message;
         const camera = () => (cfg.cameraAvailable && cfg.cameraRunning ? cfg.camera : 'off');
         const wakesOnCamera = () => camera() === 'wake';
         const isActive = () => kind !== null;
-        const contentFor = (k) => ((k === 'hold' ? cfg.holdContent : cfg.content) === 'image' ? 'image' : 'video');
+        // What k ('hold' | 'idle') shows: the chosen kind if a usable file exists, otherwise
+        // the other kind, otherwise null (nothing to show; the overlay stays down)
+        const contentFor = (k) => {
+            const wanted = (k === 'hold' ? cfg.holdContent : cfg.content) === 'image' ? 'image' : 'video';
+            if (media[wanted]) return wanted;
+            const other = wanted === 'video' ? 'image' : 'video';
+            return media[other] ? other : null;
+        };
         const blockedByOverlay = () => !!document.querySelector(
             '.admin-overlay--visible, .dashboard-overlay--visible, .lookup-overlay--visible'
         );
@@ -2407,7 +2419,7 @@ ${destination}` : message;
             log(`show ${k} content=${content} idleMs=${cfg.idleMs} ${snapshot()}`);
             el.dataset.content = content;
             if (content === 'video') {
-                video.src = video.dataset.src;
+                video.src = media.video;
                 applySound(true);
                 const p = video.play();
                 if (p && p.catch) p.catch((err) => {
@@ -2431,6 +2443,8 @@ ${destination}` : message;
         const show = () => {
             if (!el || isActive()) return;
             if (blockedByOverlay()) { skip('an overlay (admin/dashboard/lookup) is open'); arm(); return; }
+            if (!mediaReady) { skip('media check not finished'); arm(); return; }
+            if (!contentFor(cfg.hold ? 'hold' : 'idle')) { skip('no usable video or image'); arm(); return; }
             if (cfg.hold) { present('hold'); return; }
             if (!cfg.enabled) { skip('screensaver disabled'); arm(); return; }
             if (wakesOnCamera() && personPresent) { skip('camera sees a person (wake mode)'); arm(); return; }
@@ -2543,6 +2557,15 @@ ${destination}` : message;
             },
             setIdleSeconds(sec) { cfg.idleMs = Math.max(5, Number(sec)) * 1000; if (!cfg.hold) arm(); },
             setMuted(m) { cfg.muted = !!m; if (isActive() && contentFor(kind) === 'video') applySound(false); },
+            // Usable file URLs after the startup check: { video: url|null, image: url|null }
+            setMedia(m) {
+                media.video = m.video || null;
+                media.image = m.image || null;
+                if (media.image) image.src = media.image; else image.removeAttribute('src');
+                mediaReady = true;
+                log(`media ready: video=${media.video ? 'yes' : 'none'} image=${media.image ? 'yes' : 'none'}`);
+                reapply();
+            },
             // Camera detection switched on/off (kiosk button, admin toggle, startup)
             setCameraRunning(running) {
                 if (cfg.cameraRunning === !!running) return;
@@ -2571,6 +2594,95 @@ ${destination}` : message;
             if (bridge.admin_set_hold) bridge.admin_set_hold(on, () => {});
         });
     };
+    // ── Screensaver media: which video/image the full-screen display can really use ──
+    // The app lists candidates (event media/ folder first, then the built-in neutral
+    // default); only this engine knows what it can play (a normal MP4, H.264/AAC, cannot),
+    // so each candidate is loaded once here and the first that works is kept.
+    const MEDIA_PROBE_TIMEOUT_MS = 15000;
+    const probeMedia = (kind, url) => new Promise((resolve) => {
+        let settled = false;
+        let probe = null;
+        const finish = (ok, why) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (kind === 'video' && probe) { probe.removeAttribute('src'); probe.load(); }
+            resolve({ ok, why });
+        };
+        const timer = setTimeout(() => finish(false, 'did not load in time'), MEDIA_PROBE_TIMEOUT_MS);
+        if (kind === 'video') {
+            probe = document.createElement('video');
+            probe.preload = 'metadata';
+            probe.muted = true;
+            probe.addEventListener('loadedmetadata', () => (probe.videoWidth > 0
+                ? finish(true, '') : finish(false, 'no playable video track')), { once: true });
+            probe.addEventListener('error', () => finish(false, probe.error && probe.error.code === 4
+                ? 'format not supported by the kiosk (an MP4 is usually H.264; convert it to WebM)'
+                : `cannot be read (error ${probe.error && probe.error.code})`), { once: true });
+            probe.src = url;
+        } else {
+            probe = new Image();
+            probe.onload = () => finish(true, '');
+            probe.onerror = () => finish(false, 'cannot be read as an image');
+            probe.src = url;
+        }
+    });
+    const pickPlayable = async (kind, candidates) => {
+        const rejected = [];
+        for (const cand of candidates || []) {
+            const { ok, why } = await probeMedia(kind, cand.url);
+            queueOrRun((bridge) => {
+                if (bridge.log_client_event) bridge.log_client_event('screensaver',
+                    `media ${kind} ${cand.name} (${cand.source}): ${ok ? 'OK' : 'REJECTED - ' + why}`);
+            });
+            if (ok) return { chosen: cand, rejected };
+            rejected.push({ ...cand, why });
+        }
+        return { chosen: null, rejected };
+    };
+    // Admin: say what is in use, grey out what has no usable file, explain rejections
+    const showScreensaverMediaInAdmin = (video, image, folder) => {
+        const status = document.getElementById('admin-media-status');
+        const has = { video: !!video.chosen, image: !!image.chosen };
+        document.querySelectorAll('.adm-ss-content-opt, .adm-hold-content-opt').forEach((btn) => {
+            const ok = has[btn.dataset.val];
+            btn.disabled = !ok;
+            btn.title = ok ? '' : `No usable ${btn.dataset.val} found`;
+        });
+        const none = !has.video && !has.image;
+        [adminScreensaverToggle, adminHoldToggle].forEach((t) => {
+            if (!t) return;
+            t.disabled = none;
+            t.title = none ? 'No usable video or image found' : '';
+        });
+        if (!status) return;
+        const line = (label, r) => (r.chosen
+            ? `${label}: ${r.chosen.name} (${r.chosen.source})`
+            : `${label}: none`);
+        const lines = [`${line('Video', video)} · ${line('Image', image)}`];
+        [...video.rejected, ...image.rejected].forEach((r) => {
+            lines.push(`${r.name} (${r.source}) was skipped: ${r.why}.`);
+        });
+        if (none) lines.push(`Add a .webm video or a .jpg/.png image to ${folder} and restart.`);
+        else if (!(video.chosen && video.chosen.source === 'media folder')
+                 || !(image.chosen && image.chosen.source === 'media folder')) {
+            lines.push(`Event files go in ${folder}`);
+        }
+        status.textContent = lines.join('\n');
+    };
+    queueOrRun((bridge) => {
+        if (!bridge.get_screensaver_media) { screensaver.setMedia({}); return; }
+        bridge.get_screensaver_media(async (m) => {
+            const video = await pickPlayable('video', m && m.video);
+            const image = await pickPlayable('image', m && m.image);
+            screensaver.setMedia({
+                video: video.chosen && video.chosen.url,
+                image: image.chosen && image.chosen.url,
+            });
+            showScreensaverMediaInAdmin(video, image, (m && m.folder) || 'the media folder');
+        });
+    });
+
     // Arm from persisted settings at startup (admin panel isn't opened on boot)
     queueOrRun((bridge) => {
         if (bridge.presence_changed && bridge.presence_changed.connect) {

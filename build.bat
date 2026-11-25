@@ -35,6 +35,13 @@ if exist "voices\" (
     xcopy /e /i /y /q "voices" "dist\TrackAttendance\voices\" >nul
     echo Included event voices\ folder.
 )
+
+:: Event screensaver media: a repo-root media\ folder (.webm video and/or .jpg/.png
+:: image) is shipped next to the exe, where it is used before the bundled assets\media.
+if exist "media\" (
+    xcopy /e /i /y /q "media" "dist\TrackAttendance\media\" >nul
+    echo Included event media\ folder.
+)
 echo.
 echo Built TrackAttendance v%VER% -^> dist\TrackAttendance
 

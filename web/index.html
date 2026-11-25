@@ -19,8 +19,9 @@
 <body class="party-bg">
     <!-- Idle screensaver: video loads only while shown; any input dismisses it -->
     <div id="screensaver" class="screensaver" aria-hidden="true">
-        <video id="screensaver-video" loop playsinline preload="none" data-src="videos/checkin-guide.webm"></video>
-        <img id="screensaver-image" alt="" src="images/checkin-key-visual.jpg">
+        <!-- Sources come from the app (media/ folder, else assets/media defaults): see setMedia -->
+        <video id="screensaver-video" loop playsinline preload="none"></video>
+        <img id="screensaver-image" alt="">
     </div>
     <header>
         <div class="header-inner">
@@ -477,6 +478,7 @@
                         <span class="adm-toggle-row__label">Idle Video Screensaver</span>
                         <button class="adm-toggle" id="admin-screensaver-toggle" type="button"></button>
                     </div>
+                    <p id="admin-media-status" style="font-size:0.72rem;color:#999;margin:6px 0 0;white-space:pre-line;word-break:break-all;">Checking video and image…</p>
                     <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Screensaver shows</p>
                     <div class="adm-opt-group">
                         <button class="adm-opt adm-ss-content-opt" data-val="video" type="button">Video</button>

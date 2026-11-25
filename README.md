@@ -92,7 +92,7 @@ python main.py
 
 ## 📺 Hold screen & idle screensaver
 
-One full-screen overlay, two independent uses. Content is the still key visual (`web/images/checkin-key-visual.jpg`) or the KV video loop (`web/videos/checkin-guide.webm`). Everything is in the admin panel (**Settings**, next to *Background Image*) and persists across restarts; the `.env` values below are only the starting defaults.
+One full-screen overlay, two independent uses. Content is a still key visual or a video loop, taken from a `media\` folder next to the exe (per event, like `voices\`; `.webm` video, `.jpg/.png` image), else the neutral built-in defaults. A usual MP4 (H.264) does not play in the kiosk: convert it with `scripts\convert-to-webm.bat` (see `docs/CONFIGURATION.md`). Everything is in the admin panel (**Settings**, next to *Background Image*) and persists across restarts; the `.env` values below are only the starting defaults.
 
 **Hold screen (before check-in opens)** — for leaving several kiosks on signage until you are ready.
 - Turn on: admin → Settings → **Hold Screen**, or press `Ctrl+Shift+H` on the kiosk. It appears at once and stays.

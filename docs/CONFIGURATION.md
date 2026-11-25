@@ -73,7 +73,11 @@ Required Excel columns: `Legacy ID`, `Full Name`, `SL L1 Desc`, `Position Desc`.
 
 ## Hold Screen & Idle Screensaver
 
-Full-screen overlay showing a still key visual (`web/images/checkin-key-visual.jpg`) or the KV video loop (`web/videos/checkin-guide.webm`). Two independent uses. All of these are also in the admin panel (Settings) and persist across restarts; a value saved from the admin panel or by pressing Esc overrides `.env`.
+Full-screen overlay showing a still key visual or a video loop. Two independent uses.
+
+**Event content:** put the event's files in a `media\` folder next to `TrackAttendance.exe` (in development: next to `main.py`; `build.bat` ships a repo-root `media\`). Video: `.webm` (or an MP4 encoded as AV1/VP9). Image: `.jpg`, `.png` or `.webp`. Video and image are chosen separately; when several files of a kind are present, the one added most recently is used, and any file the kiosk cannot play is skipped for the next one. Without usable event files the neutral built-in defaults (`assets/media`) are shown. Admin → Settings shows which files are in use and why any were skipped, and greys out Video/Image when none is usable.
+
+**MP4 files:** the kiosk's web engine cannot play the usual MP4 (H.264/AAC). Convert it once on any PC with ffmpeg: `scripts\convert-to-webm.bat input.mp4` (install ffmpeg with `winget install Gyan.FFmpeg`), then put the `.webm` in `media\`. All of these are also in the admin panel (Settings) and persist across restarts; a value saved from the admin panel or by pressing Esc overrides `.env`.
 
 **Idle screensaver** (during the event): appears after the idle time, any input closes it, returns after the next idle period.
 
