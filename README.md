@@ -33,6 +33,7 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - Fully offline — runs without network; syncs when connection returns
 - **Admin control center** (PIN-protected) — sectioned panel with Status, Data Management, and Settings; runtime-tunable sliders for duplicate detection (toggle + alert duration), voice, camera (confirm frames, strictness, reset to defaults), and connection check
 - Welcome animation and configurable party/event background
+- **Hold screen & idle screensaver** — full-screen key visual (still image) or KV video loop. The *hold screen* keeps a kiosk on signage before check-in opens (Esc releases it for good); the *idle screensaver* plays the loop when the station is idle and returns to the kiosk on any input. Optional camera control (a person arriving closes it, or turns the sound on). See [Hold screen & idle screensaver](#-hold-screen--idle-screensaver)
 - **Email field support** — optional `Email` column in roster xlsx (stays local, never synced)
 - **Scan source tracking** — distinguishes badge scans, name lookups, and manual entries (`badge` / `lookup` / `manual`)
 - **Business unit sync to cloud** — BU names synced for the mobile dashboard (organisational labels, not PII)
@@ -87,7 +88,23 @@ python main.py
 
 - Prompts for station name on first launch
 - Opens frameless fullscreen by default
-- Press `Escape` to close (syncs pending scans, exports to Excel, then exits)
+- Press `Escape` to close (syncs pending scans, exports to Excel, then exits). While the hold screen or idle screensaver is showing, `Escape` only dismisses it and does **not** close the app
+
+## 📺 Hold screen & idle screensaver
+
+One full-screen overlay, two independent uses. Content is the still key visual (`web/images/checkin-key-visual.jpg`) or the KV video loop (`web/videos/checkin-guide.webm`). Everything is in the admin panel (**Settings**, next to *Background Image*) and persists across restarts; the `.env` values below are only the starting defaults.
+
+**Hold screen (before check-in opens)** — for leaving several kiosks on signage until you are ready.
+- Turn on: admin → Settings → **Hold Screen**, or press `Ctrl+Shift+H` on the kiosk. It appears at once and stays.
+- Release: press `Escape` on each kiosk. The kiosk goes live and the hold does **not** come back (not on a timeout, not after a reboot). A reboot *before* you release it returns to the hold screen.
+- **Scans while held**: `accept` (default) records the scan, shows the normal result for a few seconds, then returns to the hold screen; `block` ignores scans.
+- Once released, the saved setting wins over `.env`, so re-arm with `Ctrl+Shift+H` or the admin toggle (not by editing `HOLD_ENABLED`).
+
+**Idle screensaver (during the event)** — after `SCREENSAVER_IDLE_SECONDS` without input the content appears; any key, click, touch or mouse move closes it and it returns after the next idle period.
+- **Camera** (needs `ENABLE_CAMERA_DETECTION=True`): `off`, `wake` (a person arriving closes it and it will not restart while someone is in front of the station), or `sound` (the video keeps looping; sound fades in when a person is seen and out after they leave — keeps idle stations quiet in an empty room).
+- For distant people (wide-angle camera) lower `CAMERA_MIN_SIZE_PCT`.
+
+Notes: the video ships as VP9/Opus WebM because the bundled QtWebEngine cannot decode H.264. Set stations to never sleep / turn off the display, or the overlay will not be seen.
 
 ## 📦 Building
 
@@ -221,6 +238,14 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `DUPLICATE_BADGE_ACTION` | `warn` | `warn` / `block` / `silent` |
 | `SHOW_FULL_SCREEN` | `True` | Fullscreen kiosk mode |
 | `SHOW_PARTY_BACKGROUND` | `True` | Festive background image |
+| `SCREENSAVER_ENABLED` | `False` | Idle screensaver: show the content after the idle time (any input closes it) |
+| `SCREENSAVER_CONTENT` | `video` | What the screensaver shows: `video` / `image` |
+| `SCREENSAVER_IDLE_SECONDS` | `60` | Idle seconds before the screensaver appears (min `5`) |
+| `SCREENSAVER_MUTED` | `False` | Play the screensaver video silently |
+| `SCREENSAVER_CAMERA` | `wake` | Camera control (needs camera detection): `off` / `wake` (person arriving closes it) / `sound` (sound fades in with presence) |
+| `HOLD_ENABLED` | `False` | Pre-event hold screen: shows at once, `Escape` releases it for good (saved; later changes use `Ctrl+Shift+H` / admin toggle) |
+| `HOLD_CONTENT` | `image` | What the hold screen shows: `image` / `video` |
+| `HOLD_SCANS` | `accept` | Scans while held: `accept` (recorded, result shown, then back to hold) / `block` (ignored) |
 | `VOICE_ENABLED` | `True` | Voice confirmation on scan |
 | `VOICE_VOLUME` | `1.0` | Playback volume (`0.0`–`1.0`) |
 | `ADMIN_PIN` | *(empty)* | 4-6 digit PIN to enable admin panel (leave empty to disable) |
