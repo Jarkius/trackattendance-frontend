@@ -2336,16 +2336,30 @@ ${destination}` : message;
     // quit the app. Other input is not swallowed (passive), except scans while held+blocked.
     const screensaver = (() => {
         const el = document.getElementById('screensaver');
-        const video = document.getElementById('screensaver-video');
         const image = document.getElementById('screensaver-image');
-        // File URLs that passed the startup playability check (setMedia); null = none usable.
+        // The video plays in a native Qt panel over this page (QtWebEngine cannot decode
+        // H.264 MP4); this controller still decides everything and drives it via the bridge.
+        // media.video: the app found a usable video; media.image: image URL that loaded.
         // mediaReady stays false until that check finishes, so nothing shows half-loaded.
-        const media = { video: null, image: null };
+        const media = { video: false, image: null };
         let mediaReady = false;
+        let volume = 0;                // what the native player was last told (0..1)
+        const nativeVideo = {
+            play: (vol, pauseS) => queueOrRun((bridge) => {
+                if (!bridge.screensaver_video_play) return;
+                bridge.screensaver_video_play(vol, pauseS, (r) => {
+                    if (!(r && r.ok)) { log(`video play refused: ${r && r.message}`); hide('no video'); arm(); }
+                });
+            }),
+            stop: () => queueOrRun((bridge) => { if (bridge.screensaver_video_stop) bridge.screensaver_video_stop(); }),
+            setVolume: (vol) => queueOrRun((bridge) => {
+                if (bridge.screensaver_video_set_volume) bridge.screensaver_video_set_volume(vol);
+            }),
+        };
         const HOLD_RETURN_MS = 8000;   // how long a scan's result stays up before the hold returns
         const cfg = { enabled: false, content: 'video', idleMs: 60000, muted: false,
                       camera: 'wake', cameraAvailable: true, cameraRunning: true,
-                      hold: false, holdContent: 'image', holdScans: 'accept' };
+                      hold: false, holdContent: 'image', holdScans: 'accept', loopPauseS: 0 };
         const hooks = { onHoldChanged: null };
         let kind = null;             // what is on screen: 'hold' | 'idle' | null
         let timer = null;
@@ -2361,7 +2375,7 @@ ${destination}` : message;
             if (bridge.log_client_event) bridge.log_client_event('screensaver', msg);
         });
         const snapshot = () => `kind=${kind} camera=${camera()} muted=${cfg.muted} ` +
-            `personPresent=${personPresent} volume=${video.volume.toFixed(2)}`;
+            `personPresent=${personPresent} volume=${volume.toFixed(2)}`;
         const skip = (why) => { if (why !== lastSkip) { lastSkip = why; log('not shown: ' + why); } };
 
         // Wake/Sound wait for the camera; with no camera set up, or detection switched off,
@@ -2386,17 +2400,17 @@ ${destination}` : message;
         const applySound = (immediate) => {
             clearInterval(fadeTimer);
             const target = soundTarget();
-            video.muted = false;
             log(`sound target=${target} (${immediate ? 'immediate' : 'fade'}) ${snapshot()}`);
-            if (immediate) { video.volume = target; return; }
+            if (immediate) { volume = target; nativeVideo.setVolume(volume); return; }
             fadeTimer = setInterval(() => {
-                const d = target - video.volume;
+                const d = target - volume;
                 if (Math.abs(d) < 0.06) {
-                    video.volume = target; clearInterval(fadeTimer);
+                    volume = target; nativeVideo.setVolume(volume); clearInterval(fadeTimer);
                     log(`sound fade done volume=${target}`);
                     return;
                 }
-                video.volume = Math.max(0, Math.min(1, video.volume + Math.sign(d) * 0.05));
+                volume = Math.max(0, Math.min(1, volume + Math.sign(d) * 0.05));
+                nativeVideo.setVolume(volume);
             }, 100);
         };
 
@@ -2407,34 +2421,22 @@ ${destination}` : message;
             kind = null;
             el.classList.remove('screensaver--active');
             el.setAttribute('aria-hidden', 'true');
-            try { video.pause(); } catch (e) { /* ignore */ }
-            video.removeAttribute('src');   // release the decoder while not playing
-            video.load();
+            nativeVideo.stop();            // harmless when an image was showing
         };
         const present = (k) => {
             kind = k;
             peeking = false;
             lastSkip = '';
             const content = contentFor(k);
+            if (content === 'video') {
+                clearInterval(fadeTimer);
+                volume = soundTarget();    // start at the right level, no jump
+            }
             log(`show ${k} content=${content} idleMs=${cfg.idleMs} ${snapshot()}`);
             el.dataset.content = content;
             if (content === 'video') {
-                video.src = media.video;
-                applySound(true);
-                const p = video.play();
-                if (p && p.catch) p.catch((err) => {
-                    console.warn('Screensaver video failed:', err);
-                    log(`video play() rejected: ${err && err.name}: ${err && err.message}`);
-                    hide('play failed'); arm();
-                });
-                // webkitAudioDecodedByteCount > 0 proves the file's audio is being decoded
-                setTimeout(() => {
-                    if (kind !== k) return;
-                    log(`playback check: paused=${video.paused} muted=${video.muted} ` +
-                        `volume=${video.volume.toFixed(2)} readyState=${video.readyState} ` +
-                        `time=${video.currentTime.toFixed(1)}s ` +
-                        `audioDecodedBytes=${video.webkitAudioDecodedByteCount}`);
-                }, 3000);
+                // Rests silently on the first frame between loops (Admin: Pause between loops)
+                nativeVideo.play(volume, cfg.loopPauseS);
             }
             el.classList.add('screensaver--active');
             el.setAttribute('aria-hidden', 'false');
@@ -2528,18 +2530,24 @@ ${destination}` : message;
         ['keydown', 'mousedown', 'mousemove', 'wheel', 'touchstart', 'pointerdown'].forEach((evt) => {
             document.addEventListener(evt, onActivity, { capture: true, passive: true });
         });
-        video.addEventListener('error', () => {
-            log(`video error code=${video.error && video.error.code} ` +
-                `message=${video.error && video.error.message}`);
-            hide('video error'); arm();
+        // The native player failed mid-play (it has already hidden itself)
+        queueOrRun((bridge) => {
+            if (bridge.screensaver_video_failed && bridge.screensaver_video_failed.connect) {
+                bridge.screensaver_video_failed.connect((why) => {
+                    log(`video failed: ${why}`);
+                    hide('video error'); arm();
+                });
+            }
         });
-        video.addEventListener('playing', () => log(`video playing ${snapshot()}`));
 
         return {
             hooks,
             // Merge any of: enabled, content, muted, idleSeconds, camera, cameraAvailable,
-            //               hold, holdContent, holdScans
+            //               hold, holdContent, holdScans, loopPauseS
             configure(o) {
+                if (o.loopPauseS !== undefined) {
+                    cfg.loopPauseS = Math.max(0, Math.min(300, Number(o.loopPauseS) || 0));
+                }
                 if (o.enabled !== undefined) cfg.enabled = !!o.enabled;
                 if (o.content === 'video' || o.content === 'image') cfg.content = o.content;
                 if (o.muted !== undefined) cfg.muted = !!o.muted;
@@ -2557,9 +2565,10 @@ ${destination}` : message;
             },
             setIdleSeconds(sec) { cfg.idleMs = Math.max(5, Number(sec)) * 1000; if (!cfg.hold) arm(); },
             setMuted(m) { cfg.muted = !!m; if (isActive() && contentFor(kind) === 'video') applySound(false); },
-            // Usable file URLs after the startup check: { video: url|null, image: url|null }
+            // After the startup check: { video: true if the app found a playable video,
+            //                           image: URL of an image that loaded, or null }
             setMedia(m) {
-                media.video = m.video || null;
+                media.video = !!m.video;
                 media.image = m.image || null;
                 if (media.image) image.src = media.image; else image.removeAttribute('src');
                 mediaReady = true;
@@ -2595,42 +2604,29 @@ ${destination}` : message;
         });
     };
     // ── Screensaver media: which video/image the full-screen display can really use ──
-    // The app lists candidates (event media/ folder first, then the built-in neutral
-    // default); only this engine knows what it can play (a normal MP4, H.264/AAC, cannot),
-    // so each candidate is loaded once here and the first that works is kept.
+    // Video: the app picks it with Qt's player (event media/ folder newest first, then the
+    // built-in default) and reports the result; the page never sees a video path.
+    // Image: the app lists candidates and each is loaded here once; the first that works
+    // is kept.
     const MEDIA_PROBE_TIMEOUT_MS = 15000;
-    const probeMedia = (kind, url) => new Promise((resolve) => {
+    const probeImage = (url) => new Promise((resolve) => {
         let settled = false;
-        let probe = null;
         const finish = (ok, why) => {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
-            if (kind === 'video' && probe) { probe.removeAttribute('src'); probe.load(); }
             resolve({ ok, why });
         };
         const timer = setTimeout(() => finish(false, 'did not load in time'), MEDIA_PROBE_TIMEOUT_MS);
-        if (kind === 'video') {
-            probe = document.createElement('video');
-            probe.preload = 'metadata';
-            probe.muted = true;
-            probe.addEventListener('loadedmetadata', () => (probe.videoWidth > 0
-                ? finish(true, '') : finish(false, 'no playable video track')), { once: true });
-            probe.addEventListener('error', () => finish(false, probe.error && probe.error.code === 4
-                ? 'format not supported by the kiosk (an MP4 is usually H.264; convert it to WebM)'
-                : `cannot be read (error ${probe.error && probe.error.code})`), { once: true });
-            probe.src = url;
-        } else {
-            probe = new Image();
-            probe.onload = () => finish(true, '');
-            probe.onerror = () => finish(false, 'cannot be read as an image');
-            probe.src = url;
-        }
+        const probe = new Image();
+        probe.onload = () => finish(true, '');
+        probe.onerror = () => finish(false, 'cannot be read as an image');
+        probe.src = url;
     });
     const pickPlayable = async (kind, candidates) => {
         const rejected = [];
         for (const cand of candidates || []) {
-            const { ok, why } = await probeMedia(kind, cand.url);
+            const { ok, why } = await probeImage(cand.url);
             queueOrRun((bridge) => {
                 if (bridge.log_client_event) bridge.log_client_event('screensaver',
                     `media ${kind} ${cand.name} (${cand.source}): ${ok ? 'OK' : 'REJECTED - ' + why}`);
@@ -2663,24 +2659,29 @@ ${destination}` : message;
         [...video.rejected, ...image.rejected].forEach((r) => {
             lines.push(`${r.name} (${r.source}) was skipped: ${r.why}.`);
         });
-        if (none) lines.push(`Add a .webm video or a .jpg/.png image to ${folder} and restart.`);
+        if (none) lines.push(`Add an .mp4/.webm video or a .jpg/.png image to ${folder} and restart.`);
         else if (!(video.chosen && video.chosen.source === 'media folder')
                  || !(image.chosen && image.chosen.source === 'media folder')) {
             lines.push(`Event files go in ${folder}`);
         }
         status.textContent = lines.join('\n');
     };
+    let screensaverMediaApplied = false;
+    const applyScreensaverMedia = async (m) => {
+        if (!m || m.pending || screensaverMediaApplied) return;   // the app's check still running
+        screensaverMediaApplied = true;
+        const video = { chosen: m.video || null, rejected: m.video_rejected || [] };
+        const image = await pickPlayable('image', m.image);
+        screensaver.setMedia({ video: !!video.chosen, image: image.chosen && image.chosen.url });
+        showScreensaverMediaInAdmin(video, image, m.folder || 'the media folder');
+    };
     queueOrRun((bridge) => {
         if (!bridge.get_screensaver_media) { screensaver.setMedia({}); return; }
-        bridge.get_screensaver_media(async (m) => {
-            const video = await pickPlayable('video', m && m.video);
-            const image = await pickPlayable('image', m && m.image);
-            screensaver.setMedia({
-                video: video.chosen && video.chosen.url,
-                image: image.chosen && image.chosen.url,
-            });
-            showScreensaverMediaInAdmin(video, image, (m && m.folder) || 'the media folder');
-        });
+        // Listen first, then ask: whichever comes first (signal or reply) applies, once
+        if (bridge.screensaver_media_ready && bridge.screensaver_media_ready.connect) {
+            bridge.screensaver_media_ready.connect(applyScreensaverMedia);
+        }
+        bridge.get_screensaver_media(applyScreensaverMedia);
     });
 
     // Arm from persisted settings at startup (admin panel isn't opened on boot)
@@ -2695,6 +2696,7 @@ ${destination}` : message;
                     camera: r.screensaver_camera, muted: !!r.screensaver_muted,
                     idleSeconds: r.screensaver_idle_seconds, cameraAvailable: !!r.camera_enabled,
                     hold: !!r.hold_enabled, holdContent: r.hold_content, holdScans: r.hold_scans,
+                    loopPauseS: r.video_loop_pause_seconds || 0,
                 });
             });
         }
@@ -2830,6 +2832,7 @@ ${destination}` : message;
                         camera: result.screensaver_camera, muted: !!result.screensaver_muted,
                         idleSeconds: result.screensaver_idle_seconds, cameraAvailable: !!result.camera_enabled,
                         hold: !!result.hold_enabled, holdContent: result.hold_content, holdScans: result.hold_scans,
+                        loopPauseS: result.video_loop_pause_seconds || 0,
                     });
                     const markActive = (sel, val) => document.querySelectorAll(sel).forEach(b => {
                         b.classList.toggle('active', b.dataset.val === val);
@@ -2838,6 +2841,8 @@ ${destination}` : message;
                     markActive('.adm-ss-camera-opt', result.screensaver_camera || 'wake');
                     showCameraModeHint();
                     markActive('.adm-hold-content-opt', result.hold_content || 'image');
+                    updateLoopPauseEnabled();
+                    syncSlider(adminLoopPauseSlider, adminLoopPauseValue, result.video_loop_pause_seconds || 0, 0, 300, 'sec');
                     markActive('.adm-hold-scans-opt', result.hold_scans || 'accept');
                     if (adminHoldToggle) adminHoldToggle.classList.toggle('active', !!result.hold_enabled);
                     syncSlider(adminScreensaverIdleSlider, adminScreensaverIdleValue, result.screensaver_idle_seconds || 60, 5, 300, 'sec');
@@ -3152,6 +3157,23 @@ ${destination}` : message;
         });
     }
 
+    // Pause between video loops: screensaver and hold screen. Only meaningful when at least
+    // one of them shows video, so greyed out when both show the image.
+    const adminLoopPauseSlider = document.getElementById('admin-loop-pause-slider');
+    const adminLoopPauseValue = document.getElementById('admin-loop-pause-value');
+    function updateLoopPauseEnabled() {
+        // Runs after bindChooser's handler (registered earlier) has marked the clicked option
+        const usesVideo = !!document.querySelector(
+            '.adm-ss-content-opt.active[data-val="video"], .adm-hold-content-opt.active[data-val="video"]');
+        if (adminLoopPauseSlider) adminLoopPauseSlider.disabled = !usesVideo;
+    }
+    bindSlider(adminLoopPauseSlider, adminLoopPauseValue, 'sec', (v) => {
+        screensaver.configure({ loopPauseS: v });
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_video_loop_pause) bridge.admin_set_video_loop_pause(v, () => {});
+        });
+    });
+
     bindSlider(adminScreensaverIdleSlider, adminScreensaverIdleValue, 'sec', (v) => {
         screensaver.setIdleSeconds(v);
         queueOrRun((bridge) => {
@@ -3215,6 +3237,9 @@ ${destination}` : message;
     });
     bindChooser('.adm-hold-content-opt', 'holdContent', 'admin_set_hold_content');
     bindChooser('.adm-hold-scans-opt', 'holdScans', 'admin_set_hold_scans');
+    document.querySelectorAll('.adm-ss-content-opt, .adm-hold-content-opt').forEach((btn) => {
+        btn.addEventListener('click', updateLoopPauseEnabled);
+    });
     if (adminHoldToggle) {
         adminHoldToggle.addEventListener('click', (e) => {
             e.preventDefault();

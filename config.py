@@ -312,6 +312,9 @@ SCREENSAVER_MUTED = os.getenv("SCREENSAVER_MUTED", "False").lower() in ("true", 
 HOLD_ENABLED = os.getenv("HOLD_ENABLED", "False").lower() in ("true", "1", "yes")
 HOLD_CONTENT = _choice("HOLD_CONTENT", "image", ("image", "video"))
 HOLD_SCANS = _choice("HOLD_SCANS", "accept", ("accept", "block"))
+# Video (idle screensaver and hold screen): seconds to rest on the first frame (silent)
+# between loops, so a looping video with sound is less tiring during an event. 0 = none.
+VIDEO_LOOP_PAUSE_SECONDS = _safe_int("VIDEO_LOOP_PAUSE_SECONDS", 0, min_val=0, max_val=300)
 
 # Confetti burst on a successful (matched, non-duplicate) scan. Off by default
 # so the new visual doesn't surprise anyone until explicitly enabled.

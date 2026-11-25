@@ -92,7 +92,7 @@ python main.py
 
 ## 📺 Hold screen & idle screensaver
 
-One full-screen overlay, two independent uses. Content is a still key visual or a video loop, taken from a `media\` folder next to the exe (per event, like `voices\`; `.webm` video, `.jpg/.png` image), else the neutral built-in defaults. A usual MP4 (H.264) does not play in the kiosk: convert it with `scripts\convert-to-webm.bat` (see `docs/CONFIGURATION.md`). Everything is in the admin panel (**Settings**, next to *Background Image*) and persists across restarts; the `.env` values below are only the starting defaults.
+One full-screen overlay, two independent uses. Content is a still key visual or a video loop, taken from a `media\` folder next to the exe (per event, like `voices\`; `.mp4`/`.webm` video, `.jpg/.png` image), else the neutral built-in defaults. The video can rest on its first frame between loops (*Pause between loops*), on both the screensaver and the hold screen. Everything is in the admin panel (**Settings**, next to *Background Image*) and persists across restarts; the `.env` values below are only the starting defaults.
 
 **Hold screen (before check-in opens)** — for leaving several kiosks on signage until you are ready.
 - Turn on: admin → Settings → **Hold Screen**, or press `Ctrl+Shift+H` on the kiosk. It appears at once and stays.
@@ -245,6 +245,7 @@ All settings are in `config.py` with `.env` override. Key settings:
 | `SCREENSAVER_CAMERA` | `wake` | Camera control (needs camera detection): `off` / `wake` (person arriving closes it) / `sound` (sound fades in with presence) |
 | `HOLD_ENABLED` | `False` | Pre-event hold screen: shows at once, `Escape` releases it for good (saved; later changes use `Ctrl+Shift+H` / admin toggle) |
 | `HOLD_CONTENT` | `image` | What the hold screen shows: `image` / `video` |
+| `VIDEO_LOOP_PAUSE_SECONDS` | `0` | Screensaver and hold screen video: silent pause on the first frame between loops (`0` = none) |
 | `HOLD_SCANS` | `accept` | Scans while held: `accept` (recorded, result shown, then back to hold) / `block` (ignored) |
 | `VOICE_ENABLED` | `True` | Voice confirmation on scan |
 | `VOICE_VOLUME` | `1.0` | Playback volume (`0.0`–`1.0`) |

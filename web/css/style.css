@@ -1633,6 +1633,7 @@ body.dashboard-open {
     margin: 0 !important; padding: 0 !important;
     border: none !important; box-shadow: none !important;
 }
+.adm-slider:disabled { opacity: 0.4; cursor: not-allowed; }
 .adm-slider::-webkit-slider-runnable-track {
     -webkit-appearance: none !important; appearance: none !important;
     height: 8px; border-radius: 4px;
@@ -1758,7 +1759,8 @@ body.dashboard-open {
     user-select: none;
 }
 
-/* Full-screen display: idle screensaver / hold screen. [data-content] picks image or video */
+/* Full-screen display: idle screensaver / hold screen. [data-content] picks image or video.
+   Video plays in a native Qt panel stacked above this black overlay (native_video.py). */
 .screensaver {
     display: none;
     position: fixed;
@@ -1769,12 +1771,11 @@ body.dashboard-open {
 }
 .screensaver.screensaver--active { display: block; }
 .screensaver[data-content="image"] { background: #f5f5f5; }
-.screensaver video, .screensaver img {
+.screensaver img {
     display: none;
     width: 100%;
     height: 100%;
     object-fit: contain;
 }
-.screensaver[data-content="video"] video { display: block; background: #000; }
 .screensaver[data-content="image"] img { display: block; background: #f5f5f5; }
 

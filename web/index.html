@@ -19,8 +19,8 @@
 <body class="party-bg">
     <!-- Idle screensaver: video loads only while shown; any input dismisses it -->
     <div id="screensaver" class="screensaver" aria-hidden="true">
-        <!-- Sources come from the app (media/ folder, else assets/media defaults): see setMedia -->
-        <video id="screensaver-video" loop playsinline preload="none"></video>
+        <!-- Image source comes from the app (media/ folder, else assets/media defaults): see
+             setMedia. Video is not in the page: it plays in a native Qt panel on top. -->
         <img id="screensaver-image" alt="">
     </div>
     <header>
@@ -484,6 +484,15 @@
                         <button class="adm-opt adm-ss-content-opt" data-val="video" type="button">Video</button>
                         <button class="adm-opt adm-ss-content-opt" data-val="image" type="button">Image</button>
                     </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Pause between loops</span>
+                        <div class="adm-slider-wrap" data-default="0" data-min="0" data-max="300" data-key="video_loop_pause_s">
+                            <input type="range" class="adm-slider" id="admin-loop-pause-slider" min="0" max="300" value="0" step="5" style="--fill:0%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0;" title="Default: 0 (loop without a break)"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-loop-pause-value">0 sec</span>
+                    </div>
+                    <p style="font-size:0.72rem;color:#999;margin:4px 0 0;">Video on the screensaver and the hold screen rests silently on its first frame between plays. 0 = loop without a break.</p>
                     <div class="adm-slider-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Start After</span>
                         <div class="adm-slider-wrap" data-default="60" data-min="5" data-max="300" data-key="screensaver_idle_s">

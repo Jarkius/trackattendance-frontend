@@ -75,9 +75,13 @@ Required Excel columns: `Legacy ID`, `Full Name`, `SL L1 Desc`, `Position Desc`.
 
 Full-screen overlay showing a still key visual or a video loop. Two independent uses.
 
-**Event content:** put the event's files in a `media\` folder next to `TrackAttendance.exe` (in development: next to `main.py`; `build.bat` ships a repo-root `media\`). Video: `.webm` (or an MP4 encoded as AV1/VP9). Image: `.jpg`, `.png` or `.webp`. Video and image are chosen separately; when several files of a kind are present, the one added most recently is used, and any file the kiosk cannot play is skipped for the next one. Without usable event files the neutral built-in defaults (`assets/media`) are shown. Admin → Settings shows which files are in use and why any were skipped, and greys out Video/Image when none is usable.
+**Event content:** put the event's files in a `media\` folder next to `TrackAttendance.exe` (in development: next to `main.py`; `build.bat` ships a repo-root `media\`). Video: `.mp4` or `.webm` (it plays in Qt's own media player, which handles the usual H.264/AAC MP4). Image: `.jpg`, `.png` or `.webp`. Video and image are chosen separately; when several files of a kind are present, the one added most recently is used, and any file the kiosk cannot play is skipped for the next one. Without usable event files the neutral built-in defaults (`assets/media`) are shown. Admin → Settings shows which files are in use and why any were skipped, and greys out Video/Image when none is usable.
 
-**MP4 files:** the kiosk's web engine cannot play the usual MP4 (H.264/AAC). Convert it once on any PC with ffmpeg: `scripts\convert-to-webm.bat input.mp4` (install ffmpeg with `winget install Gyan.FFmpeg`), then put the `.webm` in `media\`. All of these are also in the admin panel (Settings) and persist across restarts; a value saved from the admin panel or by pressing Esc overrides `.env`.
+**Video that will not play:** Admin shows why it was skipped. As a fallback, `scripts\convert-to-webm.bat input.mp4` re-encodes it to WebM with ffmpeg (install it with `winget install Gyan.FFmpeg`).
+
+**Pause between loops** (video on the idle screensaver and the hold screen): the video rests silently on its first frame for this many seconds between plays, so a looping video with sound is less tiring during an event. Admin slider, or `VIDEO_LOOP_PAUSE_SECONDS`.
+
+All of these are also in the admin panel (Settings) and persist across restarts; a value saved from the admin panel or by pressing Esc overrides `.env`.
 
 **Idle screensaver** (during the event): appears after the idle time, any input closes it, returns after the next idle period.
 
@@ -95,6 +99,7 @@ Full-screen overlay showing a still key visual or a video loop. Two independent 
 |----------|---------|-------------|
 | `HOLD_ENABLED` | `False` | Start with the hold screen up. After an Esc release the saved `False` wins over `.env`, so re-arm with `Ctrl+Shift+H` or the admin toggle |
 | `HOLD_CONTENT` | `image` | `image` / `video` |
+| `VIDEO_LOOP_PAUSE_SECONDS` | `0` | Screensaver and hold screen video: seconds resting on the first frame (silent) between loops; `0` = loop without a break (max 300) |
 | `HOLD_SCANS` | `accept` | Scans while held: `accept` = recorded, normal result shown for about 8 s, then back to the hold screen; `block` = scans ignored (use when early scans must not count) |
 
 Notes:

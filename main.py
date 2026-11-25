@@ -55,6 +55,7 @@ from qt_bridge import call_without_freezing_ui
 import config
 import media_diagnostics
 import screensaver_media
+from native_video import NativeVideoPanel, VideoProbe
 from version import __version__
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
@@ -736,6 +737,9 @@ class Api(QObject):
     # Camera detection actually started/stopped outside a toggle_camera() reply (startup
     # starts it after the page has already asked for the state, device change restarts it)
     camera_running_changed = pyqtSignal(bool)
+    # Full-screen display video (native panel): media check finished / playback failed
+    screensaver_media_ready = pyqtSignal("QVariantMap")
+    screensaver_video_failed = pyqtSignal(str)
 
     def __init__(
         self,
@@ -1647,6 +1651,7 @@ class Api(QObject):
             "screensaver_content": config.SCREENSAVER_CONTENT,
             "hold_enabled": config.HOLD_ENABLED,
             "hold_content": config.HOLD_CONTENT,
+            "video_loop_pause_seconds": config.VIDEO_LOOP_PAUSE_SECONDS,
             "hold_scans": config.HOLD_SCANS,
             "screensaver_camera": config.SCREENSAVER_CAMERA,
             "log_level": config.LOGGING_LEVEL,
@@ -1912,6 +1917,10 @@ class Api(QObject):
         if v in ("image", "video"):
             config.HOLD_CONTENT = v
             count += 1
+        v = db.get_meta("setting:video_loop_pause_seconds")
+        if v is not None and v.isdigit():
+            config.VIDEO_LOOP_PAUSE_SECONDS = max(0, min(300, int(v)))
+            count += 1
         v = db.get_meta("setting:hold_scans")
         if v in ("accept", "block"):
             config.HOLD_SCANS = v
@@ -2091,6 +2100,16 @@ class Api(QObject):
         LOGGER.info("[Admin] Hold content set to %s", content)
         return {"ok": True, "value": content}
 
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_video_loop_pause(self, seconds: int) -> dict:
+        """Video on the idle screensaver and hold screen: seconds resting silently on the
+        first frame between loops (0 = loop without a break). Persisted."""
+        seconds = max(0, min(300, int(seconds)))
+        config.VIDEO_LOOP_PAUSE_SECONDS = seconds
+        self._save_setting("video_loop_pause_seconds", str(seconds))
+        LOGGER.info("[Admin] Video loop pause set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
     @pyqtSlot(str, result="QVariant")
     def admin_set_hold_scans(self, policy: str) -> dict:
         """Scans while the hold screen is up: 'accept' (record + show result) or 'block'. Persisted."""
@@ -2101,18 +2120,74 @@ class Api(QObject):
         LOGGER.info("[Admin] Hold scans set to %s", policy)
         return {"ok": True, "value": policy}
 
-    @pyqtSlot(result="QVariant")
-    def get_screensaver_media(self) -> dict:
-        """Video/image candidates for the full-screen display, event media/ folder first.
+    # ── Full-screen display media (docs/specs/native-video-playback.md) ──
+    # The video plays in a native Qt panel (QtWebEngine cannot decode H.264 MP4); which
+    # file is chosen here, by trying candidates with Qt's own player. The page only ever
+    # says play/stop/volume: no file path crosses the bridge.
 
-        The page tries each list in order and keeps the first file its engine can play.
-        """
+    def attach_native_video(self, panel) -> None:
+        """Called once at start-up with the NativeVideoPanel over the web view."""
+        self._video_panel = panel
+        self._screensaver_media = {"pending": True}
+        self._screensaver_video_path = None
+        panel.failed.connect(self.screensaver_video_failed.emit)
+
+    def start_screensaver_media_check(self, make_probe=None) -> None:
+        """Pick the video (async, Qt player) and list image candidates; then tell the page."""
         media = screensaver_media.resolve_screensaver_media(
             EVENT_MEDIA_DIRECTORY, BUILTIN_MEDIA_DIRECTORY)
         LOGGER.info("[Media] Screensaver candidates (%s): %s",
                     EVENT_MEDIA_DIRECTORY, screensaver_media.describe(media))
-        media["folder"] = str(EVENT_MEDIA_DIRECTORY)
-        return media
+        probe = (make_probe or VideoProbe)(media["video"])
+        probe.finished.connect(lambda result: self._on_video_chosen(result, media["image"]))
+        self._video_probe = probe          # keep alive until finished
+        probe.start()
+
+    def _on_video_chosen(self, result: dict, images: list) -> None:
+        chosen = result["chosen"]
+        self._screensaver_video_path = Path(QUrl(chosen["url"]).toLocalFile()) if chosen else None
+        state = {
+            "video": {"name": chosen["name"], "source": chosen["source"]} if chosen else None,
+            "video_rejected": [{"name": r["name"], "source": r["source"], "why": r["why"]}
+                               for r in result["rejected"]],
+            "image": images,
+            "folder": str(EVENT_MEDIA_DIRECTORY),
+        }
+        for r in state["video_rejected"]:
+            LOGGER.warning("[Media] Video %s (%s) skipped: %s", r["name"], r["source"], r["why"])
+        LOGGER.info("[Media] Screensaver video: %s",
+                    f"{chosen['name']} ({chosen['source']})" if chosen else "none usable")
+        self._screensaver_media = state
+        self.screensaver_media_ready.emit(state)
+
+    @pyqtSlot(result="QVariant")
+    def get_screensaver_media(self) -> dict:
+        """{pending: true} until the video check is done, then the state also sent by
+        screensaver_media_ready: chosen video name/source, rejections, image candidates."""
+        return getattr(self, "_screensaver_media", None) or {"pending": True}
+
+    @pyqtSlot(float, int, result="QVariant")
+    def screensaver_video_play(self, volume: float, loop_pause_s: int) -> dict:
+        """Play the chosen video full screen; loop_pause_s > 0 rests on the first frame
+        between loops (hold screen). Inputs are clamped."""
+        panel = getattr(self, "_video_panel", None)
+        path = getattr(self, "_screensaver_video_path", None)
+        if panel is None or path is None:
+            return {"ok": False, "message": "No usable video"}
+        panel.play(path, max(0.0, min(1.0, float(volume))), max(0, min(300, int(loop_pause_s))))
+        return {"ok": True}
+
+    @pyqtSlot()
+    def screensaver_video_stop(self) -> None:
+        panel = getattr(self, "_video_panel", None)
+        if panel is not None:
+            panel.stop()
+
+    @pyqtSlot(float)
+    def screensaver_video_set_volume(self, volume: float) -> None:
+        panel = getattr(self, "_video_panel", None)
+        if panel is not None:
+            panel.set_volume(max(0.0, min(1.0, float(volume))))
 
     _CLIENT_LOG_CATEGORIES = ("screensaver", "camera", "audio")
 
@@ -2405,6 +2480,7 @@ class Api(QObject):
             "SCREENSAVER_CONTENT": config.SCREENSAVER_CONTENT,
             "HOLD_ENABLED": config.HOLD_ENABLED,
             "HOLD_CONTENT": config.HOLD_CONTENT,
+            "VIDEO_LOOP_PAUSE_SECONDS": config.VIDEO_LOOP_PAUSE_SECONDS,
             "HOLD_SCANS": config.HOLD_SCANS,
             "SCREENSAVER_CAMERA": config.SCREENSAVER_CAMERA,
             "AUTO_EXPORT_ON_SHUTDOWN": config.AUTO_EXPORT_ON_SHUTDOWN,
@@ -2780,6 +2856,17 @@ def initialize_app(
 
     window._web_channel = channel  # type: ignore[attr-defined]
     window._api = api  # type: ignore[attr-defined]
+
+    # Full-screen display video: native Qt panel over the page (plays H.264 MP4)
+    if isinstance(api, Api):
+        try:
+            api.attach_native_video(NativeVideoPanel(window, view))
+            api.start_screensaver_media_check()
+        except Exception as exc:  # no Qt Multimedia backend: images still work, video is off
+            LOGGER.warning("[Media] Native video unavailable (%s); screensaver video disabled", exc)
+            api._on_video_chosen({"chosen": None, "rejected": []},
+                                 screensaver_media.resolve_screensaver_media(
+                                     EVENT_MEDIA_DIRECTORY, BUILTIN_MEDIA_DIRECTORY)["image"])
 
     return app, window, view, animation
 

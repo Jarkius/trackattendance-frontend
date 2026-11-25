@@ -28,12 +28,14 @@ class ScreensaverSettingsTests(unittest.TestCase):
         self.api._save_setting = lambda k, v: self.db.set_meta(f"setting:{k}", v)
         self._orig = (config.SCREENSAVER_ENABLED, config.SCREENSAVER_IDLE_SECONDS,
                       config.SCREENSAVER_MUTED, config.SCREENSAVER_CONTENT, config.SCREENSAVER_CAMERA,
-                      config.HOLD_ENABLED, config.HOLD_CONTENT, config.HOLD_SCANS)
+                      config.HOLD_ENABLED, config.HOLD_CONTENT, config.HOLD_SCANS,
+                      getattr(config, 'VIDEO_LOOP_PAUSE_SECONDS', 0))
 
     def tearDown(self):
         (config.SCREENSAVER_ENABLED, config.SCREENSAVER_IDLE_SECONDS,
          config.SCREENSAVER_MUTED, config.SCREENSAVER_CONTENT, config.SCREENSAVER_CAMERA,
-         config.HOLD_ENABLED, config.HOLD_CONTENT, config.HOLD_SCANS) = self._orig
+         config.HOLD_ENABLED, config.HOLD_CONTENT, config.HOLD_SCANS,
+         config.VIDEO_LOOP_PAUSE_SECONDS) = self._orig
         self.db.close()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
@@ -47,6 +49,7 @@ class ScreensaverSettingsTests(unittest.TestCase):
         config.HOLD_ENABLED = False
         config.HOLD_CONTENT = "image"
         config.HOLD_SCANS = "accept"
+        config.VIDEO_LOOP_PAUSE_SECONDS = 0
         Api.load_saved_settings(self.api)
 
     def test_all_settings_survive_restart(self):
@@ -108,6 +111,21 @@ class ScreensaverSettingsTests(unittest.TestCase):
         self._restart()
         self.assertTrue(config.HOLD_ENABLED)
 
+    def test_video_loop_pause_survives_restart(self):
+        self.assertEqual(Api.admin_set_video_loop_pause(self.api, 30)["value"], 30)
+        self._restart()
+        self.assertEqual(config.VIDEO_LOOP_PAUSE_SECONDS, 30)
+
+    def test_video_loop_pause_is_bounded(self):
+        self.assertEqual(Api.admin_set_video_loop_pause(self.api, -5)["value"], 0)
+        self.assertEqual(Api.admin_set_video_loop_pause(self.api, 99999)["value"], 300)
+
+    def test_saved_video_loop_pause_of_zero_overrides_env(self):
+        Api.admin_set_video_loop_pause(self.api, 0)
+        config.VIDEO_LOOP_PAUSE_SECONDS = 45     # e.g. .env says 45
+        Api.load_saved_settings(self.api)
+        self.assertEqual(config.VIDEO_LOOP_PAUSE_SECONDS, 0)
+
     def test_defaults_when_nothing_saved(self):
         self._restart()
         self.assertFalse(config.SCREENSAVER_ENABLED)
@@ -117,6 +135,7 @@ class ScreensaverSettingsTests(unittest.TestCase):
         self.assertFalse(config.HOLD_ENABLED)
         self.assertEqual(config.HOLD_CONTENT, "image")
         self.assertEqual(config.HOLD_SCANS, "accept")
+        self.assertEqual(config.VIDEO_LOOP_PAUSE_SECONDS, 0)
 
 
 if __name__ == "__main__":
