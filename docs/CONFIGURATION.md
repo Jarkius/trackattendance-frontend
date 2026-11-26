@@ -104,7 +104,7 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 
 Notes:
 - While either overlay is showing, `Esc` only dismisses it; it does not close the app.
-- The video is VP9/Opus WebM because the bundled QtWebEngine cannot decode H.264. Camera `wake`/`sound` use the presence state of the camera detection plugin, so for far-away people lower `CAMERA_MIN_SIZE_PCT`, or on a wide-angle camera use `CAMERA_DETECTOR=person` (see Camera Detection).
+- The video plays in Qt's own media player (not the web page), so normal H.264/AAC MP4 and WebM both work. Camera `wake`/`sound` use the presence state of the camera detection plugin, so for far-away people lower `CAMERA_MIN_SIZE_PCT`, or on a wide-angle camera use `CAMERA_DETECTOR=person` (see Camera Detection).
 - Stations must not sleep or turn off the display, or the overlay will not be seen.
 
 ## Voice
