@@ -100,7 +100,7 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 | `HOLD_ENABLED` | `False` | Start with the hold screen up. After an Esc release the saved `False` wins over `.env`, so re-arm with `Ctrl+Shift+H` or the admin toggle |
 | `HOLD_CONTENT` | `image` | `image` / `video` |
 | `VIDEO_LOOP_PAUSE_SECONDS` | `0` | Screensaver and hold screen video: seconds resting on the first frame (silent) between loops; `0` = loop without a break (max 300) |
-| `HOLD_SCANS` | `accept` | Scans while held: `accept` = recorded, normal result shown for about 8 s, then back to the hold screen; `block` = scans ignored (use when early scans must not count) |
+| `HOLD_SCANS` | `accept` | Scans while held: `accept` = recorded, normal result shown for about 8 s, then back to the hold screen; `block` = scans ignored and the camera greeting is muted, since it would ask people to scan (use when early scans must not count) |
 
 Notes:
 - While either overlay is showing, `Esc` only dismisses it; it does not close the app.
