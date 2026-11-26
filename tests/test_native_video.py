@@ -18,6 +18,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+import pytest  # noqa: E402
+pytest.importorskip("PyQt6")  # CI installs no Qt; these run locally
+
 from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal  # noqa: E402
 from PyQt6.QtMultimedia import QMediaPlayer  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget  # noqa: E402
