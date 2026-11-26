@@ -104,7 +104,7 @@ One full-screen overlay, two independent uses. Content is a still key visual or 
 - **Camera** (needs `ENABLE_CAMERA_DETECTION=True`): `off`, `wake` (a person arriving closes it and it will not restart while someone is in front of the station), or `sound` (the video keeps looping; sound fades in when a person is seen and out after they leave — keeps idle stations quiet in an empty room).
 - For distant people (wide-angle camera) use `CAMERA_DETECTOR=person` (whole-body detection, ignores furniture; Admin → Camera → Detect: People) or lower `CAMERA_MIN_SIZE_PCT`. See `docs/CONFIGURATION.md` → Detect: Faces vs People.
 
-Notes: the video ships as VP9/Opus WebM because the bundled QtWebEngine cannot decode H.264. Set stations to never sleep / turn off the display, or the overlay will not be seen.
+Notes: the video plays in Qt's own media player, so normal MP4 (H.264/AAC) and WebM both work. Set stations to never sleep / turn off the display, or the overlay will not be seen.
 
 ## 📦 Building
 
@@ -197,6 +197,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.2.0** — Pre-event hold screen (accept or block early scans; block also mutes the camera greeting) and idle screensaver, with a per-event `media\` folder and native MP4 playback; camera wake/sound modes; per-station People detector (YOLOX-Nano) for wide-angle cameras; admin settings regrouped into Idle Screensaver / Hold Screen / Video, Sound & Camera
 - **v2.1.11** — Audit fixes #101–#112: attendance rate counts registered employees only (walk-ins and unknown badges reported separately, rate capped at 100%); failed scans retried and bad batches isolated instead of blocking sync; badge IDs normalised (case, invisible characters, lost leading zeros); scanner keystrokes no longer dropped during alerts or the lookup box; Excel exports can't run formulas; reporting queries indexed (10k×10k: seconds → milliseconds)
 - **v2.1.10** — Added app version display (window title, tiny corner label on the main screen, Admin Panel footer, startup log line) backed by a single `version.py`; added `build.bat` for one-step builds
 - **v2.1.9** — Fixed the admin Volume slider being capped by Windows' own system volume (one station's was left at 36%, so the slider's 100% still sounded quiet) — the slider now drives the actual Windows system volume directly, not just this app's own relative gain

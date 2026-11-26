@@ -38,6 +38,7 @@ class ProximityGreetingManager:
         detector: str = "face",
         min_person_pct: float = 0.30,
         person_confidence: float = 0.5,
+        greeting_suppressed=None,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
@@ -58,6 +59,8 @@ class ProximityGreetingManager:
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
         # Called as presence_callback(bool) from the camera thread on present/empty changes
         self._presence_callback = presence_callback
+        # greeting_suppressed() -> bool, asked at each detection (e.g. hold screen blocking scans)
+        self._greeting_suppressed = greeting_suppressed
         self._last_presence = False
 
         self._cap = None  # cv2.VideoCapture
@@ -240,6 +243,16 @@ class ProximityGreetingManager:
         Runs on camera thread. All Qt operations are deferred to main thread
         via GreetingPlayer's thread-safe play_random().
         """
+        if self._greeting_suppressed is not None:
+            try:
+                suppressed = self._greeting_suppressed()
+            except Exception as exc:
+                LOGGER.warning("[Proximity] Greeting-suppressed check failed: %s", exc)
+                suppressed = False
+            if suppressed:
+                LOGGER.info("[Proximity] Person detected but greeting suppressed (hold screen blocking scans)")
+                return
+
         # Suppress greeting while scans are happening (queue is active)
         if time.time() < self._busy_until:
             remaining = self._busy_until - time.time()

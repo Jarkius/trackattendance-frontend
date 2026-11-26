@@ -3089,6 +3089,8 @@ def main() -> None:
                         if isinstance(api_object, Api)
                         else None
                     ),
+                    # A blocked hold ignores scans, so "please scan your badge" would mislead
+                    greeting_suppressed=lambda: config.HOLD_ENABLED and config.HOLD_SCANS == "block",
                 )
                 LOGGER.info("[Proximity] Plugin loaded")
                 # Wire proximity manager into the API so scans suppress greetings

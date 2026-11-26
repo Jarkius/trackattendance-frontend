@@ -297,7 +297,8 @@ SHOW_PARTY_BACKGROUND = os.getenv("SHOW_PARTY_BACKGROUND", "True").lower() in ("
 #    Appears at once and stays. Esc releases it FOR GOOD (saved; it does not come back on a
 #    timeout or after a reboot). Ctrl+Shift+H, or the admin toggle, turns it on again.
 #    HOLD_SCANS: accept = a badge scan is recorded, its normal result is shown for a few
-#                seconds, then the hold screen returns;  block = scans are ignored.
+#                seconds, then the hold screen returns;  block = scans are ignored
+#                and the camera greeting is muted.
 def _choice(name: str, default: str, allowed: tuple) -> str:
     value = os.getenv(name, default).strip().lower()
     return value if value in allowed else default

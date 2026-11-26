@@ -90,8 +90,8 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 | `SCREENSAVER_ENABLED` | `False` | Turn the idle screensaver on |
 | `SCREENSAVER_CONTENT` | `video` | `video` / `image` |
 | `SCREENSAVER_IDLE_SECONDS` | `60` | Idle seconds before it appears (min `5`; admin slider 5-300) |
-| `SCREENSAVER_MUTED` | `False` | Play the video silently |
-| `SCREENSAVER_CAMERA` | `wake` | Needs `ENABLE_CAMERA_DETECTION`. `off` = ignore the camera; `wake` = a person arriving closes it and it will not restart while someone is in front of the station; `sound` = the video keeps looping, sound fades in (about 2 s) when a person is seen and out after they leave |
+| `SCREENSAVER_MUTED` | `False` | Play the video silently. Also applies to the hold screen video (Admin: Video Sound) |
+| `SCREENSAVER_CAMERA` | `wake` | Needs `ENABLE_CAMERA_DETECTION`. `off` = ignore the camera; `wake` = a person arriving closes it and it will not restart while someone is in front of the station; `sound` = the video keeps looping, sound fades in (about 2 s) when a person is seen and out after they leave. On the hold screen `sound` works the same, while `wake` and `off` do nothing (only Esc releases the hold) |
 
 **Hold screen** (before check-in opens): shows at once and stays. `Esc` releases it for good (saved; no timeout resume, survives reboot until released). `Ctrl+Shift+H` or the admin toggle turns it back on.
 
@@ -100,11 +100,11 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 | `HOLD_ENABLED` | `False` | Start with the hold screen up. After an Esc release the saved `False` wins over `.env`, so re-arm with `Ctrl+Shift+H` or the admin toggle |
 | `HOLD_CONTENT` | `image` | `image` / `video` |
 | `VIDEO_LOOP_PAUSE_SECONDS` | `0` | Screensaver and hold screen video: seconds resting on the first frame (silent) between loops; `0` = loop without a break (max 300) |
-| `HOLD_SCANS` | `accept` | Scans while held: `accept` = recorded, normal result shown for about 8 s, then back to the hold screen; `block` = scans ignored (use when early scans must not count) |
+| `HOLD_SCANS` | `accept` | Scans while held: `accept` = recorded, normal result shown for about 8 s, then back to the hold screen; `block` = scans ignored and the camera greeting is muted, since it would ask people to scan (use when early scans must not count) |
 
 Notes:
 - While either overlay is showing, `Esc` only dismisses it; it does not close the app.
-- The video is VP9/Opus WebM because the bundled QtWebEngine cannot decode H.264. Camera `wake`/`sound` use the presence state of the camera detection plugin, so for far-away people lower `CAMERA_MIN_SIZE_PCT`, or on a wide-angle camera use `CAMERA_DETECTOR=person` (see Camera Detection).
+- The video plays in Qt's own media player (not the web page), so normal H.264/AAC MP4 and WebM both work. Camera `wake`/`sound` use the presence state of the camera detection plugin, so for far-away people lower `CAMERA_MIN_SIZE_PCT`, or on a wide-angle camera use `CAMERA_DETECTOR=person` (see Camera Detection).
 - Stations must not sleep or turn off the display, or the overlay will not be seen.
 
 ## Voice
