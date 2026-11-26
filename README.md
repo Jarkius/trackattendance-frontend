@@ -43,7 +43,7 @@ A desktop kiosk application for tracking employee attendance using barcode/QR co
 - **Clear This Station / Clear All** — separate admin actions; Clear All resets all stations + roster via `clear_epoch` coordination
 - **Voice file override** — drop custom MP3s in `voices/` next to exe to replace bundled voices without recompiling
 - **CI/CD pipeline** — automated `pytest` runs on every push and PR (338 tests)
-- **Camera proximity greeting** — YuNet DNN face detection with upper body Haar cascade fallback; detects approaching people even when face isn't visible (turned away, too tall/short); ElevenLabs voice greetings; presence-aware state machine with voice overlap prevention (disabled by default)
+- **Camera proximity greeting** — YuNet DNN face detection with upper body Haar cascade fallback, or per station whole-body People detection (YOLOX-Nano, for wide-angle cameras); detects approaching people even when face isn't visible (turned away, too tall/short); ElevenLabs voice greetings; presence-aware state machine with voice overlap prevention (disabled by default)
 - **Debug panel** — live Python log streaming overlay in the kiosk UI with click-to-copy, Copy All, color-coded log levels, and 500ms polling; toggled from admin panel
 - **Admin debug controls** — runtime log level (ERROR/WARN/INFO/DEBUG), console output toggle, debug panel toggle; all settings persist across restarts
 - **Focus lock release** — when debug panel is active, focus lock disengages to allow free clicking, text selection, and clipboard copy
@@ -102,7 +102,7 @@ One full-screen overlay, two independent uses. Content is a still key visual or 
 
 **Idle screensaver (during the event)** — after `SCREENSAVER_IDLE_SECONDS` without input the content appears; any key, click, touch or mouse move closes it and it returns after the next idle period.
 - **Camera** (needs `ENABLE_CAMERA_DETECTION=True`): `off`, `wake` (a person arriving closes it and it will not restart while someone is in front of the station), or `sound` (the video keeps looping; sound fades in when a person is seen and out after they leave — keeps idle stations quiet in an empty room).
-- For distant people (wide-angle camera) lower `CAMERA_MIN_SIZE_PCT`.
+- For distant people (wide-angle camera) use `CAMERA_DETECTOR=person` (whole-body detection, ignores furniture; Admin → Camera → Detect: People) or lower `CAMERA_MIN_SIZE_PCT`. See `docs/CONFIGURATION.md` → Detect: Faces vs People.
 
 Notes: the video ships as VP9/Opus WebM because the bundled QtWebEngine cannot decode H.264. Set stations to never sleep / turn off the display, or the overlay will not be seen.
 

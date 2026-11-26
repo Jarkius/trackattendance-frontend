@@ -406,6 +406,16 @@
                         <span class="adm-toggle-row__label">Live Preview</span>
                         <button class="adm-toggle" id="admin-camera-overlay-toggle" type="button"></button>
                     </div>
+                    <div id="admin-camera-detector-row" style="margin-top:10px;">
+                        <p style="font-size:0.78rem;color:#666;margin:0 0 6px;">Detect</p>
+                        <div class="adm-opt-group">
+                            <button class="adm-opt adm-cam-detector-opt" data-val="face" type="button"
+                                    data-hint="Faces: needs a visible face. Best for normal webcams. Suggested Min Face 20% (wide-angle camera: 9-10%, may count furniture).">Faces</button>
+                            <button class="adm-opt adm-cam-detector-opt" data-val="person" type="button"
+                                    data-hint="People: whole body, for wide-angle cameras; ignores furniture. Suggested Min Person 30% (busy hall: 40-50%, wake from further away: 20-25%).">People</button>
+                        </div>
+                        <p id="admin-cam-detector-hint" style="font-size:0.72rem;color:#999;margin:6px 0 0;"></p>
+                    </div>
                     <div class="adm-slider-row" style="margin-top:10px;">
                         <span class="adm-slider-row__label">Cooldown</span>
                         <div class="adm-slider-wrap" data-default="60" data-min="5" data-max="120" data-key="greeting_cooldown">
@@ -414,13 +424,21 @@
                         </div>
                         <span class="adm-slider-row__value" id="admin-cooldown-value">60 sec</span>
                     </div>
-                    <div class="adm-slider-row" style="margin-top:8px;">
+                    <div class="adm-slider-row" id="admin-minsize-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Min Face</span>
                         <div class="adm-slider-wrap" data-default="20" data-min="5" data-max="40" data-key="min_size_pct" data-scale="100">
                             <input type="range" class="adm-slider" id="admin-minsize-slider" min="5" max="40" value="20" step="1" style="--fill:42.9%;">
                             <div class="adm-slider-default-mark" style="--default-pct:0.429;" title="Default: 20%"></div>
                         </div>
                         <span class="adm-slider-row__value" id="admin-minsize-value">20%</span>
+                    </div>
+                    <div class="adm-slider-row" id="admin-minperson-row" style="margin-top:8px;display:none;">
+                        <span class="adm-slider-row__label" title="Person height as % of the camera picture height">Min Person</span>
+                        <div class="adm-slider-wrap" data-default="30" data-min="10" data-max="90" data-key="min_person_pct" data-scale="100">
+                            <input type="range" class="adm-slider" id="admin-minperson-slider" min="10" max="90" value="30" step="1" style="--fill:25%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.25;" title="Default: 30%"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-minperson-value">30%</span>
                     </div>
                     <div class="adm-slider-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Absence</span>

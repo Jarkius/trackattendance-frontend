@@ -20,6 +20,8 @@ python-dotenv==1.1.1
 # Camera / proximity detection (optional — app runs without these)
 opencv-python-headless==4.13.0.92
 numpy==2.4.2
+# People mode (CAMERA_DETECTOR=person): YOLOX-Nano runner; without it People falls back to faces
+onnxruntime==1.32.0
 
 # Windows system volume control (admin panel "Max System Volume" button)
 pycaw==20251023

@@ -408,7 +408,22 @@ CAMERA_MIN_SIZE_PCT = _safe_float("CAMERA_MIN_SIZE_PCT", 0.20, min_val=0.05, max
 # Only applies when MediaPipe is unavailable. 3 = sensitive, 5-6 = balanced, 8+ = strict.
 CAMERA_HAAR_MIN_NEIGHBORS = _safe_int("CAMERA_HAAR_MIN_NEIGHBORS", 5, min_val=2, max_val=10)
 
+# What counts as "someone is there": face = YuNet face (+ Haar upper-body fallback), for
+# normal webcams; person = YOLOX-Nano whole-body detection on the full frame, for wide-angle
+# cameras (ignores furniture, finds people whose face is small or turned away).
+# person falls back to face if the model or onnxruntime cannot load (see the log).
+CAMERA_DETECTOR = _safe_choice("CAMERA_DETECTOR", "face", {"face", "person"})
+
+# People mode distance: the person box must be at least this fraction of the frame HEIGHT.
+# Poly R30 (wide lens) at 640x480: ~4-5 m away facing the camera = 41%, people across the
+# room = 14%, at the kiosk = 100%. 0.30 counts the first and ignores the second.
+CAMERA_MIN_PERSON_PCT = _safe_float("CAMERA_MIN_PERSON_PCT", 0.30, min_val=0.10, max_val=0.90)
+
+# People mode: minimum model confidence for a person box (0.30-0.90).
+CAMERA_PERSON_CONFIDENCE = _safe_float("CAMERA_PERSON_CONFIDENCE", 0.50, min_val=0.30, max_val=0.90)
+
 # Detection frame downscale factor (0.5 = half resolution for detection, saves CPU)
+# Face mode only: People mode always uses the full frame.
 CAMERA_DETECTION_SCALE = _safe_float("CAMERA_DETECTION_SCALE", 0.5, min_val=0.25, max_val=1.0)
 
 # Camera resolution

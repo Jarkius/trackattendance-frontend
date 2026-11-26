@@ -2726,6 +2726,8 @@ ${destination}` : message;
     const adminConfirmSlider = document.getElementById('admin-confirm-slider');
     const adminConfirmValue = document.getElementById('admin-confirm-value');
     const adminHaarSlider = document.getElementById('admin-haar-slider');
+    const adminMinpersonSlider = document.getElementById('admin-minperson-slider');
+    const adminMinpersonValue = document.getElementById('admin-minperson-value');
     const adminHaarValue = document.getElementById('admin-haar-value');
     const adminCameraResetBtn = document.getElementById('admin-camera-reset-btn');
     const adminFeedbackSlider = document.getElementById('admin-feedback-slider');
@@ -2925,6 +2927,9 @@ ${destination}` : message;
                         syncSlider(adminConfirmSlider, adminConfirmValue, confirmF, 1, 10, 'frm');
                         const haarN = result.haar_min_neighbors || 5;
                         syncSlider(adminHaarSlider, adminHaarValue, haarN, 2, 10, '');
+                        syncSlider(adminMinpersonSlider, adminMinpersonValue,
+                            Math.round((result.min_person_pct || 0.30) * 100), 10, 90, '%');
+                        applyDetectorUi(result.camera_detector || 'face', result.camera_detector_active || 'face');
                     }
                     // Display section
                     const feedbackSec = Math.round((result.scan_feedback_ms || 2000) / 1000);
@@ -3620,6 +3625,49 @@ ${destination}` : message;
             if (bridge.admin_set_haar_min_neighbors) bridge.admin_set_haar_min_neighbors(v, () => {});
         });
     });
+    bindSlider(adminMinpersonSlider, adminMinpersonValue, '%', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_min_person_pct) bridge.admin_set_min_person_pct(v / 100, () => {});
+        });
+    });
+
+    // Detect: Faces | People. Each mode keeps its own size slider (Min Face / Min Person);
+    // Strictness only tunes the face Haar cascades, so it is greyed out for People.
+    // `active` is what really runs: 'face' when People could not load on this PC.
+    function applyDetectorUi(mode, active) {
+        const people = mode === 'person';
+        document.querySelectorAll('.adm-cam-detector-opt').forEach((b) => {
+            b.classList.toggle('active', b.dataset.val === mode);
+        });
+        const faceRow = document.getElementById('admin-minsize-row');
+        const personRow = document.getElementById('admin-minperson-row');
+        if (faceRow) faceRow.style.display = people ? 'none' : '';
+        if (personRow) personRow.style.display = people ? '' : 'none';
+        if (adminHaarSlider) adminHaarSlider.disabled = people;
+        const hint = document.getElementById('admin-cam-detector-hint');
+        if (!hint) return;
+        if (people && active !== 'person') {
+            hint.textContent = 'People detection unavailable on this PC (see log) \u2013 using Faces.';
+            hint.style.color = '#f0960a';
+            return;
+        }
+        const btn = document.querySelector('.adm-cam-detector-opt[data-val="' + mode + '"]');
+        hint.textContent = btn ? (btn.dataset.hint || '') : '';
+        hint.style.color = '#999';
+    }
+    document.querySelectorAll('.adm-cam-detector-opt').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const mode = btn.dataset.val;
+            applyDetectorUi(mode, mode);
+            queueOrRun((bridge) => {
+                if (!bridge.admin_set_camera_detector) return;
+                bridge.admin_set_camera_detector(mode, (r) => {
+                    if (r && r.ok) applyDetectorUi(r.value, r.active);
+                });
+            });
+        });
+    });
 
     // Reset camera settings to .env defaults
     if (adminCameraResetBtn) {
@@ -3637,6 +3685,9 @@ ${destination}` : message;
                                         syncSlider(adminAbsenceSlider, adminAbsenceValue, r.absence_threshold || 3, 1, 10, 'sec');
                                         syncSlider(adminConfirmSlider, adminConfirmValue, r.confirm_frames || 3, 1, 10, 'frm');
                                         syncSlider(adminHaarSlider, adminHaarValue, r.haar_min_neighbors || 5, 2, 10, '');
+                                        syncSlider(adminMinpersonSlider, adminMinpersonValue,
+                                            Math.round((r.min_person_pct || 0.30) * 100), 10, 90, '%');
+                                        applyDetectorUi(r.camera_detector || 'face', r.camera_detector_active || 'face');
                                     }
                                 });
                             }

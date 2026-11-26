@@ -45,6 +45,6 @@ and written by Export .env.
 ```
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `main.py` (defaults snapshot, `load_saved_settings`, `admin_get_local_settings`, `admin_set_camera_detector`, `admin_set_min_person_pct`, reset, export), `plugins/camera/proximity_detector.py` (`set_mode`, which queues a switch applied on the camera thread), `plugins/camera/proximity_manager.py` (`set_detector_mode`, `active_detector`), `tests/test_camera_detector_settings.py` (new, 13 tests).
+- Verification results: `test_camera_detector_settings.py` 13 passed; live-switch tests in `test_person_detector.py` pass.
+- Known limitations: the People backend is built on the caller (Qt) thread, about 0.1 s, and handed to the camera thread ready-made.

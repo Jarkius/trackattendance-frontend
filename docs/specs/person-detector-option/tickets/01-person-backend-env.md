@@ -59,6 +59,6 @@ Faces mode is unchanged.
 Manual: `.env` `CAMERA_DETECTOR=person`, run `main.py`, cabinet for 60 s (no presence), walk in (presence).
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `plugins/camera/person_detector.py` (new), `plugins/camera/proximity_detector.py`, `plugins/camera/proximity_manager.py`, `config.py`, `main.py`, `requirements.txt`, `plugins/camera/models/yolox_nano.onnx` + `NOTICE-YOLOX.md` (new), `scripts/detector-poc/app_detector_check.py` (new), `tests/test_person_detector.py` (new), `tests/conftest.py` (new).
+- Verification results: `test_person_detector.py` 22 passed; `test_proximity_detector.py` OK; `test_camera_plugin.py` 31/37, the same 6 failures as before the change (local `.env` defaults, an old `OVERLAY_SIZE` import). `app_detector_check.py` on 41 POC frames: empty cabinet 0/10, far back 8/8 (40-41% height), only the known hard frame (bending away) missed. Packaged exe on the Poly: People active, present at 37% height, people across the room logged as too small (5-22%).
+- Known limitations: found and fixed a crash. onnxruntime loaded after PyQt6 kills the process (MSVC runtime 14.26 vs 14.51); see the spec's Decisions. Min Person 30% comes from one room.

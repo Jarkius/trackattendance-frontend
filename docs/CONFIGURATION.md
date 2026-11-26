@@ -104,7 +104,7 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 
 Notes:
 - While either overlay is showing, `Esc` only dismisses it; it does not close the app.
-- The video is VP9/Opus WebM because the bundled QtWebEngine cannot decode H.264. Camera `wake`/`sound` use the presence state of the camera detection plugin, so for far-away people lower `CAMERA_MIN_SIZE_PCT`.
+- The video is VP9/Opus WebM because the bundled QtWebEngine cannot decode H.264. Camera `wake`/`sound` use the presence state of the camera detection plugin, so for far-away people lower `CAMERA_MIN_SIZE_PCT`, or on a wide-angle camera use `CAMERA_DETECTOR=person` (see Camera Detection).
 - Stations must not sleep or turn off the display, or the overlay will not be seen.
 
 ## Voice
@@ -131,12 +131,40 @@ Admin panel is accessible from the dashboard header (gear icon). Features: view 
 | `CAMERA_SHOW_OVERLAY` | `True` | Show floating camera preview (`False` = icon-only mode for production) |
 | `CAMERA_GREETING_COOLDOWN_SECONDS` | `60` | Minimum seconds between greetings per person |
 | `CAMERA_SCAN_BUSY_SECONDS` | `30` | Suppress greetings after a badge scan |
-| `CAMERA_MIN_SIZE_PCT` | `0.20` | Minimum detection size as fraction of frame width |
+| `CAMERA_DETECTOR` | `face` | What counts as "someone is there": `face` (YuNet face + upper-body fallback, normal webcams) or `person` (YOLOX-Nano whole body, wide-angle cameras). Admin → Camera → Detect |
+| `CAMERA_MIN_SIZE_PCT` | `0.20` | Faces: minimum face size as fraction of frame width ("Min Face") |
+| `CAMERA_MIN_PERSON_PCT` | `0.30` | People: minimum person height as fraction of frame **height** ("Min Person", 0.10-0.90) |
+| `CAMERA_PERSON_CONFIDENCE` | `0.50` | People: minimum model confidence for a person (0.30-0.90, `.env` only) |
 | `CAMERA_ABSENCE_THRESHOLD_SECONDS` | `5` | Seconds with no person before kiosk resets to "empty" |
 | `CAMERA_CONFIRM_FRAMES` | `3` | Consecutive detected frames required before greeting |
-| `CAMERA_HAAR_MIN_NEIGHBORS` | `5` | Haar cascade strictness (2-10, higher = fewer false positives) |
+| `CAMERA_HAAR_MIN_NEIGHBORS` | `5` | Faces only: Haar cascade strictness (2-10, higher = fewer false positives) |
+| `CAMERA_DETECTION_SCALE` | `0.5` | Faces only: detection frame downscale. People always uses the full frame |
 
-Detection chain: YuNet DNN face → Upper body Haar → Frontal face Haar → Motion (frame differencing).
+Faces detection chain: YuNet DNN face → Upper body Haar → Frontal face Haar → Motion (frame differencing).
+
+### Detect: Faces vs People
+
+People mode runs YOLOX-Nano (Apache-2.0, `plugins/camera/models/NOTICE-YOLOX.md`) on
+onnxruntime, about 30 ms per checked frame on 2 CPU threads. It finds whole bodies, so it
+ignores furniture (the upper-body fallback counted a shelf as a person) and still finds people
+whose face is small, turned away or out of the picture. Each mode keeps its own size setting;
+switching in Admin applies at once, without a restart. If the model or onnxruntime cannot
+load, the station runs Faces, logs why, and Admin shows "People detection unavailable".
+
+Suggested values, measured on a Poly Studio R30 (wide lens) at 640x480: a person about 4-5 m
+away facing the camera = 41% of frame height, people across the room = 14%, at the kiosk = 100%.
+
+| Station | Detect | Size |
+|---|---|---|
+| Normal webcam, greeting only | Faces | Min Face 20% (default) |
+| Wide-angle camera, video loop with camera `wake` / `sound` | People | Min Person 30% (default) |
+| Busy hall, people walking close behind | People | Min Person 40-50% |
+| Wake from further away | People | Min Person 20-25% (passers-by may wake it) |
+| Wide-angle camera that must stay on Faces | Faces | Min Face 9-10% (expect furniture false alarms) |
+
+Tune with the log: `State: empty → present (person, ..., box NN% of frame height)` and
+`Person seen but too small: NN% of frame height (needs >= MM%)`. Background:
+`ψ/memory/learnings/2026-11-26_person-detector-poc.md`.
 
 ## Logging & Debug
 

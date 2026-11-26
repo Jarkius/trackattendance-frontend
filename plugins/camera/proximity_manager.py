@@ -35,6 +35,9 @@ class ProximityGreetingManager:
         haar_min_neighbors: int = 5,
         detection_scale: float = 1.0,
         presence_callback=None,
+        detector: str = "face",
+        min_person_pct: float = 0.30,
+        person_confidence: float = 0.5,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
@@ -47,6 +50,10 @@ class ProximityGreetingManager:
         self._min_size_pct = min_size_pct
         self._haar_min_neighbors = haar_min_neighbors
         self._detection_scale = detection_scale
+        self._detector_mode = detector  # "face" | "person" (People = YOLOX-Nano)
+        self._min_person_pct = min_person_pct
+        self._person_confidence = person_confidence
+        self._active_detector = "face"  # updated by set_detector_mode while the camera is off
         self._show_overlay = show_overlay
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
         # Called as presence_callback(bool) from the camera thread on present/empty changes
@@ -61,6 +68,36 @@ class ProximityGreetingManager:
         self._running = False
         self._busy_until: float = 0.0  # suppress greetings while queue is active
         self._voice_playing_until: float = 0.0  # time-based voice overlap guard
+
+    def set_detector_mode(self, mode: str) -> str:
+        """Switch between 'face' and 'person' (People = YOLOX-Nano) without a restart.
+
+        The People backend is built here, on the caller's thread, and handed over ready;
+        the camera thread swaps it in at its next frame. Returns the mode that will really
+        run: 'face' when People cannot load (the reason is logged). The chosen mode is kept
+        either way, so the next camera start tries it again.
+        """
+        self._detector_mode = mode
+        active, backend = "face", None
+        if mode == "person":
+            try:
+                from plugins.camera import person_detector
+                backend = person_detector.PersonDetector(confidence=self._person_confidence)
+                active = "person"
+            except Exception as exc:
+                LOGGER.warning("[Proximity] People detection unavailable (%s) - using faces", exc)
+        self._active_detector = active
+        if self._detector:
+            self._detector.set_mode(active, backend)
+        LOGGER.info("[Proximity] Detector mode set to %s (running: %s)", mode, active)
+        return active
+
+    @property
+    def active_detector(self) -> str:
+        """'person' or 'face': what the detector really runs (after any fallback)."""
+        if self._detector:
+            return self._detector.active_detector
+        return self._active_detector
 
     def start(self) -> bool:
         """Late-import deps, open camera, start daemon thread. Returns False on failure."""
@@ -118,6 +155,9 @@ class ProximityGreetingManager:
                 min_size_pct=self._min_size_pct,
                 haar_min_neighbors=self._haar_min_neighbors,
                 detection_scale=self._detection_scale,
+                detector=self._detector_mode,
+                min_person_pct=self._min_person_pct,
+                person_confidence=self._person_confidence,
             )
             self._detector.add_detection_callback(self._on_person_detected)
 

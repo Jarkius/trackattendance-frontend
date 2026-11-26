@@ -37,6 +37,6 @@ suggested values, and see when People fell back to Faces.
 Manual: Admin → Camera on the Poly station; switch modes, move sliders, restart, reopen.
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `web/index.html` (Detect chooser, Min Person row), `web/script.js` (`applyDetectorUi`, chooser and slider bindings, load and reset refresh).
+- Verification results: a throwaway QWebEngineView check. Faces shows Min Face, Strictness enabled and the Faces hint. People shows Min Person (30%), Strictness disabled and the People hint. Screenshot reviewed. The script.js syntax check passes.
+- Known limitations: two rows, one shown per mode, instead of one swapping slider (same look). The "unavailable" hint and persistence across reopen are still to be checked in the live app.

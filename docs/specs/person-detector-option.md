@@ -178,7 +178,7 @@ tests pass unchanged.
 - Performance budget: People inference ≤ 50 ms mean on the kiosk CPU, with onnxruntime
   `intra_op_num_threads=2`. The existing `skip_frames=2` keeps it at about 5 inferences per
   second. Log the mean inference time once a minute at DEBUG.
-- Packaging adds roughly 25 MB, mostly `onnxruntime.dll` at 22 MB, plus the 3.6 MB model.
+- Packaging adds about 54 MB (measured: 696 → 750 MB). The onnxruntime binaries are 44 MB and the model is 3.6 MB.
 - Licence: YOLOX code and weights are Apache-2.0 and need the NOTICE file. onnxruntime is MIT.
   No AGPL components.
 - Rollout: the default stays `face`, so existing stations are unaffected. Enable People per
@@ -196,6 +196,21 @@ tests pass unchanged.
 - ASSUMED: People mode ignores `CAMERA_DETECTION_SCALE` and uses the full frame. YOLOX
   resizes to 416 anyway, and halving the frame loses far-away people.
 - DEFERRED: a saas port, a person-count display, and an upper-body fix for Faces mode.
+- LOCKED (found during implementation, 2026-11-26): **onnxruntime must load before PyQt6.**
+  PyQt6 ships MSVC runtime 14.26; onnxruntime 1.32 loaded after it crashes the process
+  (access violation, no Python traceback). Handled at four points:
+  1. `main.py` imports onnxruntime before PyQt6 on camera stations.
+  2. `tests/conftest.py` does the same for pytest.
+  3. `PersonDetector` refuses to load onnxruntime after Qt (Faces fallback, not a crash).
+  4. The exe: onnxruntime is shipped as plain files, because PyInstaller's dependency scan
+     crashed the same way. The current `msvcp140*.dll` is bundled, and
+     `build_hooks/rthook_msvc_runtime_first.py` loads it before PyInstaller's PyQt6 hook
+     imports QtCore.
+- Deviation: the exe grew by about 54 MB (696 → 750 MB), not about 25 MB. onnxruntime's two
+  binaries are 44 MB.
+- Deviation (UI): Min Face and Min Person are two slider rows, and the one for the active
+  mode is shown. That is simpler than one slider changing range and default mark, and looks
+  the same to the user.
 
 ## Verification
 
