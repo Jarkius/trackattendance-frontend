@@ -40,6 +40,19 @@ if getattr(sys, 'frozen', False):
             os.environ['REQUESTS_CA_BUNDLE'] = cert_path
             print(f"[SSL] Using certifi: {cert_path}")
 
+# Camera People mode (YOLOX-Nano) runs on onnxruntime, which must be loaded BEFORE PyQt6:
+# PyQt6 ships an old MSVC runtime (14.26) and onnxruntime 1.32 crashes the process
+# (access violation) when it loads after it. Loaded first, both run on the newer runtime.
+# Only on camera stations, so others don't pay for it; Faces/People can then be switched live.
+import config as _early_config  # reads .env only; no Qt
+if _early_config.ENABLE_CAMERA_DETECTION:
+    # (In the exe, PyInstaller's PyQt6 hook loads QtCore before this line; the run-time hook
+    # build_hooks/rthook_msvc_runtime_first.py loads the current runtime before that.)
+    try:
+        import onnxruntime  # noqa: F401
+    except Exception:  # not installed: People mode falls back to faces with a log line
+        pass
+
 from PyQt6.QtCore import QCoreApplication, QEventLoop, QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt6.QtWebChannel import QWebChannel
@@ -790,6 +803,8 @@ class Api(QObject):
             "absence_threshold": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
             "confirm_frames": config.CAMERA_CONFIRM_FRAMES,
             "haar_min_neighbors": config.CAMERA_HAAR_MIN_NEIGHBORS,
+            "camera_detector": config.CAMERA_DETECTOR,
+            "min_person_pct": config.CAMERA_MIN_PERSON_PCT,
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "screensaver_idle_s": config.SCREENSAVER_IDLE_SECONDS,
@@ -1610,6 +1625,7 @@ class Api(QObject):
         absence_threshold = config.CAMERA_ABSENCE_THRESHOLD_SECONDS
         confirm_frames = config.CAMERA_CONFIRM_FRAMES
         haar_min_neighbors = config.CAMERA_HAAR_MIN_NEIGHBORS
+        camera_detector_active = "face"
         if self._proximity_manager:
             camera_running = bool(self._proximity_manager._running)
             camera_overlay = bool(self._proximity_manager._show_overlay)
@@ -1618,6 +1634,7 @@ class Api(QObject):
             absence_threshold = self._proximity_manager._absence_threshold
             confirm_frames = self._proximity_manager._confirm_frames
             haar_min_neighbors = self._proximity_manager._haar_min_neighbors
+            camera_detector_active = self._proximity_manager.active_detector
         # Build dashboard URL from cloud API base
         dashboard_url = ""
         if config.CLOUD_API_URL:
@@ -1639,6 +1656,9 @@ class Api(QObject):
             "absence_threshold": absence_threshold,
             "confirm_frames": confirm_frames,
             "haar_min_neighbors": haar_min_neighbors,
+            "camera_detector": config.CAMERA_DETECTOR,
+            "camera_detector_active": camera_detector_active,
+            "min_person_pct": config.CAMERA_MIN_PERSON_PCT,
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
@@ -1853,6 +1873,17 @@ class Api(QObject):
         if v is not None:
             try:
                 config.CAMERA_MIN_SIZE_PCT = max(0.05, min(0.80, float(v)))
+                count += 1
+            except ValueError:
+                pass
+        v = db.get_meta("setting:camera_detector")
+        if v in ("face", "person"):
+            config.CAMERA_DETECTOR = v
+            count += 1
+        v = db.get_meta("setting:min_person_pct")
+        if v is not None:
+            try:
+                config.CAMERA_MIN_PERSON_PCT = max(0.10, min(0.90, float(v)))
                 count += 1
             except ValueError:
                 pass
@@ -2353,6 +2384,36 @@ class Api(QObject):
         LOGGER.info("[Admin] Min face size set to %.0f%%", pct * 100)
         return {"ok": True, "value": pct}
 
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_camera_detector(self, mode: str) -> dict:
+        """Choose what counts as "someone is there": 'face' or 'person' (YOLOX-Nano, for
+        wide-angle cameras). Applied live, persisted per station. 'active' is the mode
+        really running: 'face' when People cannot load on this PC (reason in the log)."""
+        if mode not in ("face", "person"):
+            return {"ok": False, "message": f"Unknown detector {mode!r}"}
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        active = self._proximity_manager.set_detector_mode(mode)
+        config.CAMERA_DETECTOR = mode
+        self._save_setting("camera_detector", mode)
+        LOGGER.info("[Admin] Camera detector set to %s (running: %s)", mode, active)
+        return {"ok": True, "value": mode, "active": active}
+
+    @pyqtSlot(float, result="QVariant")
+    def admin_set_min_person_pct(self, pct: float) -> dict:
+        """People mode distance: minimum person box height as a fraction of frame height
+        (0.10-0.90). Kept separately from Min Face. Persisted across restarts."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        pct = round(max(0.10, min(0.90, pct)), 2)
+        self._proximity_manager._min_person_pct = pct
+        if self._proximity_manager._detector:
+            self._proximity_manager._detector.min_person_pct = pct
+        config.CAMERA_MIN_PERSON_PCT = pct
+        self._save_setting("min_person_pct", str(pct))
+        LOGGER.info("[Admin] Min person height set to %.0f%%", pct * 100)
+        return {"ok": True, "value": pct}
+
     @pyqtSlot(float, result="QVariant")
     def admin_set_absence_threshold(self, seconds: float) -> dict:
         """Set camera absence threshold in seconds. Persisted across restarts."""
@@ -2403,7 +2464,7 @@ class Api(QObject):
         camera_keys = [
             "camera_device_id", "camera_overlay", "greeting_cooldown",
             "min_size_pct", "absence_threshold", "confirm_frames",
-            "haar_min_neighbors",
+            "haar_min_neighbors", "camera_detector", "min_person_pct",
         ]
         for key in camera_keys:
             db._connection.execute("DELETE FROM roster_meta WHERE key = ?", (f"setting:{key}",))
@@ -2416,6 +2477,8 @@ class Api(QObject):
         config.CAMERA_ABSENCE_THRESHOLD_SECONDS = d["absence_threshold"]
         config.CAMERA_CONFIRM_FRAMES = d["confirm_frames"]
         config.CAMERA_HAAR_MIN_NEIGHBORS = d["haar_min_neighbors"]
+        config.CAMERA_DETECTOR = d["camera_detector"]
+        config.CAMERA_MIN_PERSON_PCT = d["min_person_pct"]
         config.CAMERA_SHOW_OVERLAY = False  # production default
         config.CAMERA_DEVICE_ID = d.get("camera_device_id", 0)
 
@@ -2435,6 +2498,9 @@ class Api(QObject):
                 det.absence_threshold = d["absence_threshold"]
                 det.confirm_frames = d["confirm_frames"]
                 det.haar_min_neighbors = d["haar_min_neighbors"]
+                det.min_person_pct = d["min_person_pct"]
+            self._proximity_manager._min_person_pct = d["min_person_pct"]
+            self._proximity_manager.set_detector_mode(d["camera_detector"])
 
         LOGGER.info("[Admin] Camera settings reset to defaults")
         return {"ok": True}
@@ -2500,6 +2566,8 @@ class Api(QObject):
             "CAMERA_ABSENCE_THRESHOLD_SECONDS": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
             "CAMERA_CONFIRM_FRAMES": config.CAMERA_CONFIRM_FRAMES,
             "CAMERA_HAAR_MIN_NEIGHBORS": config.CAMERA_HAAR_MIN_NEIGHBORS,
+            "CAMERA_DETECTOR": config.CAMERA_DETECTOR,
+            "CAMERA_MIN_PERSON_PCT": config.CAMERA_MIN_PERSON_PCT,
             "CAMERA_RESOLUTION_WIDTH": config.CAMERA_RESOLUTION_WIDTH,
             "CAMERA_RESOLUTION_HEIGHT": config.CAMERA_RESOLUTION_HEIGHT,
             "LOGGING_LEVEL": config.LOGGING_LEVEL,
@@ -3011,6 +3079,9 @@ def main() -> None:
                     min_size_pct=config.CAMERA_MIN_SIZE_PCT,
                     haar_min_neighbors=config.CAMERA_HAAR_MIN_NEIGHBORS,
                     detection_scale=config.CAMERA_DETECTION_SCALE,
+                    detector=config.CAMERA_DETECTOR,
+                    min_person_pct=config.CAMERA_MIN_PERSON_PCT,
+                    person_confidence=config.CAMERA_PERSON_CONFIDENCE,
                     # Gated at call time so the admin toggle takes effect without a restart
                     presence_callback=(
                         (lambda present: api_object.presence_changed.emit(present)
@@ -3018,6 +3089,8 @@ def main() -> None:
                         if isinstance(api_object, Api)
                         else None
                     ),
+                    # A blocked hold ignores scans, so "please scan your badge" would mislead
+                    greeting_suppressed=lambda: config.HOLD_ENABLED and config.HOLD_SCANS == "block",
                 )
                 LOGGER.info("[Proximity] Plugin loaded")
                 # Wire proximity manager into the API so scans suppress greetings

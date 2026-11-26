@@ -36,6 +36,6 @@ pyinstaller TrackAttendance.spec
 Manual: run the built exe on the Poly station in People mode; check the log.
 
 ## Completion Report
-- Changed files:
-- Verification results:
-- Known limitations:
+- Changed files: `TrackAttendance.spec` (onnxruntime shipped as files and excluded from analysis, `msvcp140*.dll` bundled, run-time hook), `build_hooks/rthook_msvc_runtime_first.py` (new), `docs/CONFIGURATION.md`, `.env.example`, `README.md`, `CLAUDE.md`.
+- Verification results: `pyinstaller TrackAttendance.spec` builds. The exe started with `CAMERA_DETECTOR=person` logs "People detection active" and detects on the Poly. Without the hook it crashed (exit 139).
+- Known limitations: the exe grew by about 54 MB (696 → 750 MB), not about 25 MB. Tested on this PC only; the hook makes camera stations use the bundled 14.51 runtime.

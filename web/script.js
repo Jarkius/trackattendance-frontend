@@ -2599,6 +2599,7 @@ ${destination}` : message;
     // Esc / Ctrl+Shift+H change the hold state inside the controller: save it and mirror it in admin
     screensaver.hooks.onHoldChanged = (on) => {
         if (adminHoldToggle) adminHoldToggle.classList.toggle('active', on);
+        updateVideoSectionsDimmed();
         queueOrRun((bridge) => {
             if (bridge.admin_set_hold) bridge.admin_set_hold(on, () => {});
         });
@@ -2726,6 +2727,8 @@ ${destination}` : message;
     const adminConfirmSlider = document.getElementById('admin-confirm-slider');
     const adminConfirmValue = document.getElementById('admin-confirm-value');
     const adminHaarSlider = document.getElementById('admin-haar-slider');
+    const adminMinpersonSlider = document.getElementById('admin-minperson-slider');
+    const adminMinpersonValue = document.getElementById('admin-minperson-value');
     const adminHaarValue = document.getElementById('admin-haar-value');
     const adminCameraResetBtn = document.getElementById('admin-camera-reset-btn');
     const adminFeedbackSlider = document.getElementById('admin-feedback-slider');
@@ -2845,6 +2848,7 @@ ${destination}` : message;
                     syncSlider(adminLoopPauseSlider, adminLoopPauseValue, result.video_loop_pause_seconds || 0, 0, 300, 'sec');
                     markActive('.adm-hold-scans-opt', result.hold_scans || 'accept');
                     if (adminHoldToggle) adminHoldToggle.classList.toggle('active', !!result.hold_enabled);
+                    updateVideoSectionsDimmed();
                     syncSlider(adminScreensaverIdleSlider, adminScreensaverIdleValue, result.screensaver_idle_seconds || 60, 5, 300, 'sec');
                     if (adminScreensaverSoundToggle) {
                         adminScreensaverSoundToggle.classList.toggle('active', !result.screensaver_muted);
@@ -2925,6 +2929,9 @@ ${destination}` : message;
                         syncSlider(adminConfirmSlider, adminConfirmValue, confirmF, 1, 10, 'frm');
                         const haarN = result.haar_min_neighbors || 5;
                         syncSlider(adminHaarSlider, adminHaarValue, haarN, 2, 10, '');
+                        syncSlider(adminMinpersonSlider, adminMinpersonValue,
+                            Math.round((result.min_person_pct || 0.30) * 100), 10, 90, '%');
+                        applyDetectorUi(result.camera_detector || 'face', result.camera_detector_active || 'face');
                     }
                     // Display section
                     const feedbackSec = Math.round((result.scan_feedback_ms || 2000) / 1000);
@@ -3148,6 +3155,7 @@ ${destination}` : message;
             e.preventDefault();
             const newState = !adminScreensaverToggle.classList.contains('active');
             adminScreensaverToggle.classList.toggle('active', newState);
+            updateVideoSectionsDimmed();
             screensaver.configure({ enabled: newState });
             queueOrRun((bridge) => {
                 if (bridge.admin_set_screensaver) {
@@ -3166,6 +3174,20 @@ ${destination}` : message;
         const usesVideo = !!document.querySelector(
             '.adm-ss-content-opt.active[data-val="video"], .adm-hold-content-opt.active[data-val="video"]');
         if (adminLoopPauseSlider) adminLoopPauseSlider.disabled = !usesVideo;
+    }
+    // Dim (not lock) a section whose feature is off, so it can still be set up before it is
+    // turned on. The shared video section is in use while either the screensaver or the hold is.
+    function updateVideoSectionsDimmed() {
+        const on = (t) => !!(t && t.classList.contains('active'));
+        const ssOn = on(adminScreensaverToggle);
+        const holdOn = on(adminHoldToggle);
+        const dim = (id, off) => {
+            const s = document.getElementById(id);
+            if (s) s.classList.toggle('adm-section--off', off);
+        };
+        dim('admin-ss-section', !ssOn);
+        dim('admin-hold-section', !holdOn);
+        dim('admin-video-section', !ssOn && !holdOn);
     }
     bindSlider(adminLoopPauseSlider, adminLoopPauseValue, 'sec', (v) => {
         screensaver.configure({ loopPauseS: v });
@@ -3245,12 +3267,14 @@ ${destination}` : message;
             e.preventDefault();
             const newState = !adminHoldToggle.classList.contains('active');
             adminHoldToggle.classList.toggle('active', newState);
+            updateVideoSectionsDimmed();
             screensaver.configure({ hold: newState });
             queueOrRun((bridge) => {
                 if (bridge.admin_set_hold) bridge.admin_set_hold(newState, () => {});
             });
         });
     }
+    updateVideoSectionsDimmed();
 
     // Duplicate detection toggle
     if (adminDupDetectionToggle) {
@@ -3620,6 +3644,49 @@ ${destination}` : message;
             if (bridge.admin_set_haar_min_neighbors) bridge.admin_set_haar_min_neighbors(v, () => {});
         });
     });
+    bindSlider(adminMinpersonSlider, adminMinpersonValue, '%', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_min_person_pct) bridge.admin_set_min_person_pct(v / 100, () => {});
+        });
+    });
+
+    // Detect: Faces | People. Each mode keeps its own size slider (Min Face / Min Person);
+    // Strictness only tunes the face Haar cascades, so it is greyed out for People.
+    // `active` is what really runs: 'face' when People could not load on this PC.
+    function applyDetectorUi(mode, active) {
+        const people = mode === 'person';
+        document.querySelectorAll('.adm-cam-detector-opt').forEach((b) => {
+            b.classList.toggle('active', b.dataset.val === mode);
+        });
+        const faceRow = document.getElementById('admin-minsize-row');
+        const personRow = document.getElementById('admin-minperson-row');
+        if (faceRow) faceRow.style.display = people ? 'none' : '';
+        if (personRow) personRow.style.display = people ? '' : 'none';
+        if (adminHaarSlider) adminHaarSlider.disabled = people;
+        const hint = document.getElementById('admin-cam-detector-hint');
+        if (!hint) return;
+        if (people && active !== 'person') {
+            hint.textContent = 'People detection unavailable on this PC (see log) \u2013 using Faces.';
+            hint.style.color = '#f0960a';
+            return;
+        }
+        const btn = document.querySelector('.adm-cam-detector-opt[data-val="' + mode + '"]');
+        hint.textContent = btn ? (btn.dataset.hint || '') : '';
+        hint.style.color = '#999';
+    }
+    document.querySelectorAll('.adm-cam-detector-opt').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const mode = btn.dataset.val;
+            applyDetectorUi(mode, mode);
+            queueOrRun((bridge) => {
+                if (!bridge.admin_set_camera_detector) return;
+                bridge.admin_set_camera_detector(mode, (r) => {
+                    if (r && r.ok) applyDetectorUi(r.value, r.active);
+                });
+            });
+        });
+    });
 
     // Reset camera settings to .env defaults
     if (adminCameraResetBtn) {
@@ -3637,6 +3704,9 @@ ${destination}` : message;
                                         syncSlider(adminAbsenceSlider, adminAbsenceValue, r.absence_threshold || 3, 1, 10, 'sec');
                                         syncSlider(adminConfirmSlider, adminConfirmValue, r.confirm_frames || 3, 1, 10, 'frm');
                                         syncSlider(adminHaarSlider, adminHaarValue, r.haar_min_neighbors || 5, 2, 10, '');
+                                        syncSlider(adminMinpersonSlider, adminMinpersonValue,
+                                            Math.round((r.min_person_pct || 0.30) * 100), 10, 90, '%');
+                                        applyDetectorUi(r.camera_detector || 'face', r.camera_detector_active || 'face');
                                     }
                                 });
                             }

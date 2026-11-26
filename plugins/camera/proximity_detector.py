@@ -2,7 +2,14 @@
 Person proximity detection using YuNet DNN face detector + upper body Haar cascade.
 Falls back to frontal face Haar cascade, then motion detection if models unavailable.
 
-Detection chain per frame:
+Two modes (CAMERA_DETECTOR):
+  face   (default) the chain below
+  person YOLOX-Nano whole-body detection on the full frame (person_detector.py), counted
+         when the box is at least min_person_pct of the frame height. For wide-angle
+         cameras: ignores furniture, finds people whose face is small or turned away.
+         Falls back to the face chain if the model or onnxruntime cannot load.
+
+Face detection chain per frame:
   1. YuNet face (primary — fast DNN, handles angles)
   2. Upper body Haar cascade (catches torso when face not visible)
   3. Frontal face Haar cascade (fallback if YuNet unavailable)
@@ -49,11 +56,20 @@ class ProximityDetector:
     A person is "detected" when a face/body is found or motion exceeds threshold.
     """
 
+    # Class defaults so a detector built without __init__ (tests do this) runs face mode.
+    _active_detector = "face"
+    _pending_mode: Optional[tuple] = None  # (mode, person backend) queued by set_mode()
+    _last_person_reject: Optional[tuple] = None
+    _last_person_height_pct = 0.0
+
     def __init__(self, sensitivity: int = 5000, cooldown: float = 5.0,
                  min_face_confidence: float = 0.5, min_pose_confidence: float = 0.5,
                  skip_frames: int = 2, absence_threshold: float = 3.0,
                  confirm_frames: int = 3, min_size_pct: float = 0.20,
-                 haar_min_neighbors: int = 5, detection_scale: float = 1.0):
+                 haar_min_neighbors: int = 5, detection_scale: float = 1.0,
+                 detector: str = "face", min_person_pct: float = 0.30,
+                 person_confidence: float = 0.5,
+                 person_factory: Optional[Callable[[], object]] = None):
         self.sensitivity = sensitivity  # for motion fallback
         self.haar_min_neighbors = haar_min_neighbors  # Haar cascade strictness
         self.cooldown = cooldown  # minimum seconds between greetings
@@ -75,6 +91,16 @@ class ProximityDetector:
         # throttled, so "camera works but never detects me" shows the real cause in the log.
         self._last_reject: Optional[tuple] = None
         self._last_reject_log = 0.0
+
+        # People mode (YOLOX-Nano): box height as a fraction of frame height decides distance
+        self.min_person_pct = min_person_pct
+        self.person_confidence = person_confidence
+        self._person = None
+        self._active_detector = "face"
+        self._person_errors = 0          # consecutive inference failures
+        self._person_error_log = 0.0
+        self._last_person_reject: Optional[tuple] = None  # (height %, score) of a too-small person
+        self._last_person_height_pct = 0.0
 
         # Detection backends
         self._yunet = None
@@ -140,6 +166,59 @@ class ProximityDetector:
                     LOGGER.warning("[Proximity] Haar cascade XML not found")
             except Exception as e:
                 LOGGER.warning("[Proximity] Haar cascade init failed (%s)", e)
+
+        if detector == "person":
+            self._start_person(person_factory)
+        elif detector != "face":
+            LOGGER.warning("[Proximity] Unknown detector %r - using faces", detector)
+
+    def _start_person(self, factory: Optional[Callable[[], object]]) -> None:
+        """Build the People backend; on any failure keep faces and say why in the log."""
+        try:
+            if factory is None:
+                from plugins.camera.person_detector import PersonDetector, THREADS
+                self._person = PersonDetector(confidence=self.person_confidence)
+                detail = "YOLOX-Nano, onnxruntime CPU, %d threads" % THREADS
+            else:
+                self._person = factory()
+                detail = "custom backend"
+        except Exception as e:  # PersonDetectorUnavailable, ImportError, anything else
+            self._person = None
+            LOGGER.warning("[Proximity] People detection unavailable (%s) - using faces", e)
+            return
+        self._active_detector = "person"
+        LOGGER.info("[Proximity] People detection active (%s, min person %.0f%% of frame height, "
+                    "confidence %.2f, full frame)", detail, self.min_person_pct * 100,
+                    self.person_confidence)
+
+    @property
+    def active_detector(self) -> str:
+        """Mode really running: 'person', or 'face' (chosen, or fallen back to).
+        A switch queued by set_mode() is reported straight away."""
+        pending = self._pending_mode
+        return pending[0] if pending else self._active_detector
+
+    def set_mode(self, mode: str, person_backend=None) -> None:
+        """Queue a switch between 'face' and 'person'. Safe to call from the UI thread:
+        the camera thread applies it at its next processed frame, so no frame ever runs
+        half-switched. 'person' needs a ready backend (built by the caller); without one
+        the detector stays on faces."""
+        if mode == "person" and person_backend is None:
+            mode = "face"
+        self._pending_mode = (mode, person_backend)
+
+    def _apply_pending_mode(self) -> None:
+        pending, self._pending_mode = self._pending_mode, None
+        if pending is None:
+            return
+        mode, backend = pending
+        self._person = backend if mode == "person" else None
+        self._active_detector = mode
+        self._person_errors = 0
+        self._presence_state = "empty"
+        self._consecutive_detections = 0
+        LOGGER.info("[Proximity] Detector switched to %s (presence reset to empty)",
+                    "people" if mode == "person" else "faces")
 
     @property
     def detection_method(self) -> str:
@@ -248,6 +327,45 @@ class ProximityDetector:
             return True
         return False
 
+    def _detect_person(self, frame: np.ndarray) -> bool:
+        """People mode: a person counts when the box is >= min_person_pct of frame height.
+
+        Boxes are in full-frame pixels already (no detection_scale here), stored in
+        self._last_faces for the overlay. A person seen but too small is remembered for
+        the throttled "too small" log line. Exceptions propagate to _process_people.
+        """
+        frame_h = frame.shape[0]
+        boxes = self._person.detect(frame)
+        counted = [b for b in boxes if b[3] / frame_h >= self.min_person_pct]
+        if counted:
+            self._last_faces = [[int(x), int(y), int(w), int(h)] for x, y, w, h, _ in counted]
+            self._last_person_height_pct = max(b[3] for b in counted) / frame_h * 100
+            return True
+        if boxes:
+            tallest = max(boxes, key=lambda b: b[3])
+            self._last_person_reject = (tallest[3] / frame_h * 100, tallest[4])
+        return False
+
+    def _process_people(self, frame: np.ndarray, now: float) -> bool:
+        """Run the People backend on one frame; three failures in a row fall back to faces."""
+        try:
+            found = self._detect_person(frame)
+            self._person_errors = 0
+        except Exception as e:
+            self._person_errors += 1
+            if now - self._person_error_log >= 60.0:
+                self._person_error_log = now
+                LOGGER.warning("[Proximity] People detection failed on a frame: %s", e)
+            if self._person_errors >= 3:
+                LOGGER.warning("[Proximity] People detection failed %d frames in a row - "
+                               "falling back to faces", self._person_errors)
+                self._active_detector = "face"
+                self._person = None
+            return False
+        if found:
+            self._last_detection_method = "person"
+        return found
+
     def _detect_motion(self, frame: np.ndarray, precomputed_gray=None) -> bool:
         """Fallback: simple motion detection via frame differencing.
 
@@ -305,6 +423,18 @@ class ProximityDetector:
         if self._frame_count % (self.skip_frames + 1) != 0:
             return False
 
+        self._apply_pending_mode()
+        self._last_faces = None
+        self._last_reject = None
+        self._last_person_reject = None
+        if self._active_detector == "person":
+            person_in_frame = self._process_people(frame, current_time)
+        else:
+            person_in_frame = self._detect_faces(frame)
+        return self._update_presence(person_in_frame, current_time)
+
+    def _detect_faces(self, frame: np.ndarray) -> bool:
+        """Face mode: YuNet face → upper body → frontal face Haar → motion (unchanged)."""
         # Downscale frame for detection to save CPU (display uses original)
         if self._detection_scale < 1.0:
             det_h = int(frame.shape[0] * self._detection_scale)
@@ -316,8 +446,6 @@ class ProximityDetector:
         # Detect person in this frame
         # Chain: YuNet face → upper body → frontal face Haar → motion
         person_in_frame = False
-        self._last_faces = None
-        self._last_reject = None
 
         if self._use_yunet:
             if self._detect_yunet_face(det_frame):
@@ -353,7 +481,10 @@ class ProximityDetector:
             if self._detect_motion(det_frame):
                 person_in_frame = True
                 self._last_detection_method = "motion"
+        return person_in_frame
 
+    def _update_presence(self, person_in_frame: bool, current_time: float) -> bool:
+        """Presence state machine shared by both modes (confirm, cooldown, absence)."""
         if person_in_frame:
             self._last_person_seen_time = current_time
             self._consecutive_detections += 1
@@ -365,8 +496,10 @@ class ProximityDetector:
 
                 # Confirmed: empty → present
                 self._presence_state = "present"
-                LOGGER.info("[Proximity] State: empty → present (%s, %d consecutive frames)",
-                            self._last_detection_method, self._consecutive_detections)
+                size = (", box %.0f%% of frame height" % self._last_person_height_pct
+                        if self._last_detection_method == "person" else "")
+                LOGGER.info("[Proximity] State: empty → present (%s, %d consecutive frames%s)",
+                            self._last_detection_method, self._consecutive_detections, size)
 
                 # Enforce minimum gap between greetings (cooldown)
                 since_last_greet = current_time - self._last_detection_time
@@ -397,6 +530,13 @@ class ProximityDetector:
             LOGGER.info("[Proximity] Face seen but too small: %d px = %.0f%% of frame width "
                         "(needs >= %.0f%%, score %.2f) - step closer or lower CAMERA_MIN_SIZE_PCT",
                         fw, 100.0 * fw / frame_w, self.min_size_pct * 100, score)
+
+        if self._last_person_reject is not None and current_time - self._last_reject_log >= 5.0:
+            self._last_reject_log = current_time
+            pct, score = self._last_person_reject
+            LOGGER.info("[Proximity] Person seen but too small: %.0f%% of frame height "
+                        "(needs >= %.0f%%, score %.2f) - step closer or lower CAMERA_MIN_PERSON_PCT",
+                        pct, self.min_person_pct * 100, score)
 
         # Check if absent long enough to reset presence state
         if self._presence_state == "present":

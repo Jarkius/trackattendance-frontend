@@ -35,6 +35,10 @@ class ProximityGreetingManager:
         haar_min_neighbors: int = 5,
         detection_scale: float = 1.0,
         presence_callback=None,
+        detector: str = "face",
+        min_person_pct: float = 0.30,
+        person_confidence: float = 0.5,
+        greeting_suppressed=None,
     ):
         self._parent_window = parent_window
         self._camera_id = camera_id
@@ -47,10 +51,16 @@ class ProximityGreetingManager:
         self._min_size_pct = min_size_pct
         self._haar_min_neighbors = haar_min_neighbors
         self._detection_scale = detection_scale
+        self._detector_mode = detector  # "face" | "person" (People = YOLOX-Nano)
+        self._min_person_pct = min_person_pct
+        self._person_confidence = person_confidence
+        self._active_detector = "face"  # updated by set_detector_mode while the camera is off
         self._show_overlay = show_overlay
         self._voice_player = voice_player  # main app's VoicePlayer, to avoid audio overlap
         # Called as presence_callback(bool) from the camera thread on present/empty changes
         self._presence_callback = presence_callback
+        # greeting_suppressed() -> bool, asked at each detection (e.g. hold screen blocking scans)
+        self._greeting_suppressed = greeting_suppressed
         self._last_presence = False
 
         self._cap = None  # cv2.VideoCapture
@@ -61,6 +71,36 @@ class ProximityGreetingManager:
         self._running = False
         self._busy_until: float = 0.0  # suppress greetings while queue is active
         self._voice_playing_until: float = 0.0  # time-based voice overlap guard
+
+    def set_detector_mode(self, mode: str) -> str:
+        """Switch between 'face' and 'person' (People = YOLOX-Nano) without a restart.
+
+        The People backend is built here, on the caller's thread, and handed over ready;
+        the camera thread swaps it in at its next frame. Returns the mode that will really
+        run: 'face' when People cannot load (the reason is logged). The chosen mode is kept
+        either way, so the next camera start tries it again.
+        """
+        self._detector_mode = mode
+        active, backend = "face", None
+        if mode == "person":
+            try:
+                from plugins.camera import person_detector
+                backend = person_detector.PersonDetector(confidence=self._person_confidence)
+                active = "person"
+            except Exception as exc:
+                LOGGER.warning("[Proximity] People detection unavailable (%s) - using faces", exc)
+        self._active_detector = active
+        if self._detector:
+            self._detector.set_mode(active, backend)
+        LOGGER.info("[Proximity] Detector mode set to %s (running: %s)", mode, active)
+        return active
+
+    @property
+    def active_detector(self) -> str:
+        """'person' or 'face': what the detector really runs (after any fallback)."""
+        if self._detector:
+            return self._detector.active_detector
+        return self._active_detector
 
     def start(self) -> bool:
         """Late-import deps, open camera, start daemon thread. Returns False on failure."""
@@ -100,13 +140,18 @@ class ProximityGreetingManager:
                 names = video_input_names()
                 name = names[self._camera_id] if self._camera_id < len(names) else "name unknown"
                 fh, fw = first_frame.shape[:2]
+                if self._detector_mode == "person":
+                    size = "min person %.0f%% of height (= %d px)" % (
+                        self._min_person_pct * 100, int(fh * self._min_person_pct))
+                else:
+                    size = "min face size %.0f%% of width (= %d px)" % (
+                        self._min_size_pct * 100, int(fw * self._min_size_pct))
                 LOGGER.info(
                     "[Proximity] Camera %d opened: %s, %s, requested %dx%d, actual %dx%d, "
-                    "mean brightness %.0f/255, min face size %.0f%% of width (= %d px)",
+                    "mean brightness %.0f/255, %s",
                     self._camera_id, name, self._cap.getBackendName(),
                     self._resolution[0], self._resolution[1], fw, fh,
-                    float(first_frame.mean()), self._min_size_pct * 100,
-                    int(fw * self._min_size_pct),
+                    float(first_frame.mean()), size,
                 )
             except Exception as exc:  # diagnostics only
                 LOGGER.debug("[Proximity] Camera info unavailable: %s", exc)
@@ -118,6 +163,9 @@ class ProximityGreetingManager:
                 min_size_pct=self._min_size_pct,
                 haar_min_neighbors=self._haar_min_neighbors,
                 detection_scale=self._detection_scale,
+                detector=self._detector_mode,
+                min_person_pct=self._min_person_pct,
+                person_confidence=self._person_confidence,
             )
             self._detector.add_detection_callback(self._on_person_detected)
 
@@ -195,6 +243,16 @@ class ProximityGreetingManager:
         Runs on camera thread. All Qt operations are deferred to main thread
         via GreetingPlayer's thread-safe play_random().
         """
+        if self._greeting_suppressed is not None:
+            try:
+                suppressed = self._greeting_suppressed()
+            except Exception as exc:
+                LOGGER.warning("[Proximity] Greeting-suppressed check failed: %s", exc)
+                suppressed = False
+            if suppressed:
+                LOGGER.info("[Proximity] Person detected but greeting suppressed (hold screen blocking scans)")
+                return
+
         # Suppress greeting while scans are happening (queue is active)
         if time.time() < self._busy_until:
             remaining = self._busy_until - time.time()
