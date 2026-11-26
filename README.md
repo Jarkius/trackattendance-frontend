@@ -197,6 +197,7 @@ docs/                Technical documentation
 
 ## 📝 Version History
 
+- **v2.2.1** — Clear ALL stations re-arms the hold screen from `.env` on every station (rehearse, then reset from one place); an offline station no longer re-uploads cleared test scans; sync always resumes after a failed clear; roster summary re-sent after a clear
 - **v2.2.0** — Pre-event hold screen (accept or block early scans; block also mutes the camera greeting) and idle screensaver, with a per-event `media\` folder and native MP4 playback; camera wake/sound modes; per-station People detector (YOLOX-Nano) for wide-angle cameras; admin settings regrouped into Idle Screensaver / Hold Screen / Video, Sound & Camera
 - **v2.1.11** — Audit fixes #101–#112: attendance rate counts registered employees only (walk-ins and unknown badges reported separately, rate capped at 100%); failed scans retried and bad batches isolated instead of blocking sync; badge IDs normalised (case, invisible characters, lost leading zeros); scanner keystrokes no longer dropped during alerts or the lookup box; Excel exports can't run formulas; reporting queries indexed (10k×10k: seconds → milliseconds)
 - **v2.1.10** — Added app version display (window title, tiny corner label on the main screen, Admin Panel footer, startup log line) backed by a single `version.py`; added `build.bat` for one-step builds

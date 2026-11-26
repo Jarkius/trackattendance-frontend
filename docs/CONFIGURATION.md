@@ -95,6 +95,8 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 
 **Hold screen** (before check-in opens): shows at once and stays. `Esc` releases it for good (saved; no timeout resume, survives reboot until released). `Ctrl+Shift+H` or the admin toggle turns it back on.
 
+**Rehearsal, then reset:** with `HOLD_ENABLED=True` in `.env`, any clear puts the hold screen back up with `.env`'s `HOLD_SCANS`, replacing an Esc release or scans setting changed during testing. Admin → Clear ALL stations on one station resets every online station within one health check (`CONNECTION_CHECK_INTERVAL_SECONDS`); those stations skip the "Data Cleared" pop-up because the hold screen is back up. A station that was offline during the clear does not upload its old scans when it reconnects: it applies the clear first. Without `HOLD_ENABLED=True` in `.env`, a clear leaves the hold screen as it is.
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOLD_ENABLED` | `False` | Start with the hold screen up. After an Esc release the saved `False` wins over `.env`, so re-arm with `Ctrl+Shift+H` or the admin toggle |

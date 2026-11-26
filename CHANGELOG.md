@@ -2,6 +2,20 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.2.1 (2026-11-26)
+
+Rehearse with the event team, then reset every station from one place.
+
+### Added
+
+- **A clear re-arms the hold screen.** With `HOLD_ENABLED=True` in `.env`, Admin → Clear ALL stations (or Clear this station) puts the hold screen back up with `.env`'s `HOLD_SCANS` on every station, replacing an Esc release or a scans setting changed while testing. Remote stations follow within one health check and skip the "Data Cleared" pop-up, which would otherwise sit hidden under the hold screen.
+
+### Fixed
+
+- **An offline station could put cleared test scans back into the cloud.** On reconnecting it uploaded its old pending scans before applying the clear. Uploads are now held while the cloud has a newer clear than the station, and the clear removes those scans.
+- **A failed local clear could leave a station's sync stopped for good.** Sync and auto-sync now always resume; the clear is retried at the next health check.
+- **Dashboard department totals stayed empty after a clear** until each app restarted. The roster summary is now sent again after any clear.
+
 ## v2.2.0 (2026-11-26)
 
 Hold screen, idle screensaver and People camera detection (PRs #121, #122, #123). Specs: `docs/specs/native-video-playback.md`, `docs/specs/person-detector-option.md`. Every new setting defaults to off, so existing stations behave as before.

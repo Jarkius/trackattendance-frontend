@@ -753,6 +753,8 @@ class Api(QObject):
     # Full-screen display video (native panel): media check finished / playback failed
     screensaver_media_ready = pyqtSignal("QVariantMap")
     screensaver_video_failed = pyqtSignal(str)
+    # A clear put the hold screen back up: {"hold": True, "holdScans": "accept" | "block"}
+    hold_rearmed = pyqtSignal("QVariantMap")
 
     def __init__(
         self,
@@ -808,7 +810,13 @@ class Api(QObject):
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "screensaver_idle_s": config.SCREENSAVER_IDLE_SECONDS,
+            # The event-ready hold state a clear returns to (see _rearm_hold_after_clear)
+            "hold_enabled": config.HOLD_ENABLED,
+            "hold_scans": config.HOLD_SCANS,
         }
+        # The upload guard compares this with the cloud's epoch (SyncService.remote_clear_pending)
+        if self._sync_service:
+            self._sync_service.local_clear_epoch = self._service._db.get_meta("last_clear_epoch")
         # Emit initial state so the UI can bind immediately
         QTimer.singleShot(0, lambda: self.connection_status_changed.emit(self._last_connection_result))
 
@@ -1480,7 +1488,11 @@ class Api(QObject):
 
         # Update local clear_epoch and send heartbeat immediately
         if clear_epoch:
-            self._service._db.set_meta("last_clear_epoch", clear_epoch)
+            # Both sides now: the cloud epoch would otherwise stay the old one until the
+            # next health check, and the upload guard would hold this station's new scans.
+            if self._sync_service:
+                self._sync_service.last_clear_epoch = clear_epoch
+            self._set_local_clear_epoch(clear_epoch)
             if self._sync_service:
                 station = self._service._db.get_station_name() or "Unknown"
                 sync_service = self._sync_service
@@ -1501,13 +1513,17 @@ class Api(QObject):
                 _schedule_followup_heartbeat(30, sync_svc, station, clear_epoch)
                 _schedule_followup_heartbeat(90, sync_svc, station, clear_epoch)
 
+        rearmed = self._after_clear()
         msg = f"Cleared {cloud_deleted} cloud + {local_count} local records + roster"
+        if rearmed:
+            msg += "; hold screen re-armed on all stations"
         LOGGER.info(f"Admin clear-all: {msg}")
         return {
             "ok": True,
             "cloud_deleted": cloud_deleted,
             "local_deleted": local_count,
             "backup_path": backup_path,
+            "hold_rearmed": rearmed,
             "message": msg,
         }
 
@@ -1568,7 +1584,10 @@ class Api(QObject):
             self._sync_coordinator.resume()
             LOGGER.info("[Admin] Coordinator resumed after station clear")
 
+        rearmed = self._after_clear()
         msg = f"Cleared {cloud_deleted} cloud + {local_count} local records for {station}"
+        if rearmed:
+            msg += "; hold screen re-armed"
         LOGGER.info(f"Admin clear-station: {msg}")
         return {
             "ok": True,
@@ -1576,6 +1595,7 @@ class Api(QObject):
             "local_deleted": local_count,
             "backup_path": backup_path,
             "station": station,
+            "hold_rearmed": rearmed,
             "message": msg,
         }
 
@@ -2340,6 +2360,7 @@ class Api(QObject):
                     batch_size=config.CLOUD_SYNC_BATCH_SIZE,
                     connection_timeout=config.CONNECTION_CHECK_TIMEOUT_SECONDS,
                 )
+                self._sync_service.local_clear_epoch = self._service._db.get_meta("last_clear_epoch")
                 LOGGER.info("[Admin] Sync service initialised with new API key")
             except Exception as exc:
                 LOGGER.warning("[Admin] Failed to init sync service: %s", exc)
@@ -2607,6 +2628,39 @@ class Api(QObject):
             LOGGER.warning("[Admin] Failed to export .env: %s", exc)
             return {"ok": False, "message": str(exc)}
 
+    def _set_local_clear_epoch(self, epoch: str) -> None:
+        """Record which cloud clear this station has applied (SQLite + the sync guard)."""
+        self._service._db.set_meta("last_clear_epoch", epoch)
+        if self._sync_service:
+            self._sync_service.local_clear_epoch = epoch
+
+    def _rearm_hold_after_clear(self) -> bool:
+        """Put the hold screen back up as .env defines it (HOLD_ENABLED, HOLD_SCANS).
+
+        A clear ends the test run: an Esc release or a scans setting changed while
+        testing must not carry over into the event. Saved, so a restart keeps it, and
+        pushed to the page. Returns False (nothing changed) when .env has no hold.
+        """
+        d = self._config_defaults
+        if not d.get("hold_enabled"):
+            LOGGER.info("[Clear] Hold screen not re-armed (HOLD_ENABLED is off in .env)")
+            return False
+        scans = d.get("hold_scans") or "accept"
+        config.HOLD_ENABLED = True
+        config.HOLD_SCANS = scans
+        self._save_setting("hold_enabled", "True")
+        self._save_setting("hold_scans", scans)
+        self.hold_rearmed.emit({"hold": True, "holdScans": scans})
+        LOGGER.info("[Clear] Hold screen re-armed (scans: %s)", scans)
+        return True
+
+    def _after_clear(self) -> bool:
+        """Common follow-up to every clear (all stations, this station, remote).
+        Returns True when the hold screen was re-armed."""
+        # The cloud roster summary may have been cleared too: send it again
+        self._roster_synced = False
+        return self._rearm_hold_after_clear()
+
     @pyqtSlot()
     def _handle_clear_epoch_and_heartbeat_slot(self) -> None:
         """Check clear_epoch and send heartbeat. Runs on MAIN thread (SQLite safe)."""
@@ -2622,7 +2676,7 @@ class Api(QObject):
 
         # First time: initialize local epoch to cloud value (no clear needed)
         if local_epoch is None and cloud_epoch:
-            self._service._db.set_meta("last_clear_epoch", cloud_epoch)
+            self._set_local_clear_epoch(cloud_epoch)
             LOGGER.info("[Sync] First connection — initialized clear_epoch to %s", cloud_epoch)
             local_epoch = cloud_epoch
         # Existing station: detect remote clear
@@ -2649,27 +2703,30 @@ class Api(QObject):
                     self._auto_sync_manager.reset_after_barrier()
                 self._reset_manual_sync_state()
             try:
-                # Synchronous on purpose: a nested event loop here would let submit_scan
-                # record a scan after the backup snapshot that clear_all_scans() then deletes.
-                self._service.export_scans()
-                LOGGER.info("[Sync] Backup exported before remote clear")
-            except Exception as e:
-                LOGGER.warning("[Sync] Backup export failed: %s", e)
-            self._service._db.clear_all_scans()
-            self._service._db.set_meta("last_clear_epoch", cloud_epoch)
-            LOGGER.info("[Sync] Local data cleared after remote clear")
-            # Refresh UI: reset counters and show alert modal
-            self._notify_remote_clear()
-            # Resume the coordinator now that the clear has committed — any
-            # sync job submitted from this point on is a fresh post-clear job,
-            # never a stale pre-clear one.
-            if self._sync_coordinator:
-                self._sync_coordinator.resume()
-                LOGGER.info("[Sync] Coordinator resumed after remote clear")
-            # Resume auto-sync's timer.
-            if self._auto_sync_manager:
-                self._auto_sync_manager.start()
-                LOGGER.info("[Sync] Auto-sync resumed after remote clear")
+                try:
+                    # Synchronous on purpose: a nested event loop here would let submit_scan
+                    # record a scan after the backup snapshot that clear_all_scans() then deletes.
+                    self._service.export_scans()
+                    LOGGER.info("[Sync] Backup exported before remote clear")
+                except Exception as e:
+                    LOGGER.warning("[Sync] Backup export failed: %s", e)
+                self._service._db.clear_all_scans()
+                self._set_local_clear_epoch(cloud_epoch)
+                LOGGER.info("[Sync] Local data cleared after remote clear")
+                rearmed = self._after_clear()
+                # Refresh UI: reset counters. The alert is skipped when the hold screen
+                # is back up: it would sit hidden under the hold until check-in opens.
+                self._notify_remote_clear(show_alert=not rearmed)
+            finally:
+                # Always resume, even if the clear failed (the epoch is then not
+                # recorded, so the next health check retries). Any sync job submitted
+                # after a successful clear is a fresh post-clear job.
+                if self._sync_coordinator:
+                    self._sync_coordinator.resume()
+                    LOGGER.info("[Sync] Coordinator resumed after remote clear")
+                if self._auto_sync_manager:
+                    self._auto_sync_manager.start()
+                    LOGGER.info("[Sync] Auto-sync resumed after remote clear")
 
         # Send heartbeat (in background to avoid blocking main thread)
         station = self._service._db.get_station_name() or "Unknown"
@@ -2682,8 +2739,8 @@ class Api(QObject):
 
         threading.Thread(target=_send, daemon=True, name="heartbeat").start()
 
-    def _notify_remote_clear(self) -> None:
-        """Show alert modal and refresh UI after remote clear detected."""
+    def _notify_remote_clear(self, show_alert: bool = True) -> None:
+        """Refresh UI after remote clear detected; show the alert modal if show_alert."""
         view = self._window.centralWidget() if self._window else None
         if not view:
             return
@@ -2705,6 +2762,10 @@ class Api(QObject):
             if (feedbackEl) {
                 feedbackEl.textContent = 'Ready to scan...';
                 feedbackEl.style.color = 'var(--deloitte-green)';
+            }
+            if (!__SHOW_ALERT__) {
+                console.log('[RemoteClear] UI reset (alert skipped: hold screen is up)');
+                return;
             }
             // Show alert modal
             var overlay = document.createElement('div');
@@ -2734,8 +2795,8 @@ class Api(QObject):
             console.log('[RemoteClear] UI reset and alert shown');
         })();
         """
-        view.page().runJavaScript(script)
-        LOGGER.info("[Sync] Remote clear alert shown to user")
+        view.page().runJavaScript(script.replace("__SHOW_ALERT__", "true" if show_alert else "false"))
+        LOGGER.info("[Sync] Remote clear: UI reset%s", ", alert shown" if show_alert else "")
 
     @pyqtSlot(str, result="QVariant")
     def admin_rename_station(self, new_name: str) -> dict:

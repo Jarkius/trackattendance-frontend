@@ -238,6 +238,15 @@ class SyncService:
             return False, f"Connection error: {str(e)}"
 
     last_clear_epoch: str | None = None  # populated by test_connection()
+    # This station's epoch, mirrored from SQLite meta by the main thread (Api)
+    local_clear_epoch: str | None = None
+
+    def remote_clear_pending(self) -> bool:
+        """True when the cloud was cleared after this station's last clear and the
+        station has not applied it yet. Its pending scans are pre-clear data then:
+        uploading them would put cleared test scans back into the cloud."""
+        return bool(self.local_clear_epoch and self.last_clear_epoch
+                    and self.local_clear_epoch != self.last_clear_epoch)
 
     def clear_station_scans(self, station_name: str) -> Dict[str, object]:
         """Delete scans for a specific station from cloud."""
@@ -555,6 +564,16 @@ class SyncService:
             return {
                 "ok": True, "synced_ids": [], "failed_ids": [], "pending_ids": all_ids,
                 "synced_count": 0, "error": None,
+            }
+
+        # Every upload path (auto, manual, live, shutdown) comes through here
+        if self.remote_clear_pending():
+            LOGGER.warning("[Sync] Upload held: cloud was cleared (epoch %s, this station %s); "
+                           "%d scan(s) wait for the local clear", self.last_clear_epoch,
+                           self.local_clear_epoch, len(all_ids))
+            return {
+                "ok": True, "synced_ids": [], "failed_ids": [], "pending_ids": all_ids,
+                "synced_count": 0, "error": "Remote clear pending",
             }
 
         if not scans:

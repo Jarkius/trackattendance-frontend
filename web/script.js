@@ -2690,6 +2690,17 @@ ${destination}` : message;
         if (bridge.presence_changed && bridge.presence_changed.connect) {
             bridge.presence_changed.connect((present) => screensaver.setPresent(present));
         }
+        // A clear (here or from another station) put the hold screen back up
+        if (bridge.hold_rearmed && bridge.hold_rearmed.connect) {
+            bridge.hold_rearmed.connect((s) => {
+                screensaver.configure({ hold: true, holdScans: s && s.holdScans });
+                if (adminHoldToggle) adminHoldToggle.classList.add('active');
+                document.querySelectorAll('.adm-hold-scans-opt').forEach((b) => {
+                    b.classList.toggle('active', b.dataset.val === (s && s.holdScans));
+                });
+                updateVideoSectionsDimmed();
+            });
+        }
         if (bridge.admin_get_local_settings) {
             bridge.admin_get_local_settings((r) => {
                 if (r) screensaver.configure({
