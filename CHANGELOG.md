@@ -19,6 +19,7 @@ Rehearse with the event team, then reset every station from one place.
 ### Deploy
 
 - **Keep-awake ships with the release.** `build.bat` copies `KeepAwake-Launcher.vbs` and `KeepAwake.ps1` from `C:\workspace\always-on-screen` (or `ALWAYS_ON_SCREEN_DIR`) into `always-on-screen\`. `deploy.bat` puts both in the user's Startup folder (`shell:startup`) and starts it, so the display stays on and the session never locks, without sending keystrokes. Run `deploy.bat` as the kiosk's logon user.
+- **An installed `C:\TrackAttendance` can be shared to other laptops.** `deploy.bat` now copies itself (before, installs kept an old script without the keep-awake step) and skips the source's database, `logs\` and `exports\` (backup exports of test scans must not spread). Run from `C:\TrackAttendance` itself, it skips the copy and only installs keep-awake and the shortcut.
 
 ## v2.2.0 (2026-11-26)
 
