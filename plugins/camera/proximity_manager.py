@@ -137,13 +137,18 @@ class ProximityGreetingManager:
                 names = video_input_names()
                 name = names[self._camera_id] if self._camera_id < len(names) else "name unknown"
                 fh, fw = first_frame.shape[:2]
+                if self._detector_mode == "person":
+                    size = "min person %.0f%% of height (= %d px)" % (
+                        self._min_person_pct * 100, int(fh * self._min_person_pct))
+                else:
+                    size = "min face size %.0f%% of width (= %d px)" % (
+                        self._min_size_pct * 100, int(fw * self._min_size_pct))
                 LOGGER.info(
                     "[Proximity] Camera %d opened: %s, %s, requested %dx%d, actual %dx%d, "
-                    "mean brightness %.0f/255, min face size %.0f%% of width (= %d px)",
+                    "mean brightness %.0f/255, %s",
                     self._camera_id, name, self._cap.getBackendName(),
                     self._resolution[0], self._resolution[1], fw, fh,
-                    float(first_frame.mean()), self._min_size_pct * 100,
-                    int(fw * self._min_size_pct),
+                    float(first_frame.mean()), size,
                 )
             except Exception as exc:  # diagnostics only
                 LOGGER.debug("[Proximity] Camera info unavailable: %s", exc)

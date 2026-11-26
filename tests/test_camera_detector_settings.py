@@ -25,6 +25,7 @@ def load_config(monkeypatch):
         return importlib.reload(config)
 
     yield _load
+    monkeypatch.undo()          # restore env and dotenv first, or the reload keeps test values
     importlib.reload(config)
 
 
