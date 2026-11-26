@@ -2,6 +2,31 @@
 
 All notable changes to TrackAttendance Frontend are documented in this file.
 
+## v2.2.0 (2026-11-26)
+
+Hold screen, idle screensaver and People camera detection (PRs #121, #122, #123). Specs: `docs/specs/native-video-playback.md`, `docs/specs/person-detector-option.md`. Every new setting defaults to off, so existing stations behave as before.
+
+### Added
+
+- **Pre-event hold screen** (`HOLD_ENABLED`). A full-screen image or video shows at once and stays until check-in opens. `Esc` releases it for good (saved, survives a reboot); `Ctrl+Shift+H` or the admin switch turns it back on.
+  - **Scans while held** (`HOLD_SCANS`): `accept` records the scan, shows its result for about 8 s, then returns to the hold; `block` ignores scans and also mutes the camera greeting, so nobody is asked to scan a badge that will not count.
+- **Idle screensaver** (`SCREENSAVER_ENABLED`). Shows after the station has been idle (`SCREENSAVER_IDLE_SECONDS`); any input closes it.
+- **Per-event media.** Put the event's video (`.mp4`/`.webm`) and image (`.jpg`/`.png`/`.webp`) in a `media\` folder next to the exe; the newest file wins, and unplayable files are skipped with the reason shown in Admin. Neutral defaults are built in. `build.bat` ships a repo-root `media\`.
+- **Native video playback.** Video plays in Qt's own player, so normal H.264 MP4 works. **Pause between loops** (`VIDEO_LOOP_PAUSE_SECONDS`) rests on the first frame between plays.
+- **Camera modes for the video** (`SCREENSAVER_CAMERA`): `wake` closes the screensaver when someone arrives; `sound` keeps the video playing silently and fades the sound in when someone is seen. On the hold screen only `sound` applies.
+- **People detector** (`CAMERA_DETECTOR=person`, Admin → Camera → Detect). Whole-body YOLOX-Nano detection for wide-angle cameras (e.g. Poly Studio R30), where faces are too small and Faces mode mistakes furniture for people. Distance is set by `CAMERA_MIN_PERSON_PCT`. Per station, switchable live; falls back to Faces with a log line if it cannot load. The model ships with the app (Apache-2.0, `plugins/camera/models/NOTICE-YOLOX.md`).
+- **Camera and media diagnostics** in the log: camera names, actual resolution and brightness, why a camera or file was skipped, a once-a-minute camera heartbeat, "face/person seen but too small" lines, and device hot-plug.
+
+### Changed
+
+- **Admin → Settings:** screensaver and hold settings are in three sections: Idle Screensaver, Hold Screen, and Video, Sound & Camera (shared by both). A section that is off is dimmed but can still be set up before it is turned on. "Screensaver Sound" is now "Video Sound".
+- **Export Settings** writes all the new settings to `.env`.
+- The camera picker shows device names and lists cameras that could not be opened.
+
+### Build
+
+- onnxruntime is bundled for People mode, and the current MSVC runtime is loaded first on camera stations (`build_hooks/rthook_msvc_runtime_first.py`), because onnxruntime crashes on PyQt6's older runtime.
+
 ## v2.1.11 (2026-11-24)
 
 Audit fixes for issues #101–#112 (PR #113). Spec and tickets: `docs/specs/audit-fixes-2026-11.md`. Needs API PR #28 (`Jarkius/trackattendance-api`) for the walk-in and unknown-badge figures; against an older API the dashboard falls back to the BU sum.

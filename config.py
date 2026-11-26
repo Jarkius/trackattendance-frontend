@@ -281,6 +281,42 @@ ENABLE_FADE_ANIMATION = os.getenv("ENABLE_FADE_ANIMATION", "True").lower() in ("
 # Party/Event background image
 SHOW_PARTY_BACKGROUND = os.getenv("SHOW_PARTY_BACKGROUND", "True").lower() in ("true", "1", "yes")
 
+# Full-screen display (a still image or a video loop). Files come from media/ next to the
+# .exe (per event; newest file first), else the neutral defaults in assets/media; see
+# screensaver_media.py. Two independent uses; all of it is also in the admin panel.
+#
+# 1) IDLE SCREENSAVER (during the event)  - SCREENSAVER_ENABLED
+#    After SCREENSAVER_IDLE_SECONDS without input the content appears; any key/click/touch/
+#    mouse move closes it, and it comes back after the next idle period.
+#    SCREENSAVER_CAMERA (needs ENABLE_CAMERA_DETECTION):
+#       off    ignore the camera
+#       wake   a person walking up closes it and it won't restart while someone is there
+#       sound  video keeps looping; sound fades in when a person is seen, out when they leave
+#
+# 2) HOLD SCREEN (before the event opens)  - HOLD_ENABLED
+#    Appears at once and stays. Esc releases it FOR GOOD (saved; it does not come back on a
+#    timeout or after a reboot). Ctrl+Shift+H, or the admin toggle, turns it on again.
+#    HOLD_SCANS: accept = a badge scan is recorded, its normal result is shown for a few
+#                seconds, then the hold screen returns;  block = scans are ignored
+#                and the camera greeting is muted.
+def _choice(name: str, default: str, allowed: tuple) -> str:
+    value = os.getenv(name, default).strip().lower()
+    return value if value in allowed else default
+
+
+SCREENSAVER_ENABLED = os.getenv("SCREENSAVER_ENABLED", "False").lower() in ("true", "1", "yes")
+SCREENSAVER_CONTENT = _choice("SCREENSAVER_CONTENT", "video", ("video", "image"))
+SCREENSAVER_CAMERA = _choice("SCREENSAVER_CAMERA", "wake", ("off", "wake", "sound"))
+SCREENSAVER_IDLE_SECONDS = max(5, int(os.getenv("SCREENSAVER_IDLE_SECONDS", "60")))
+# True = play the video silently
+SCREENSAVER_MUTED = os.getenv("SCREENSAVER_MUTED", "False").lower() in ("true", "1", "yes")
+HOLD_ENABLED = os.getenv("HOLD_ENABLED", "False").lower() in ("true", "1", "yes")
+HOLD_CONTENT = _choice("HOLD_CONTENT", "image", ("image", "video"))
+HOLD_SCANS = _choice("HOLD_SCANS", "accept", ("accept", "block"))
+# Video (idle screensaver and hold screen): seconds to rest on the first frame (silent)
+# between loops, so a looping video with sound is less tiring during an event. 0 = none.
+VIDEO_LOOP_PAUSE_SECONDS = _safe_int("VIDEO_LOOP_PAUSE_SECONDS", 0, min_val=0, max_val=300)
+
 # Confetti burst on a successful (matched, non-duplicate) scan. Off by default
 # so the new visual doesn't surprise anyone until explicitly enabled.
 CONFETTI_ENABLED = os.getenv("CONFETTI_ENABLED", "False").lower() in ("true", "1", "yes")
@@ -373,7 +409,22 @@ CAMERA_MIN_SIZE_PCT = _safe_float("CAMERA_MIN_SIZE_PCT", 0.20, min_val=0.05, max
 # Only applies when MediaPipe is unavailable. 3 = sensitive, 5-6 = balanced, 8+ = strict.
 CAMERA_HAAR_MIN_NEIGHBORS = _safe_int("CAMERA_HAAR_MIN_NEIGHBORS", 5, min_val=2, max_val=10)
 
+# What counts as "someone is there": face = YuNet face (+ Haar upper-body fallback), for
+# normal webcams; person = YOLOX-Nano whole-body detection on the full frame, for wide-angle
+# cameras (ignores furniture, finds people whose face is small or turned away).
+# person falls back to face if the model or onnxruntime cannot load (see the log).
+CAMERA_DETECTOR = _safe_choice("CAMERA_DETECTOR", "face", {"face", "person"})
+
+# People mode distance: the person box must be at least this fraction of the frame HEIGHT.
+# Poly R30 (wide lens) at 640x480: ~4-5 m away facing the camera = 41%, people across the
+# room = 14%, at the kiosk = 100%. 0.30 counts the first and ignores the second.
+CAMERA_MIN_PERSON_PCT = _safe_float("CAMERA_MIN_PERSON_PCT", 0.30, min_val=0.10, max_val=0.90)
+
+# People mode: minimum model confidence for a person box (0.30-0.90).
+CAMERA_PERSON_CONFIDENCE = _safe_float("CAMERA_PERSON_CONFIDENCE", 0.50, min_val=0.30, max_val=0.90)
+
 # Detection frame downscale factor (0.5 = half resolution for detection, saves CPU)
+# Face mode only: People mode always uses the full frame.
 CAMERA_DETECTION_SCALE = _safe_float("CAMERA_DETECTION_SCALE", 0.5, min_val=0.25, max_val=1.0)
 
 # Camera resolution

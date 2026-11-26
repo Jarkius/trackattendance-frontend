@@ -15,6 +15,7 @@ The dashboard shows:
 from __future__ import annotations
 
 import logging
+import time
 from database import normalize_badge_id, normalize_walkin_name
 from excel_safety import neutralize_formulas
 from datetime import datetime, timezone
@@ -221,12 +222,16 @@ class DashboardService:
         # Get cloud scan data from API
         cloud_bus = []  # BU data from cloud (all stations combined)
         stats_ok = False
+        # How long the overlay waited on the cloud: a slow dashboard is almost always this call
+        started = time.monotonic()
+        elapsed = lambda: f"{time.monotonic() - started:.1f}s"  # noqa: E731
         try:
             response = self._run_network_call(lambda: requests.get(
                 f"{self._api_url}/v1/dashboard/stats",
                 headers=self._get_headers(),
                 timeout=self._timeout,
             ))
+            logger.info("Dashboard: cloud stats HTTP %s in %s", response.status_code, elapsed())
 
             if response.status_code == 200:
                 data = response.json()
@@ -269,13 +274,13 @@ class DashboardService:
 
         except requests.exceptions.ConnectionError:
             result["error"] = "Cannot connect to cloud API"
-            logger.error("Dashboard: Connection error")
+            logger.error("Dashboard: Connection error after %s", elapsed())
         except requests.exceptions.Timeout:
             result["error"] = "Cloud API timeout"
-            logger.error("Dashboard: Request timeout")
+            logger.error("Dashboard: Request timeout after %s (limit %ss)", elapsed(), self._timeout)
         except Exception as e:
             result["error"] = f"API error: {e}"
-            logger.error(f"Dashboard: Unexpected error: {e}")
+            logger.error(f"Dashboard: Unexpected error after {elapsed()}: {e}")
 
         result["source"] = "cloud" if stats_ok else "none"
         if not stats_ok:

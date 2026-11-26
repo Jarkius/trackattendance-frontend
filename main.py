@@ -40,10 +40,24 @@ if getattr(sys, 'frozen', False):
             os.environ['REQUESTS_CA_BUNDLE'] = cert_path
             print(f"[SSL] Using certifi: {cert_path}")
 
+# Camera People mode (YOLOX-Nano) runs on onnxruntime, which must be loaded BEFORE PyQt6:
+# PyQt6 ships an old MSVC runtime (14.26) and onnxruntime 1.32 crashes the process
+# (access violation) when it loads after it. Loaded first, both run on the newer runtime.
+# Only on camera stations, so others don't pay for it; Faces/People can then be switched live.
+import config as _early_config  # reads .env only; no Qt
+if _early_config.ENABLE_CAMERA_DETECTION:
+    # (In the exe, PyInstaller's PyQt6 hook loads QtCore before this line; the run-time hook
+    # build_hooks/rthook_msvc_runtime_first.py loads the current runtime before that.)
+    try:
+        import onnxruntime  # noqa: F401
+    except Exception:  # not installed: People mode falls back to faces with a log line
+        pass
+
 from PyQt6.QtCore import QCoreApplication, QEventLoop, QEasingCurve, QObject, QPropertyAnimation, QTimer, QUrl, Qt, pyqtSlot, pyqtSignal, QMetaObject
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt6.QtWebChannel import QWebChannel
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings
 import requests
 
 from attendance import AttendanceService
@@ -52,6 +66,9 @@ from sync import SyncService, BackgroundSyncCoordinator
 from dashboard import DashboardService
 from qt_bridge import call_without_freezing_ui
 import config
+import media_diagnostics
+import screensaver_media
+from native_video import NativeVideoPanel, VideoProbe
 from version import __version__
 
 FALLBACK_ERROR_HTML = """<!DOCTYPE html>
@@ -123,6 +140,11 @@ def _voices_dir() -> Path:
     return RESOURCE_ROOT / "assets" / "voices"
 
 VOICES_DIRECTORY = _voices_dir()
+
+# Full-screen display content: media/ next to the .exe (per event, not committed) first,
+# then the neutral defaults bundled in assets/media. See screensaver_media.py.
+EVENT_MEDIA_DIRECTORY = EXEC_ROOT / "media"
+BUILTIN_MEDIA_DIRECTORY = RESOURCE_ROOT / "assets" / "media"
 
 DATA_DIRECTORY.mkdir(parents=True, exist_ok=True)
 EXPORT_DIRECTORY.mkdir(parents=True, exist_ok=True)
@@ -722,6 +744,16 @@ class Api(QObject):
     # _on_manual_sync_result() for the full async ack+signal contract.
     sync_now_completed = pyqtSignal("QVariant")
 
+    # True when the camera sees someone in front of the station, False when they leave.
+    # Emitted from the camera thread; Qt delivers it to the UI thread (queued).
+    presence_changed = pyqtSignal(bool)
+    # Camera detection actually started/stopped outside a toggle_camera() reply (startup
+    # starts it after the page has already asked for the state, device change restarts it)
+    camera_running_changed = pyqtSignal(bool)
+    # Full-screen display video (native panel): media check finished / playback failed
+    screensaver_media_ready = pyqtSignal("QVariantMap")
+    screensaver_video_failed = pyqtSignal(str)
+
     def __init__(
         self,
         service: AttendanceService,
@@ -771,8 +803,11 @@ class Api(QObject):
             "absence_threshold": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
             "confirm_frames": config.CAMERA_CONFIRM_FRAMES,
             "haar_min_neighbors": config.CAMERA_HAAR_MIN_NEIGHBORS,
+            "camera_detector": config.CAMERA_DETECTOR,
+            "min_person_pct": config.CAMERA_MIN_PERSON_PCT,
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
+            "screensaver_idle_s": config.SCREENSAVER_IDLE_SECONDS,
         }
         # Emit initial state so the UI can bind immediately
         QTimer.singleShot(0, lambda: self.connection_status_changed.emit(self._last_connection_result))
@@ -1225,7 +1260,11 @@ class Api(QObject):
                     daemon=True, name="camera-restart",
                 ).start()
 
-        LOGGER.info("[Admin] Camera selected: index %d", index)
+        names = media_diagnostics.video_input_names()
+        LOGGER.info("[Admin] Camera selected: index %d (%s), detection %s",
+                    index, names[index] if index < len(names) else "name unknown",
+                    "restarting" if self._proximity_manager and self._proximity_manager._running
+                    else "not running")
         return {"ok": True, "index": index}
 
     def _deferred_camera_restart(self):
@@ -1244,6 +1283,7 @@ class Api(QObject):
             started = self._proximity_manager.start()
             LOGGER.info("[Admin] Camera restart after device change: %s",
                         "ok" if started else "failed")
+            self.camera_running_changed.emit(bool(started))
 
     @pyqtSlot(result="QVariant")
     def enumerate_cameras(self) -> dict:
@@ -1266,35 +1306,63 @@ class Api(QObject):
         active_id = config.CAMERA_DEVICE_ID
         active_running = bool(self._proximity_manager
                               and self._proximity_manager._running)
+        # Qt device names are read here, on the GUI thread; the probe thread only gets the list.
+        names = media_diagnostics.video_input_names()
         self._camera_probe_running = True
         try:
-            return call_without_freezing_ui(
-                lambda: self._probe_cameras(cv2, active_id, active_running)
+            result = call_without_freezing_ui(
+                lambda: self._probe_cameras(cv2, active_id, active_running, names)
             )
         finally:
             self._camera_probe_running = False
+        if isinstance(result, dict) and "cameras" in result:
+            LOGGER.info("[Camera] Scan: found %s | skipped %s | Windows lists %s | active index %d (%s)",
+                        [c["name"] for c in result["cameras"]] or "none",
+                        result.get("skipped") or "none", names or "no names available",
+                        active_id, "running" if active_running else "not running")
+        return result
 
     @staticmethod
-    def _probe_cameras(cv2, active_id: int, active_running: bool) -> dict:
+    def _probe_cameras(cv2, active_id: int, active_running: bool, names=None) -> dict:
         """Blocking camera probe (worker-thread safe: no SQLite, no Qt)."""
+        names = names or []
         cameras = []
+        skipped = []   # {index: why}, so "my camera is missing" can be answered from the log
         for i in range(11):
+            friendly = names[i] if i < len(names) else ""
             # Skip probing the active camera if it's running (exclusive access on Windows)
             if i == active_id and active_running:
-                cameras.append({"index": i, "name": f"Camera {i} (active)"})
+                label = f"Camera {i} (active)"
+                if friendly:
+                    label = f"Camera {i}: {friendly} (active)"
+                cameras.append({"index": i, "name": label})
                 continue
             cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                if ret:
-                    backend = cap.getBackendName() if hasattr(cap, 'getBackendName') else ""
-                    label = f"Camera {i}"
-                    if backend:
-                        label += f" ({backend})"
-                    cameras.append({"index": i, "name": label})
+            if not cap.isOpened():
+                if friendly:  # Windows lists a device at this index but OpenCV can't open it
+                    skipped.append(f"{i}:{friendly} (cannot open - in use by another app or driver problem)")
                 cap.release()
+                continue
+            ret, frame = cap.read()
+            if ret:
+                backend = cap.getBackendName() if hasattr(cap, 'getBackendName') else ""
+                label = f"Camera {i}"
+                if friendly:
+                    label += f": {friendly}"
+                try:
+                    h, w = frame.shape[:2]
+                    label += f" {w}x{h}"
+                except Exception:
+                    pass
+                if backend:
+                    label += f" ({backend})"
+                cameras.append({"index": i, "name": label})
+            else:
+                skipped.append(f"{i}:{friendly or 'unnamed'} (opened but no frame)")
+            cap.release()
 
-        return {"ok": True, "cameras": cameras, "selected": active_id}
+        return {"ok": True, "cameras": cameras, "selected": active_id,
+                "skipped": skipped, "devices": names}
 
     @pyqtSlot(result="QVariant")
     def toggle_camera(self) -> dict:
@@ -1557,6 +1625,7 @@ class Api(QObject):
         absence_threshold = config.CAMERA_ABSENCE_THRESHOLD_SECONDS
         confirm_frames = config.CAMERA_CONFIRM_FRAMES
         haar_min_neighbors = config.CAMERA_HAAR_MIN_NEIGHBORS
+        camera_detector_active = "face"
         if self._proximity_manager:
             camera_running = bool(self._proximity_manager._running)
             camera_overlay = bool(self._proximity_manager._show_overlay)
@@ -1565,6 +1634,7 @@ class Api(QObject):
             absence_threshold = self._proximity_manager._absence_threshold
             confirm_frames = self._proximity_manager._confirm_frames
             haar_min_neighbors = self._proximity_manager._haar_min_neighbors
+            camera_detector_active = self._proximity_manager.active_detector
         # Build dashboard URL from cloud API base
         dashboard_url = ""
         if config.CLOUD_API_URL:
@@ -1586,12 +1656,24 @@ class Api(QObject):
             "absence_threshold": absence_threshold,
             "confirm_frames": confirm_frames,
             "haar_min_neighbors": haar_min_neighbors,
+            "camera_detector": config.CAMERA_DETECTOR,
+            "camera_detector_active": camera_detector_active,
+            "min_person_pct": config.CAMERA_MIN_PERSON_PCT,
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "dashboard_url": dashboard_url,
             "monitoring_mode": config.CLOUD_READ_ONLY,
             "immediate_sync_enabled": config.IMMEDIATE_SYNC_ENABLED,
             "show_party_background": config.SHOW_PARTY_BACKGROUND,
+            "screensaver_enabled": config.SCREENSAVER_ENABLED,
+            "screensaver_idle_seconds": config.SCREENSAVER_IDLE_SECONDS,
+            "screensaver_muted": config.SCREENSAVER_MUTED,
+            "screensaver_content": config.SCREENSAVER_CONTENT,
+            "hold_enabled": config.HOLD_ENABLED,
+            "hold_content": config.HOLD_CONTENT,
+            "video_loop_pause_seconds": config.VIDEO_LOOP_PAUSE_SECONDS,
+            "hold_scans": config.HOLD_SCANS,
+            "screensaver_camera": config.SCREENSAVER_CAMERA,
             "log_level": config.LOGGING_LEVEL,
             "console_logging": config.LOGGING_CONSOLE,
             "debug_panel": _debug_log_buffer in logging.getLogger().handlers,
@@ -1794,6 +1876,17 @@ class Api(QObject):
                 count += 1
             except ValueError:
                 pass
+        v = db.get_meta("setting:camera_detector")
+        if v in ("face", "person"):
+            config.CAMERA_DETECTOR = v
+            count += 1
+        v = db.get_meta("setting:min_person_pct")
+        if v is not None:
+            try:
+                config.CAMERA_MIN_PERSON_PCT = max(0.10, min(0.90, float(v)))
+                count += 1
+            except ValueError:
+                pass
         v = db.get_meta("setting:absence_threshold")
         if v is not None:
             try:
@@ -1827,6 +1920,45 @@ class Api(QObject):
         v = db.get_meta("setting:show_party_background")
         if v is not None:
             config.SHOW_PARTY_BACKGROUND = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:screensaver_enabled")
+        if v is not None:
+            config.SCREENSAVER_ENABLED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:screensaver_idle_seconds")
+        if v is not None:
+            try:
+                config.SCREENSAVER_IDLE_SECONDS = max(5, min(600, int(float(v))))
+                count += 1
+            except ValueError:
+                LOGGER.warning("Ignoring invalid saved screensaver_idle_seconds: %r", v)
+        v = db.get_meta("setting:screensaver_muted")
+        if v is not None:
+            config.SCREENSAVER_MUTED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:screensaver_content")
+        if v in ("video", "image"):
+            config.SCREENSAVER_CONTENT = v
+            count += 1
+        v = db.get_meta("setting:hold_enabled")
+        if v is not None:
+            config.HOLD_ENABLED = v.lower() in ("true", "1")
+            count += 1
+        v = db.get_meta("setting:hold_content")
+        if v in ("image", "video"):
+            config.HOLD_CONTENT = v
+            count += 1
+        v = db.get_meta("setting:video_loop_pause_seconds")
+        if v is not None and v.isdigit():
+            config.VIDEO_LOOP_PAUSE_SECONDS = max(0, min(300, int(v)))
+            count += 1
+        v = db.get_meta("setting:hold_scans")
+        if v in ("accept", "block"):
+            config.HOLD_SCANS = v
+            count += 1
+        v = db.get_meta("setting:screensaver_camera")
+        if v in ("off", "wake", "sound"):
+            config.SCREENSAVER_CAMERA = v
             count += 1
         # API key from SQLite (Option B: allows setting key without .env)
         if not config.CLOUD_API_KEY:
@@ -1945,6 +2077,172 @@ class Api(QObject):
         self._save_setting("show_party_background", str(enabled))
         LOGGER.info("[Admin] Party background %s", "enabled" if enabled else "disabled")
         return {"ok": True, "value": enabled}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_screensaver(self, enabled: bool) -> dict:
+        """Toggle the idle video screensaver. Persisted across restarts."""
+        config.SCREENSAVER_ENABLED = enabled
+        self._save_setting("screensaver_enabled", str(enabled))
+        LOGGER.info("[Admin] Screensaver %s", "enabled" if enabled else "disabled")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_screensaver_idle(self, seconds: int) -> dict:
+        """Set seconds of inactivity before the screensaver starts. Persisted."""
+        seconds = max(5, min(600, seconds))
+        config.SCREENSAVER_IDLE_SECONDS = seconds
+        self._save_setting("screensaver_idle_seconds", str(seconds))
+        LOGGER.info("[Admin] Screensaver idle time set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_screensaver_muted(self, muted: bool) -> dict:
+        """Mute/unmute the screensaver video. Persisted across restarts."""
+        config.SCREENSAVER_MUTED = muted
+        self._save_setting("screensaver_muted", str(muted))
+        LOGGER.info("[Admin] Screensaver %s", "muted" if muted else "sound on")
+        return {"ok": True, "value": muted}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_screensaver_content(self, content: str) -> dict:
+        """What the idle screensaver shows: 'video' or 'image'. Persisted."""
+        if content not in ("video", "image"):
+            return {"ok": False, "message": "Invalid content"}
+        config.SCREENSAVER_CONTENT = content
+        self._save_setting("screensaver_content", content)
+        LOGGER.info("[Admin] Screensaver content set to %s", content)
+        return {"ok": True, "value": content}
+
+    @pyqtSlot(bool, result="QVariant")
+    def admin_set_hold(self, enabled: bool) -> dict:
+        """Turn the pre-event hold screen on/off. Esc on the kiosk turns it off for good. Persisted."""
+        config.HOLD_ENABLED = enabled
+        self._save_setting("hold_enabled", str(enabled))
+        LOGGER.info("[Admin] Hold screen %s", "ON" if enabled else "released")
+        return {"ok": True, "value": enabled}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_hold_content(self, content: str) -> dict:
+        """What the hold screen shows: 'image' or 'video'. Persisted."""
+        if content not in ("image", "video"):
+            return {"ok": False, "message": "Invalid content"}
+        config.HOLD_CONTENT = content
+        self._save_setting("hold_content", content)
+        LOGGER.info("[Admin] Hold content set to %s", content)
+        return {"ok": True, "value": content}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_video_loop_pause(self, seconds: int) -> dict:
+        """Video on the idle screensaver and hold screen: seconds resting silently on the
+        first frame between loops (0 = loop without a break). Persisted."""
+        seconds = max(0, min(300, int(seconds)))
+        config.VIDEO_LOOP_PAUSE_SECONDS = seconds
+        self._save_setting("video_loop_pause_seconds", str(seconds))
+        LOGGER.info("[Admin] Video loop pause set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_hold_scans(self, policy: str) -> dict:
+        """Scans while the hold screen is up: 'accept' (record + show result) or 'block'. Persisted."""
+        if policy not in ("accept", "block"):
+            return {"ok": False, "message": "Invalid policy"}
+        config.HOLD_SCANS = policy
+        self._save_setting("hold_scans", policy)
+        LOGGER.info("[Admin] Hold scans set to %s", policy)
+        return {"ok": True, "value": policy}
+
+    # ── Full-screen display media (docs/specs/native-video-playback.md) ──
+    # The video plays in a native Qt panel (QtWebEngine cannot decode H.264 MP4); which
+    # file is chosen here, by trying candidates with Qt's own player. The page only ever
+    # says play/stop/volume: no file path crosses the bridge.
+
+    def attach_native_video(self, panel) -> None:
+        """Called once at start-up with the NativeVideoPanel over the web view."""
+        self._video_panel = panel
+        self._screensaver_media = {"pending": True}
+        self._screensaver_video_path = None
+        panel.failed.connect(self.screensaver_video_failed.emit)
+
+    def start_screensaver_media_check(self, make_probe=None) -> None:
+        """Pick the video (async, Qt player) and list image candidates; then tell the page."""
+        media = screensaver_media.resolve_screensaver_media(
+            EVENT_MEDIA_DIRECTORY, BUILTIN_MEDIA_DIRECTORY)
+        LOGGER.info("[Media] Screensaver candidates (%s): %s",
+                    EVENT_MEDIA_DIRECTORY, screensaver_media.describe(media))
+        probe = (make_probe or VideoProbe)(media["video"])
+        probe.finished.connect(lambda result: self._on_video_chosen(result, media["image"]))
+        self._video_probe = probe          # keep alive until finished
+        probe.start()
+
+    def _on_video_chosen(self, result: dict, images: list) -> None:
+        chosen = result["chosen"]
+        self._screensaver_video_path = Path(QUrl(chosen["url"]).toLocalFile()) if chosen else None
+        state = {
+            "video": {"name": chosen["name"], "source": chosen["source"]} if chosen else None,
+            "video_rejected": [{"name": r["name"], "source": r["source"], "why": r["why"]}
+                               for r in result["rejected"]],
+            "image": images,
+            "folder": str(EVENT_MEDIA_DIRECTORY),
+        }
+        for r in state["video_rejected"]:
+            LOGGER.warning("[Media] Video %s (%s) skipped: %s", r["name"], r["source"], r["why"])
+        LOGGER.info("[Media] Screensaver video: %s",
+                    f"{chosen['name']} ({chosen['source']})" if chosen else "none usable")
+        self._screensaver_media = state
+        self.screensaver_media_ready.emit(state)
+
+    @pyqtSlot(result="QVariant")
+    def get_screensaver_media(self) -> dict:
+        """{pending: true} until the video check is done, then the state also sent by
+        screensaver_media_ready: chosen video name/source, rejections, image candidates."""
+        return getattr(self, "_screensaver_media", None) or {"pending": True}
+
+    @pyqtSlot(float, int, result="QVariant")
+    def screensaver_video_play(self, volume: float, loop_pause_s: int) -> dict:
+        """Play the chosen video full screen; loop_pause_s > 0 rests on the first frame
+        between loops (hold screen). Inputs are clamped."""
+        panel = getattr(self, "_video_panel", None)
+        path = getattr(self, "_screensaver_video_path", None)
+        if panel is None or path is None:
+            return {"ok": False, "message": "No usable video"}
+        panel.play(path, max(0.0, min(1.0, float(volume))), max(0, min(300, int(loop_pause_s))))
+        return {"ok": True}
+
+    @pyqtSlot()
+    def screensaver_video_stop(self) -> None:
+        panel = getattr(self, "_video_panel", None)
+        if panel is not None:
+            panel.stop()
+
+    @pyqtSlot(float)
+    def screensaver_video_set_volume(self, volume: float) -> None:
+        panel = getattr(self, "_video_panel", None)
+        if panel is not None:
+            panel.set_volume(max(0.0, min(1.0, float(volume))))
+
+    _CLIENT_LOG_CATEGORIES = ("screensaver", "camera", "audio")
+
+    @pyqtSlot(str, str)
+    def log_client_event(self, category: str, message: str) -> None:
+        """Write a diagnostic line from the web UI to the app log (screensaver, audio, camera).
+
+        The page is trusted but the bridge is a boundary: only known categories, one line,
+        capped length, no format-string handling.
+        """
+        if category not in self._CLIENT_LOG_CATEGORIES:
+            return
+        text = " ".join("".join(ch if ch.isprintable() else " " for ch in str(message)).split())[:300]
+        LOGGER.info("[UI:%s] %s", category, text)
+
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_screensaver_camera(self, camera: str) -> dict:
+        """How the camera drives the video: 'off', 'wake' or 'sound'. Persisted."""
+        if camera not in ("off", "wake", "sound"):
+            return {"ok": False, "message": "Invalid camera mode"}
+        config.SCREENSAVER_CAMERA = camera
+        self._save_setting("screensaver_camera", camera)
+        LOGGER.info("[Admin] Screensaver camera mode set to %s", camera)
+        return {"ok": True, "value": camera}
 
     @pyqtSlot(str, result="QVariant")
     def admin_set_log_level(self, level: str) -> dict:
@@ -2086,6 +2384,36 @@ class Api(QObject):
         LOGGER.info("[Admin] Min face size set to %.0f%%", pct * 100)
         return {"ok": True, "value": pct}
 
+    @pyqtSlot(str, result="QVariant")
+    def admin_set_camera_detector(self, mode: str) -> dict:
+        """Choose what counts as "someone is there": 'face' or 'person' (YOLOX-Nano, for
+        wide-angle cameras). Applied live, persisted per station. 'active' is the mode
+        really running: 'face' when People cannot load on this PC (reason in the log)."""
+        if mode not in ("face", "person"):
+            return {"ok": False, "message": f"Unknown detector {mode!r}"}
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        active = self._proximity_manager.set_detector_mode(mode)
+        config.CAMERA_DETECTOR = mode
+        self._save_setting("camera_detector", mode)
+        LOGGER.info("[Admin] Camera detector set to %s (running: %s)", mode, active)
+        return {"ok": True, "value": mode, "active": active}
+
+    @pyqtSlot(float, result="QVariant")
+    def admin_set_min_person_pct(self, pct: float) -> dict:
+        """People mode distance: minimum person box height as a fraction of frame height
+        (0.10-0.90). Kept separately from Min Face. Persisted across restarts."""
+        if not self._proximity_manager:
+            return {"ok": False, "message": "Camera not configured"}
+        pct = round(max(0.10, min(0.90, pct)), 2)
+        self._proximity_manager._min_person_pct = pct
+        if self._proximity_manager._detector:
+            self._proximity_manager._detector.min_person_pct = pct
+        config.CAMERA_MIN_PERSON_PCT = pct
+        self._save_setting("min_person_pct", str(pct))
+        LOGGER.info("[Admin] Min person height set to %.0f%%", pct * 100)
+        return {"ok": True, "value": pct}
+
     @pyqtSlot(float, result="QVariant")
     def admin_set_absence_threshold(self, seconds: float) -> dict:
         """Set camera absence threshold in seconds. Persisted across restarts."""
@@ -2136,7 +2464,7 @@ class Api(QObject):
         camera_keys = [
             "camera_device_id", "camera_overlay", "greeting_cooldown",
             "min_size_pct", "absence_threshold", "confirm_frames",
-            "haar_min_neighbors",
+            "haar_min_neighbors", "camera_detector", "min_person_pct",
         ]
         for key in camera_keys:
             db._connection.execute("DELETE FROM roster_meta WHERE key = ?", (f"setting:{key}",))
@@ -2149,6 +2477,8 @@ class Api(QObject):
         config.CAMERA_ABSENCE_THRESHOLD_SECONDS = d["absence_threshold"]
         config.CAMERA_CONFIRM_FRAMES = d["confirm_frames"]
         config.CAMERA_HAAR_MIN_NEIGHBORS = d["haar_min_neighbors"]
+        config.CAMERA_DETECTOR = d["camera_detector"]
+        config.CAMERA_MIN_PERSON_PCT = d["min_person_pct"]
         config.CAMERA_SHOW_OVERLAY = False  # production default
         config.CAMERA_DEVICE_ID = d.get("camera_device_id", 0)
 
@@ -2168,6 +2498,9 @@ class Api(QObject):
                 det.absence_threshold = d["absence_threshold"]
                 det.confirm_frames = d["confirm_frames"]
                 det.haar_min_neighbors = d["haar_min_neighbors"]
+                det.min_person_pct = d["min_person_pct"]
+            self._proximity_manager._min_person_pct = d["min_person_pct"]
+            self._proximity_manager.set_detector_mode(d["camera_detector"])
 
         LOGGER.info("[Admin] Camera settings reset to defaults")
         return {"ok": True}
@@ -2207,6 +2540,15 @@ class Api(QObject):
             "ENABLE_FADE_ANIMATION": config.ENABLE_FADE_ANIMATION,
             "SHOW_PARTY_BACKGROUND": config.SHOW_PARTY_BACKGROUND,
             "CONFETTI_ENABLED": config.CONFETTI_ENABLED,
+            "SCREENSAVER_ENABLED": config.SCREENSAVER_ENABLED,
+            "SCREENSAVER_IDLE_SECONDS": config.SCREENSAVER_IDLE_SECONDS,
+            "SCREENSAVER_MUTED": config.SCREENSAVER_MUTED,
+            "SCREENSAVER_CONTENT": config.SCREENSAVER_CONTENT,
+            "HOLD_ENABLED": config.HOLD_ENABLED,
+            "HOLD_CONTENT": config.HOLD_CONTENT,
+            "VIDEO_LOOP_PAUSE_SECONDS": config.VIDEO_LOOP_PAUSE_SECONDS,
+            "HOLD_SCANS": config.HOLD_SCANS,
+            "SCREENSAVER_CAMERA": config.SCREENSAVER_CAMERA,
             "AUTO_EXPORT_ON_SHUTDOWN": config.AUTO_EXPORT_ON_SHUTDOWN,
             "DUPLICATE_BADGE_DETECTION_ENABLED": config.DUPLICATE_BADGE_DETECTION_ENABLED,
             "DUPLICATE_BADGE_TIME_WINDOW_SECONDS": config.DUPLICATE_BADGE_TIME_WINDOW_SECONDS,
@@ -2224,6 +2566,8 @@ class Api(QObject):
             "CAMERA_ABSENCE_THRESHOLD_SECONDS": config.CAMERA_ABSENCE_THRESHOLD_SECONDS,
             "CAMERA_CONFIRM_FRAMES": config.CAMERA_CONFIRM_FRAMES,
             "CAMERA_HAAR_MIN_NEIGHBORS": config.CAMERA_HAAR_MIN_NEIGHBORS,
+            "CAMERA_DETECTOR": config.CAMERA_DETECTOR,
+            "CAMERA_MIN_PERSON_PCT": config.CAMERA_MIN_PERSON_PCT,
             "CAMERA_RESOLUTION_WIDTH": config.CAMERA_RESOLUTION_WIDTH,
             "CAMERA_RESOLUTION_HEIGHT": config.CAMERA_RESOLUTION_HEIGHT,
             "LOGGING_LEVEL": config.LOGGING_LEVEL,
@@ -2513,6 +2857,10 @@ def initialize_app(
 
     view = QWebEngineView()
     view.page().setBackgroundColor(Qt.GlobalColor.transparent)
+    # The idle screensaver video autoplays with no user gesture
+    view.settings().setAttribute(
+        QWebEngineSettings.WebAttribute.PlaybackRequiresUserGesture, False
+    )
 
     animation = QPropertyAnimation(window, b"windowOpacity")
     animation.setDuration(400)
@@ -2576,6 +2924,17 @@ def initialize_app(
 
     window._web_channel = channel  # type: ignore[attr-defined]
     window._api = api  # type: ignore[attr-defined]
+
+    # Full-screen display video: native Qt panel over the page (plays H.264 MP4)
+    if isinstance(api, Api):
+        try:
+            api.attach_native_video(NativeVideoPanel(window, view))
+            api.start_screensaver_media_check()
+        except Exception as exc:  # no Qt Multimedia backend: images still work, video is off
+            LOGGER.warning("[Media] Native video unavailable (%s); screensaver video disabled", exc)
+            api._on_video_chosen({"chosen": None, "rejected": []},
+                                 screensaver_media.resolve_screensaver_media(
+                                     EVENT_MEDIA_DIRECTORY, BUILTIN_MEDIA_DIRECTORY)["image"])
 
     return app, window, view, animation
 
@@ -2720,6 +3079,18 @@ def main() -> None:
                     min_size_pct=config.CAMERA_MIN_SIZE_PCT,
                     haar_min_neighbors=config.CAMERA_HAAR_MIN_NEIGHBORS,
                     detection_scale=config.CAMERA_DETECTION_SCALE,
+                    detector=config.CAMERA_DETECTOR,
+                    min_person_pct=config.CAMERA_MIN_PERSON_PCT,
+                    person_confidence=config.CAMERA_PERSON_CONFIDENCE,
+                    # Gated at call time so the admin toggle takes effect without a restart
+                    presence_callback=(
+                        (lambda present: api_object.presence_changed.emit(present)
+                         if config.SCREENSAVER_CAMERA != "off" else None)
+                        if isinstance(api_object, Api)
+                        else None
+                    ),
+                    # A blocked hold ignores scans, so "please scan your badge" would mislead
+                    greeting_suppressed=lambda: config.HOLD_ENABLED and config.HOLD_SCANS == "block",
                 )
                 LOGGER.info("[Proximity] Plugin loaded")
                 # Wire proximity manager into the API so scans suppress greetings
@@ -2796,6 +3167,9 @@ def main() -> None:
                         LOGGER.info("[Proximity] Greeting active on camera %d", config.CAMERA_DEVICE_ID)
                     else:
                         LOGGER.warning("[Proximity] Camera not available. App continues normally.")
+                    # The page read the camera state before this start; tell it the real one
+                    if isinstance(_api, Api):
+                        _api.camera_running_changed.emit(bool(started))
         try:
             view.loadFinished.disconnect(_start_services_on_load)
         except TypeError:
@@ -3042,6 +3416,11 @@ def main() -> None:
             LOGGER.info("Screen lock prevention enabled (SetThreadExecutionState)")
         except Exception as exc:
             LOGGER.warning("Failed to prevent screen lock: %s", exc)
+
+    # Which cameras/speakers the OS offers right now, and any hot-plug while running.
+    # Keep a reference so the watcher is not garbage-collected.
+    media_diagnostics.log_media_snapshot("Startup")
+    app._media_watcher = media_diagnostics.MediaDeviceWatcher(app)
 
     try:
         sys.exit(app.exec())

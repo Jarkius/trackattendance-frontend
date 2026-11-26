@@ -1129,8 +1129,10 @@ ${destination}` : message;
     // ── Camera toggle ──────────────────────────────────────────────────
 
     let cameraToggling = false;
+    let cameraDetectionRunning = true;   // updated by onCameraDetectionChanged()
 
     const setCameraToggleState = (running) => {
+        onCameraDetectionChanged(!!running);
         if (!cameraToggle) return;
         cameraToggle.classList.remove('camera-toggle--hidden', 'camera-toggle--on', 'camera-toggle--off');
         cameraToggle.classList.add(running ? 'camera-toggle--on' : 'camera-toggle--off');
@@ -1140,6 +1142,14 @@ ${destination}` : message;
     const initCameraToggle = () => {
         queueOrRun((bridge) => {
             if (!bridge.get_camera_status) { console.warn('[Camera] bridge.get_camera_status not found'); return; }
+            // Camera starts after the page loads, so the first status below can say "off";
+            // the app sends the real state once the camera has started (or restarted)
+            if (bridge.camera_running_changed && bridge.camera_running_changed.connect) {
+                bridge.camera_running_changed.connect((running) => {
+                    setCameraToggleState(!!running);
+                    if (adminCameraDetectionToggle) adminCameraDetectionToggle.classList.toggle('active', !!running);
+                });
+            }
             bridge.get_camera_status((status) => {
                 console.info('[Camera] initCameraToggle status:', JSON.stringify(status));
                 if (!status?.enabled) return;  // keep hidden if not configured
@@ -2308,6 +2318,390 @@ ${destination}` : message;
     const adminImmediateSyncToggle = document.getElementById('admin-immediate-sync-toggle');
     const adminImmediateSyncStatus = document.getElementById('admin-immediate-sync-status');
     const adminPartyBgToggle = document.getElementById('admin-party-bg-toggle');
+    const adminScreensaverToggle = document.getElementById('admin-screensaver-toggle');
+    const adminScreensaverIdleSlider = document.getElementById('admin-screensaver-idle-slider');
+    const adminScreensaverIdleValue = document.getElementById('admin-screensaver-idle-value');
+    const adminScreensaverSoundToggle = document.getElementById('admin-screensaver-sound-toggle');
+    const adminScreensaverCameraRow = document.getElementById('admin-screensaver-camera-row');
+    const adminHoldToggle = document.getElementById('admin-hold-toggle');
+
+    // Full-screen display (still image or KV video loop), used two ways:
+    //  - Idle screensaver (during the event): appears after the idle time, ANY input closes it,
+    //    it returns after the next idle period.
+    //  - Hold screen (before the event opens): appears at once and stays. Esc releases it for
+    //    good (saved by the app, so it does not come back on a timeout or after a reboot);
+    //    Ctrl+Shift+H turns it back on. While held, a badge scan is either accepted (the
+    //    overlay lifts so the normal scan result shows, then the hold returns) or blocked.
+    // Esc is consumed while the overlay is up: the kiosk's own Esc handler would otherwise
+    // quit the app. Other input is not swallowed (passive), except scans while held+blocked.
+    const screensaver = (() => {
+        const el = document.getElementById('screensaver');
+        const image = document.getElementById('screensaver-image');
+        // The video plays in a native Qt panel over this page (QtWebEngine cannot decode
+        // H.264 MP4); this controller still decides everything and drives it via the bridge.
+        // media.video: the app found a usable video; media.image: image URL that loaded.
+        // mediaReady stays false until that check finishes, so nothing shows half-loaded.
+        const media = { video: false, image: null };
+        let mediaReady = false;
+        let volume = 0;                // what the native player was last told (0..1)
+        const nativeVideo = {
+            play: (vol, pauseS) => queueOrRun((bridge) => {
+                if (!bridge.screensaver_video_play) return;
+                bridge.screensaver_video_play(vol, pauseS, (r) => {
+                    if (!(r && r.ok)) { log(`video play refused: ${r && r.message}`); hide('no video'); arm(); }
+                });
+            }),
+            stop: () => queueOrRun((bridge) => { if (bridge.screensaver_video_stop) bridge.screensaver_video_stop(); }),
+            setVolume: (vol) => queueOrRun((bridge) => {
+                if (bridge.screensaver_video_set_volume) bridge.screensaver_video_set_volume(vol);
+            }),
+        };
+        const HOLD_RETURN_MS = 8000;   // how long a scan's result stays up before the hold returns
+        const cfg = { enabled: false, content: 'video', idleMs: 60000, muted: false,
+                      camera: 'wake', cameraAvailable: true, cameraRunning: true,
+                      hold: false, holdContent: 'image', holdScans: 'accept', loopPauseS: 0 };
+        const hooks = { onHoldChanged: null };
+        let kind = null;             // what is on screen: 'hold' | 'idle' | null
+        let timer = null;
+        let fadeTimer = null;
+        let shownAt = 0;
+        let peeking = false;         // hold lifted briefly to show a scan result
+        let personPresent = false;   // from the camera plugin (stays false without a camera)
+        let lastSkip = '';
+
+        // Diagnostics go to the app log (trackattendance.log) via the bridge: the web console
+        // is not persisted, so "why was there no sound" could not be answered afterwards.
+        const log = (msg) => queueOrRun((bridge) => {
+            if (bridge.log_client_event) bridge.log_client_event('screensaver', msg);
+        });
+        const snapshot = () => `kind=${kind} camera=${camera()} muted=${cfg.muted} ` +
+            `personPresent=${personPresent} volume=${volume.toFixed(2)}`;
+        const skip = (why) => { if (why !== lastSkip) { lastSkip = why; log('not shown: ' + why); } };
+
+        // Wake/Sound wait for the camera; with no camera set up, or detection switched off,
+        // nobody can ever be detected, so behave as Off (sound on, input closes the video)
+        const camera = () => (cfg.cameraAvailable && cfg.cameraRunning ? cfg.camera : 'off');
+        const wakesOnCamera = () => camera() === 'wake';
+        const isActive = () => kind !== null;
+        // What k ('hold' | 'idle') shows: the chosen kind if a usable file exists, otherwise
+        // the other kind, otherwise null (nothing to show; the overlay stays down)
+        const contentFor = (k) => {
+            const wanted = (k === 'hold' ? cfg.holdContent : cfg.content) === 'image' ? 'image' : 'video';
+            if (media[wanted]) return wanted;
+            const other = wanted === 'video' ? 'image' : 'video';
+            return media[other] ? other : null;
+        };
+        const blockedByOverlay = () => !!document.querySelector(
+            '.admin-overlay--visible, .dashboard-overlay--visible, .lookup-overlay--visible'
+        );
+        const soundTarget = () => (cfg.muted || (camera() === 'sound' && !personPresent) ? 0 : 1);
+
+        // Fade the volume (~2s end to end) so sound doesn't jump on/off as people come and go
+        const applySound = (immediate) => {
+            clearInterval(fadeTimer);
+            const target = soundTarget();
+            log(`sound target=${target} (${immediate ? 'immediate' : 'fade'}) ${snapshot()}`);
+            if (immediate) { volume = target; nativeVideo.setVolume(volume); return; }
+            fadeTimer = setInterval(() => {
+                const d = target - volume;
+                if (Math.abs(d) < 0.06) {
+                    volume = target; nativeVideo.setVolume(volume); clearInterval(fadeTimer);
+                    log(`sound fade done volume=${target}`);
+                    return;
+                }
+                volume = Math.max(0, Math.min(1, volume + Math.sign(d) * 0.05));
+                nativeVideo.setVolume(volume);
+            }, 100);
+        };
+
+        const hide = (why) => {
+            if (!isActive()) return;
+            log(`hide (${why || 'unspecified'}) ${snapshot()}`);
+            clearInterval(fadeTimer);
+            kind = null;
+            el.classList.remove('screensaver--active');
+            el.setAttribute('aria-hidden', 'true');
+            nativeVideo.stop();            // harmless when an image was showing
+        };
+        const present = (k) => {
+            kind = k;
+            peeking = false;
+            lastSkip = '';
+            const content = contentFor(k);
+            if (content === 'video') {
+                clearInterval(fadeTimer);
+                volume = soundTarget();    // start at the right level, no jump
+            }
+            log(`show ${k} content=${content} idleMs=${cfg.idleMs} ${snapshot()}`);
+            el.dataset.content = content;
+            if (content === 'video') {
+                // Rests silently on the first frame between loops (Admin: Pause between loops)
+                nativeVideo.play(volume, cfg.loopPauseS);
+            }
+            el.classList.add('screensaver--active');
+            el.setAttribute('aria-hidden', 'false');
+            shownAt = Date.now();
+        };
+        const show = () => {
+            if (!el || isActive()) return;
+            if (blockedByOverlay()) { skip('an overlay (admin/dashboard/lookup) is open'); arm(); return; }
+            if (!mediaReady) { skip('media check not finished'); arm(); return; }
+            if (!contentFor(cfg.hold ? 'hold' : 'idle')) { skip('no usable video or image'); arm(); return; }
+            if (cfg.hold) { present('hold'); return; }
+            if (!cfg.enabled) { skip('screensaver disabled'); arm(); return; }
+            if (wakesOnCamera() && personPresent) { skip('camera sees a person (wake mode)'); arm(); return; }
+            present('idle');
+        };
+        function arm(delayMs) {
+            clearTimeout(timer);
+            if (isActive() || (!cfg.hold && !cfg.enabled)) return;
+            timer = setTimeout(show, delayMs === undefined ? (cfg.hold ? 1000 : cfg.idleMs) : delayMs);
+        }
+        // (Re)apply settings: close whatever is showing, then schedule
+        const reapply = () => {
+            clearTimeout(timer);
+            hide('settings changed');
+            peeking = false;
+            arm(cfg.hold ? 0 : cfg.idleMs);
+        };
+        const setHold = (on) => {
+            cfg.hold = on;
+            if (hooks.onHoldChanged) hooks.onHoldChanged(on);
+            reapply();
+        };
+
+        // 1) Esc while the overlay is up only closes the overlay. Registered first, and it stops
+        //    the event, so the kiosk's own Esc ("close the app") never sees it.
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || !isActive()) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (kind === 'hold') { setHold(false); return; }   // release for good
+            hide('Esc');
+            arm();
+        }, { capture: true });
+
+        // 2) Ctrl+Shift+H turns the hold screen back on
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && (e.key === 'H' || e.key === 'h') && !cfg.hold) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                setHold(true);
+            }
+        }, { capture: true });
+
+        // 3) Scans while held: block them, or lift the overlay so the result shows
+        document.addEventListener('keydown', (e) => {
+            if (kind !== 'hold') return;
+            if (cfg.holdScans === 'block') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                return;
+            }
+            hide('scan while held');
+            peeking = true;
+            arm(HOLD_RETURN_MS);
+        }, { capture: true });
+
+        // 4) Any other input
+        // A mouse that is not being used can still report tiny moves (sensor jitter, a bumped
+        // desk). Only movement of MOUSE_JITTER_PX or more from where the pointer last settled
+        // counts; otherwise jitter closes the video, or keeps the idle timer from ever expiring.
+        const MOUSE_JITTER_PX = 10;
+        let mouseAnchor = null;
+        const isMouseJitter = (evt) => {
+            if (evt.type !== 'mousemove') return false;
+            if (!mouseAnchor) { mouseAnchor = { x: evt.screenX, y: evt.screenY }; return true; }
+            if (Math.hypot(evt.screenX - mouseAnchor.x, evt.screenY - mouseAnchor.y) < MOUSE_JITTER_PX) return true;
+            mouseAnchor = { x: evt.screenX, y: evt.screenY };
+            return false;
+        };
+        const onActivity = (evt) => {
+            if (isMouseJitter(evt)) return;
+            if (isActive()) {
+                if (kind === 'hold') return;                         // only Esc (and scans) act on hold
+                if (Date.now() - shownAt < 500) return;              // synthetic mousemove as it appears
+                hide(`input: ${evt.type}`);
+                arm();
+                return;
+            }
+            arm(cfg.hold ? (peeking ? HOLD_RETURN_MS : 1000) : undefined);
+        };
+        ['keydown', 'mousedown', 'mousemove', 'wheel', 'touchstart', 'pointerdown'].forEach((evt) => {
+            document.addEventListener(evt, onActivity, { capture: true, passive: true });
+        });
+        // The native player failed mid-play (it has already hidden itself)
+        queueOrRun((bridge) => {
+            if (bridge.screensaver_video_failed && bridge.screensaver_video_failed.connect) {
+                bridge.screensaver_video_failed.connect((why) => {
+                    log(`video failed: ${why}`);
+                    hide('video error'); arm();
+                });
+            }
+        });
+
+        return {
+            hooks,
+            // Merge any of: enabled, content, muted, idleSeconds, camera, cameraAvailable,
+            //               hold, holdContent, holdScans, loopPauseS
+            configure(o) {
+                if (o.loopPauseS !== undefined) {
+                    cfg.loopPauseS = Math.max(0, Math.min(300, Number(o.loopPauseS) || 0));
+                }
+                if (o.enabled !== undefined) cfg.enabled = !!o.enabled;
+                if (o.content === 'video' || o.content === 'image') cfg.content = o.content;
+                if (o.muted !== undefined) cfg.muted = !!o.muted;
+                if (o.idleSeconds) cfg.idleMs = Math.max(5, Number(o.idleSeconds)) * 1000;
+                if (o.camera === 'off' || o.camera === 'wake' || o.camera === 'sound') cfg.camera = o.camera;
+                if (o.cameraAvailable !== undefined) cfg.cameraAvailable = !!o.cameraAvailable;
+                if (o.hold !== undefined) cfg.hold = !!o.hold;
+                if (o.holdContent === 'image' || o.holdContent === 'video') cfg.holdContent = o.holdContent;
+                if (o.holdScans === 'accept' || o.holdScans === 'block') cfg.holdScans = o.holdScans;
+                if (camera() === 'off') personPresent = false;
+                log(`configure enabled=${cfg.enabled} content=${cfg.content} idleMs=${cfg.idleMs} ` +
+                    `muted=${cfg.muted} camera=${cfg.camera} cameraAvailable=${cfg.cameraAvailable} ` +
+                    `-> effective camera mode=${camera()} hold=${cfg.hold}`);
+                reapply();
+            },
+            setIdleSeconds(sec) { cfg.idleMs = Math.max(5, Number(sec)) * 1000; if (!cfg.hold) arm(); },
+            setMuted(m) { cfg.muted = !!m; if (isActive() && contentFor(kind) === 'video') applySound(false); },
+            // After the startup check: { video: true if the app found a playable video,
+            //                           image: URL of an image that loaded, or null }
+            setMedia(m) {
+                media.video = !!m.video;
+                media.image = m.image || null;
+                if (media.image) image.src = media.image; else image.removeAttribute('src');
+                mediaReady = true;
+                log(`media ready: video=${media.video ? 'yes' : 'none'} image=${media.image ? 'yes' : 'none'}`);
+                reapply();
+            },
+            // Camera detection switched on/off (kiosk button, admin toggle, startup)
+            setCameraRunning(running) {
+                if (cfg.cameraRunning === !!running) return;
+                cfg.cameraRunning = !!running;
+                if (!cfg.cameraRunning) personPresent = false;
+                log(`camera detection ${cfg.cameraRunning ? 'on' : 'off'} -> effective camera mode=${camera()}`);
+                if (isActive() && contentFor(kind) === 'video') applySound(false);
+                else if (!isActive()) arm();
+            },
+            // Camera saw someone step up (true) or leave (false)
+            setPresent(present) {
+                personPresent = camera() !== 'off' && !!present;
+                log(`presence signal=${!!present} -> personPresent=${personPresent} (effective camera mode=${camera()})`);
+                if (wakesOnCamera() && !cfg.hold) {
+                    if (personPresent) { if (kind === 'idle') hide('person arrived (wake)'); clearTimeout(timer); } else { arm(); }
+                } else if (isActive() && contentFor(kind) === 'video') {
+                    applySound(false);
+                }
+            },
+        };
+    })();
+    // Esc / Ctrl+Shift+H change the hold state inside the controller: save it and mirror it in admin
+    screensaver.hooks.onHoldChanged = (on) => {
+        if (adminHoldToggle) adminHoldToggle.classList.toggle('active', on);
+        updateVideoSectionsDimmed();
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_hold) bridge.admin_set_hold(on, () => {});
+        });
+    };
+    // ── Screensaver media: which video/image the full-screen display can really use ──
+    // Video: the app picks it with Qt's player (event media/ folder newest first, then the
+    // built-in default) and reports the result; the page never sees a video path.
+    // Image: the app lists candidates and each is loaded here once; the first that works
+    // is kept.
+    const MEDIA_PROBE_TIMEOUT_MS = 15000;
+    const probeImage = (url) => new Promise((resolve) => {
+        let settled = false;
+        const finish = (ok, why) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve({ ok, why });
+        };
+        const timer = setTimeout(() => finish(false, 'did not load in time'), MEDIA_PROBE_TIMEOUT_MS);
+        const probe = new Image();
+        probe.onload = () => finish(true, '');
+        probe.onerror = () => finish(false, 'cannot be read as an image');
+        probe.src = url;
+    });
+    const pickPlayable = async (kind, candidates) => {
+        const rejected = [];
+        for (const cand of candidates || []) {
+            const { ok, why } = await probeImage(cand.url);
+            queueOrRun((bridge) => {
+                if (bridge.log_client_event) bridge.log_client_event('screensaver',
+                    `media ${kind} ${cand.name} (${cand.source}): ${ok ? 'OK' : 'REJECTED - ' + why}`);
+            });
+            if (ok) return { chosen: cand, rejected };
+            rejected.push({ ...cand, why });
+        }
+        return { chosen: null, rejected };
+    };
+    // Admin: say what is in use, grey out what has no usable file, explain rejections
+    const showScreensaverMediaInAdmin = (video, image, folder) => {
+        const status = document.getElementById('admin-media-status');
+        const has = { video: !!video.chosen, image: !!image.chosen };
+        document.querySelectorAll('.adm-ss-content-opt, .adm-hold-content-opt').forEach((btn) => {
+            const ok = has[btn.dataset.val];
+            btn.disabled = !ok;
+            btn.title = ok ? '' : `No usable ${btn.dataset.val} found`;
+        });
+        const none = !has.video && !has.image;
+        [adminScreensaverToggle, adminHoldToggle].forEach((t) => {
+            if (!t) return;
+            t.disabled = none;
+            t.title = none ? 'No usable video or image found' : '';
+        });
+        if (!status) return;
+        const line = (label, r) => (r.chosen
+            ? `${label}: ${r.chosen.name} (${r.chosen.source})`
+            : `${label}: none`);
+        const lines = [`${line('Video', video)} · ${line('Image', image)}`];
+        [...video.rejected, ...image.rejected].forEach((r) => {
+            lines.push(`${r.name} (${r.source}) was skipped: ${r.why}.`);
+        });
+        if (none) lines.push(`Add an .mp4/.webm video or a .jpg/.png image to ${folder} and restart.`);
+        else if (!(video.chosen && video.chosen.source === 'media folder')
+                 || !(image.chosen && image.chosen.source === 'media folder')) {
+            lines.push(`Event files go in ${folder}`);
+        }
+        status.textContent = lines.join('\n');
+    };
+    let screensaverMediaApplied = false;
+    const applyScreensaverMedia = async (m) => {
+        if (!m || m.pending || screensaverMediaApplied) return;   // the app's check still running
+        screensaverMediaApplied = true;
+        const video = { chosen: m.video || null, rejected: m.video_rejected || [] };
+        const image = await pickPlayable('image', m.image);
+        screensaver.setMedia({ video: !!video.chosen, image: image.chosen && image.chosen.url });
+        showScreensaverMediaInAdmin(video, image, m.folder || 'the media folder');
+    };
+    queueOrRun((bridge) => {
+        if (!bridge.get_screensaver_media) { screensaver.setMedia({}); return; }
+        // Listen first, then ask: whichever comes first (signal or reply) applies, once
+        if (bridge.screensaver_media_ready && bridge.screensaver_media_ready.connect) {
+            bridge.screensaver_media_ready.connect(applyScreensaverMedia);
+        }
+        bridge.get_screensaver_media(applyScreensaverMedia);
+    });
+
+    // Arm from persisted settings at startup (admin panel isn't opened on boot)
+    queueOrRun((bridge) => {
+        if (bridge.presence_changed && bridge.presence_changed.connect) {
+            bridge.presence_changed.connect((present) => screensaver.setPresent(present));
+        }
+        if (bridge.admin_get_local_settings) {
+            bridge.admin_get_local_settings((r) => {
+                if (r) screensaver.configure({
+                    enabled: !!r.screensaver_enabled, content: r.screensaver_content,
+                    camera: r.screensaver_camera, muted: !!r.screensaver_muted,
+                    idleSeconds: r.screensaver_idle_seconds, cameraAvailable: !!r.camera_enabled,
+                    hold: !!r.hold_enabled, holdContent: r.hold_content, holdScans: r.hold_scans,
+                    loopPauseS: r.video_loop_pause_seconds || 0,
+                });
+            });
+        }
+    });
     const adminDupDetectionToggle = document.getElementById('admin-dup-detection-toggle');
     const adminDupWindowStatus = document.getElementById('admin-dup-window-status');
     const adminDupActionStatus = document.getElementById('admin-dup-action-status');
@@ -2333,6 +2727,8 @@ ${destination}` : message;
     const adminConfirmSlider = document.getElementById('admin-confirm-slider');
     const adminConfirmValue = document.getElementById('admin-confirm-value');
     const adminHaarSlider = document.getElementById('admin-haar-slider');
+    const adminMinpersonSlider = document.getElementById('admin-minperson-slider');
+    const adminMinpersonValue = document.getElementById('admin-minperson-value');
     const adminHaarValue = document.getElementById('admin-haar-value');
     const adminCameraResetBtn = document.getElementById('admin-camera-reset-btn');
     const adminFeedbackSlider = document.getElementById('admin-feedback-slider');
@@ -2429,6 +2825,38 @@ ${destination}` : message;
                         adminPartyBgToggle.classList.toggle('active', partyBgEnabled);
                     }
                     document.body.classList.toggle('party-bg', partyBgEnabled);
+                    // Idle screensaver toggle
+                    const screensaverOn = !!result.screensaver_enabled;
+                    if (adminScreensaverToggle) {
+                        adminScreensaverToggle.classList.toggle('active', screensaverOn);
+                    }
+                    screensaver.configure({
+                        enabled: screensaverOn, content: result.screensaver_content,
+                        camera: result.screensaver_camera, muted: !!result.screensaver_muted,
+                        idleSeconds: result.screensaver_idle_seconds, cameraAvailable: !!result.camera_enabled,
+                        hold: !!result.hold_enabled, holdContent: result.hold_content, holdScans: result.hold_scans,
+                        loopPauseS: result.video_loop_pause_seconds || 0,
+                    });
+                    const markActive = (sel, val) => document.querySelectorAll(sel).forEach(b => {
+                        b.classList.toggle('active', b.dataset.val === val);
+                    });
+                    markActive('.adm-ss-content-opt', result.screensaver_content || 'video');
+                    markActive('.adm-ss-camera-opt', result.screensaver_camera || 'wake');
+                    showCameraModeHint();
+                    markActive('.adm-hold-content-opt', result.hold_content || 'image');
+                    updateLoopPauseEnabled();
+                    syncSlider(adminLoopPauseSlider, adminLoopPauseValue, result.video_loop_pause_seconds || 0, 0, 300, 'sec');
+                    markActive('.adm-hold-scans-opt', result.hold_scans || 'accept');
+                    if (adminHoldToggle) adminHoldToggle.classList.toggle('active', !!result.hold_enabled);
+                    updateVideoSectionsDimmed();
+                    syncSlider(adminScreensaverIdleSlider, adminScreensaverIdleValue, result.screensaver_idle_seconds || 60, 5, 300, 'sec');
+                    if (adminScreensaverSoundToggle) {
+                        adminScreensaverSoundToggle.classList.toggle('active', !result.screensaver_muted);
+                    }
+                    // Camera wake-up only means something when the camera plugin is loaded
+                    if (adminScreensaverCameraRow) {
+                        adminScreensaverCameraRow.style.display = result.camera_enabled ? '' : 'none';
+                    }
                     // Duplicate detection toggle
                     const dupEnabled = result.duplicate_detection_enabled !== false;
                     if (adminDupDetectionToggle) {
@@ -2483,6 +2911,7 @@ ${destination}` : message;
                     if (result.camera_enabled) {
                         // Populate camera device dropdown
                         refreshCameraList(bridge, result.camera_device_id);
+                        onCameraDetectionChanged(!!result.camera_running);
                         if (adminCameraDetectionToggle) {
                             adminCameraDetectionToggle.classList.toggle('active', !!result.camera_running);
                         }
@@ -2500,6 +2929,9 @@ ${destination}` : message;
                         syncSlider(adminConfirmSlider, adminConfirmValue, confirmF, 1, 10, 'frm');
                         const haarN = result.haar_min_neighbors || 5;
                         syncSlider(adminHaarSlider, adminHaarValue, haarN, 2, 10, '');
+                        syncSlider(adminMinpersonSlider, adminMinpersonValue,
+                            Math.round((result.min_person_pct || 0.30) * 100), 10, 90, '%');
+                        applyDetectorUi(result.camera_detector || 'face', result.camera_detector_active || 'face');
                     }
                     // Display section
                     const feedbackSec = Math.round((result.scan_feedback_ms || 2000) / 1000);
@@ -2716,6 +3148,133 @@ ${destination}` : message;
             });
         });
     }
+
+    // Idle video screensaver toggle
+    if (adminScreensaverToggle) {
+        adminScreensaverToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminScreensaverToggle.classList.contains('active');
+            adminScreensaverToggle.classList.toggle('active', newState);
+            updateVideoSectionsDimmed();
+            screensaver.configure({ enabled: newState });
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_screensaver) {
+                    bridge.admin_set_screensaver(newState, () => {});
+                }
+            });
+        });
+    }
+
+    // Pause between video loops: screensaver and hold screen. Only meaningful when at least
+    // one of them shows video, so greyed out when both show the image.
+    const adminLoopPauseSlider = document.getElementById('admin-loop-pause-slider');
+    const adminLoopPauseValue = document.getElementById('admin-loop-pause-value');
+    function updateLoopPauseEnabled() {
+        // Runs after bindChooser's handler (registered earlier) has marked the clicked option
+        const usesVideo = !!document.querySelector(
+            '.adm-ss-content-opt.active[data-val="video"], .adm-hold-content-opt.active[data-val="video"]');
+        if (adminLoopPauseSlider) adminLoopPauseSlider.disabled = !usesVideo;
+    }
+    // Dim (not lock) a section whose feature is off, so it can still be set up before it is
+    // turned on. The shared video section is in use while either the screensaver or the hold is.
+    function updateVideoSectionsDimmed() {
+        const on = (t) => !!(t && t.classList.contains('active'));
+        const ssOn = on(adminScreensaverToggle);
+        const holdOn = on(adminHoldToggle);
+        const dim = (id, off) => {
+            const s = document.getElementById(id);
+            if (s) s.classList.toggle('adm-section--off', off);
+        };
+        dim('admin-ss-section', !ssOn);
+        dim('admin-hold-section', !holdOn);
+        dim('admin-video-section', !ssOn && !holdOn);
+    }
+    bindSlider(adminLoopPauseSlider, adminLoopPauseValue, 'sec', (v) => {
+        screensaver.configure({ loopPauseS: v });
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_video_loop_pause) bridge.admin_set_video_loop_pause(v, () => {});
+        });
+    });
+
+    bindSlider(adminScreensaverIdleSlider, adminScreensaverIdleValue, 'sec', (v) => {
+        screensaver.setIdleSeconds(v);
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_screensaver_idle) bridge.admin_set_screensaver_idle(v, () => {});
+        });
+    });
+    if (adminScreensaverSoundToggle) {
+        adminScreensaverSoundToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const soundOn = !adminScreensaverSoundToggle.classList.contains('active');
+            adminScreensaverSoundToggle.classList.toggle('active', soundOn);
+            screensaver.setMuted(!soundOn);
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_screensaver_muted) bridge.admin_set_screensaver_muted(!soundOn, () => {});
+            });
+        });
+    }
+    // Option choosers: each sets the matching cfg field, then saves through the bridge
+    // One plain sentence under the camera-mode buttons describing the selected one,
+    // or why the buttons are greyed out while camera detection is switched off
+    function showCameraModeHint() {
+        const hint = document.getElementById('admin-ss-camera-hint');
+        const opts = document.querySelectorAll('.adm-ss-camera-opt');
+        opts.forEach((b) => { b.disabled = !cameraDetectionRunning; });
+        if (!hint) return;
+        if (!cameraDetectionRunning) {
+            hint.textContent = 'Camera detection is off, so the video plays as if Off is selected. '
+                + 'Turn camera detection on to use these options.';
+            return;
+        }
+        const active = document.querySelector('.adm-ss-camera-opt.active');
+        hint.textContent = active ? (active.dataset.hint || '') : '';
+    }
+
+    // Single place that learns "camera detection is on/off" (startup, kiosk button, admin
+    // toggle, device change): the screensaver must not wait for a camera that is not running
+    function onCameraDetectionChanged(running) {
+        cameraDetectionRunning = running;
+        screensaver.setCameraRunning(running);
+        showCameraModeHint();
+    }
+
+    const bindChooser = (selector, cfgKey, bridgeMethod) => {
+        document.querySelectorAll(selector).forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const val = btn.dataset.val;
+                document.querySelectorAll(selector).forEach(b => b.classList.toggle('active', b === btn));
+                screensaver.configure({ [cfgKey]: val });
+                queueOrRun((bridge) => {
+                    if (bridge[bridgeMethod]) bridge[bridgeMethod](val, () => {});
+                });
+            });
+        });
+    };
+    bindChooser('.adm-ss-content-opt', 'content', 'admin_set_screensaver_content');
+    bindChooser('.adm-ss-camera-opt', 'camera', 'admin_set_screensaver_camera');
+    // Registered after bindChooser, so the clicked button is already marked active
+    document.querySelectorAll('.adm-ss-camera-opt').forEach((btn) => {
+        btn.addEventListener('click', showCameraModeHint);
+    });
+    bindChooser('.adm-hold-content-opt', 'holdContent', 'admin_set_hold_content');
+    bindChooser('.adm-hold-scans-opt', 'holdScans', 'admin_set_hold_scans');
+    document.querySelectorAll('.adm-ss-content-opt, .adm-hold-content-opt').forEach((btn) => {
+        btn.addEventListener('click', updateLoopPauseEnabled);
+    });
+    if (adminHoldToggle) {
+        adminHoldToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const newState = !adminHoldToggle.classList.contains('active');
+            adminHoldToggle.classList.toggle('active', newState);
+            updateVideoSectionsDimmed();
+            screensaver.configure({ hold: newState });
+            queueOrRun((bridge) => {
+                if (bridge.admin_set_hold) bridge.admin_set_hold(newState, () => {});
+            });
+        });
+    }
+    updateVideoSectionsDimmed();
 
     // Duplicate detection toggle
     if (adminDupDetectionToggle) {
@@ -3045,6 +3604,7 @@ ${destination}` : message;
                             setTimeout(() => {
                                 if (bridge.get_camera_status) {
                                     bridge.get_camera_status((s) => {
+                                        onCameraDetectionChanged(!!s.running);
                                         if (adminCameraDetectionToggle) {
                                             adminCameraDetectionToggle.classList.toggle('active', !!s.running);
                                         }
@@ -3084,6 +3644,49 @@ ${destination}` : message;
             if (bridge.admin_set_haar_min_neighbors) bridge.admin_set_haar_min_neighbors(v, () => {});
         });
     });
+    bindSlider(adminMinpersonSlider, adminMinpersonValue, '%', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_min_person_pct) bridge.admin_set_min_person_pct(v / 100, () => {});
+        });
+    });
+
+    // Detect: Faces | People. Each mode keeps its own size slider (Min Face / Min Person);
+    // Strictness only tunes the face Haar cascades, so it is greyed out for People.
+    // `active` is what really runs: 'face' when People could not load on this PC.
+    function applyDetectorUi(mode, active) {
+        const people = mode === 'person';
+        document.querySelectorAll('.adm-cam-detector-opt').forEach((b) => {
+            b.classList.toggle('active', b.dataset.val === mode);
+        });
+        const faceRow = document.getElementById('admin-minsize-row');
+        const personRow = document.getElementById('admin-minperson-row');
+        if (faceRow) faceRow.style.display = people ? 'none' : '';
+        if (personRow) personRow.style.display = people ? '' : 'none';
+        if (adminHaarSlider) adminHaarSlider.disabled = people;
+        const hint = document.getElementById('admin-cam-detector-hint');
+        if (!hint) return;
+        if (people && active !== 'person') {
+            hint.textContent = 'People detection unavailable on this PC (see log) \u2013 using Faces.';
+            hint.style.color = '#f0960a';
+            return;
+        }
+        const btn = document.querySelector('.adm-cam-detector-opt[data-val="' + mode + '"]');
+        hint.textContent = btn ? (btn.dataset.hint || '') : '';
+        hint.style.color = '#999';
+    }
+    document.querySelectorAll('.adm-cam-detector-opt').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const mode = btn.dataset.val;
+            applyDetectorUi(mode, mode);
+            queueOrRun((bridge) => {
+                if (!bridge.admin_set_camera_detector) return;
+                bridge.admin_set_camera_detector(mode, (r) => {
+                    if (r && r.ok) applyDetectorUi(r.value, r.active);
+                });
+            });
+        });
+    });
 
     // Reset camera settings to .env defaults
     if (adminCameraResetBtn) {
@@ -3101,6 +3704,9 @@ ${destination}` : message;
                                         syncSlider(adminAbsenceSlider, adminAbsenceValue, r.absence_threshold || 3, 1, 10, 'sec');
                                         syncSlider(adminConfirmSlider, adminConfirmValue, r.confirm_frames || 3, 1, 10, 'frm');
                                         syncSlider(adminHaarSlider, adminHaarValue, r.haar_min_neighbors || 5, 2, 10, '');
+                                        syncSlider(adminMinpersonSlider, adminMinpersonValue,
+                                            Math.round((r.min_person_pct || 0.30) * 100), 10, 90, '%');
+                                        applyDetectorUi(r.camera_detector || 'face', r.camera_detector_active || 'face');
                                     }
                                 });
                             }

@@ -27,6 +27,10 @@ data/*
 # folder with .mp3/.wav clips replaces assets/voices; build.bat ships it.
 /voices/
 
+# Per-event screensaver video/image, same idea: media/ is used before the neutral
+# assets/media defaults; build.bat ships it.
+/media/
+
 # Logs (keep structure, ignore contents)
 logs/**/*.log
 logs/**/*.png

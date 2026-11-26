@@ -17,6 +17,12 @@
 </head>
 
 <body class="party-bg">
+    <!-- Idle screensaver: video loads only while shown; any input dismisses it -->
+    <div id="screensaver" class="screensaver" aria-hidden="true">
+        <!-- Image source comes from the app (media/ folder, else assets/media defaults): see
+             setMedia. Video is not in the page: it plays in a native Qt panel on top. -->
+        <img id="screensaver-image" alt="">
+    </div>
     <header>
         <div class="header-inner">
             <h1>Station : <span id="station-name">--</span></h1>
@@ -384,7 +390,7 @@
                     <div class="adm-toggle-row" style="margin-bottom:8px;">
                         <span class="adm-toggle-row__label">Device</span>
                         <div style="display:flex;gap:6px;flex:1;align-items:center;">
-                            <select id="admin-camera-select" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem;background:#fff;color:#333;">
+                            <select id="admin-camera-select" class="browser-default" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.82rem;background:#fff;color:#333;">
                                 <option value="-1">Click refresh to scan</option>
                             </select>
                             <button class="adm-btn adm-btn--secondary" id="admin-camera-refresh-btn" type="button" style="font-size:12px;padding:5px 8px;white-space:nowrap;" title="Scan for cameras">
@@ -400,6 +406,16 @@
                         <span class="adm-toggle-row__label">Live Preview</span>
                         <button class="adm-toggle" id="admin-camera-overlay-toggle" type="button"></button>
                     </div>
+                    <div id="admin-camera-detector-row" style="margin-top:10px;">
+                        <p style="font-size:0.78rem;color:#666;margin:0 0 6px;">Detect</p>
+                        <div class="adm-opt-group">
+                            <button class="adm-opt adm-cam-detector-opt" data-val="face" type="button"
+                                    data-hint="Faces: needs a visible face. Best for normal webcams. Suggested Min Face 20% (wide-angle camera: 9-10%, may count furniture).">Faces</button>
+                            <button class="adm-opt adm-cam-detector-opt" data-val="person" type="button"
+                                    data-hint="People: whole body, for wide-angle cameras; ignores furniture. Suggested Min Person 30% (busy hall: 40-50%, wake from further away: 20-25%).">People</button>
+                        </div>
+                        <p id="admin-cam-detector-hint" style="font-size:0.72rem;color:#999;margin:6px 0 0;"></p>
+                    </div>
                     <div class="adm-slider-row" style="margin-top:10px;">
                         <span class="adm-slider-row__label">Cooldown</span>
                         <div class="adm-slider-wrap" data-default="60" data-min="5" data-max="120" data-key="greeting_cooldown">
@@ -408,13 +424,21 @@
                         </div>
                         <span class="adm-slider-row__value" id="admin-cooldown-value">60 sec</span>
                     </div>
-                    <div class="adm-slider-row" style="margin-top:8px;">
+                    <div class="adm-slider-row" id="admin-minsize-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Min Face</span>
                         <div class="adm-slider-wrap" data-default="20" data-min="5" data-max="40" data-key="min_size_pct" data-scale="100">
                             <input type="range" class="adm-slider" id="admin-minsize-slider" min="5" max="40" value="20" step="1" style="--fill:42.9%;">
                             <div class="adm-slider-default-mark" style="--default-pct:0.429;" title="Default: 20%"></div>
                         </div>
                         <span class="adm-slider-row__value" id="admin-minsize-value">20%</span>
+                    </div>
+                    <div class="adm-slider-row" id="admin-minperson-row" style="margin-top:8px;display:none;">
+                        <span class="adm-slider-row__label" title="Person height as % of the camera picture height">Min Person</span>
+                        <div class="adm-slider-wrap" data-default="30" data-min="10" data-max="90" data-key="min_person_pct" data-scale="100">
+                            <input type="range" class="adm-slider" id="admin-minperson-slider" min="10" max="90" value="30" step="1" style="--fill:25%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.25;" title="Default: 30%"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-minperson-value">30%</span>
                     </div>
                     <div class="adm-slider-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Absence</span>
@@ -467,6 +491,81 @@
                     <div class="adm-toggle-row" style="margin-top:8px;">
                         <span class="adm-toggle-row__label">Background Image</span>
                         <button class="adm-toggle" id="admin-party-bg-toggle" type="button"></button>
+                    </div>
+                </div>
+                <!-- Screensaver and hold screen each own when they show and what; the video
+                     playback settings below them (pause, sound, camera) are shared by both -->
+                <div class="adm-section" id="admin-ss-section">
+                    <div class="adm-section__header adm-section__header--display"><i class="material-icons">slideshow</i> Idle Screensaver</div>
+                    <p style="font-size:0.72rem;color:#999;margin:-6px 0 8px;">During the event: shows after the station is idle; any input closes it.</p>
+                    <div class="adm-toggle-row adm-section__master">
+                        <span class="adm-toggle-row__label">Idle Screensaver</span>
+                        <button class="adm-toggle" id="admin-screensaver-toggle" type="button"></button>
+                    </div>
+                    <p class="adm-off-note">Off. You can still set it up; changes apply when it is turned on.</p>
+                    <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Shows</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-ss-content-opt" data-val="video" type="button">Video</button>
+                        <button class="adm-opt adm-ss-content-opt" data-val="image" type="button">Image</button>
+                    </div>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Start After</span>
+                        <div class="adm-slider-wrap" data-default="60" data-min="5" data-max="300" data-key="screensaver_idle_s">
+                            <input type="range" class="adm-slider" id="admin-screensaver-idle-slider" min="5" max="300" value="60" step="5" style="--fill:18.6%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.186;" title="Default: 60s"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-screensaver-idle-value">60 sec</span>
+                    </div>
+                </div>
+                <div class="adm-section" id="admin-hold-section">
+                    <div class="adm-section__header adm-section__header--display"><i class="material-icons">pause_presentation</i> Hold Screen</div>
+                    <p style="font-size:0.72rem;color:#999;margin:-6px 0 8px;">Before check-in opens: shows at once and stays. Esc releases it for good; Ctrl+Shift+H turns it back on.</p>
+                    <div class="adm-toggle-row adm-section__master">
+                        <span class="adm-toggle-row__label">Hold Screen</span>
+                        <button class="adm-toggle" id="admin-hold-toggle" type="button"></button>
+                    </div>
+                    <p class="adm-off-note">Off. You can still set it up; changes apply when it is turned on.</p>
+                    <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Shows</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-hold-content-opt" data-val="image" type="button">Image</button>
+                        <button class="adm-opt adm-hold-content-opt" data-val="video" type="button">Video</button>
+                    </div>
+                    <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Scans while held</p>
+                    <div class="adm-opt-group">
+                        <button class="adm-opt adm-hold-scans-opt" data-val="accept" type="button">Accept</button>
+                        <button class="adm-opt adm-hold-scans-opt" data-val="block" type="button">Block</button>
+                    </div>
+                    <p style="font-size:0.72rem;color:#999;margin:6px 0 0;">Accept = recorded, result shown, then back to hold. Block = ignored, and the camera greeting is muted.</p>
+                </div>
+                <div class="adm-section" id="admin-video-section">
+                    <div class="adm-section__header adm-section__header--audio"><i class="material-icons">movie</i> Video, Sound &amp; Camera</div>
+                    <p class="adm-section__master" style="font-size:0.72rem;color:#999;margin:-6px 0 8px;">For both the idle screensaver and the hold screen.</p>
+                    <p class="adm-off-note">Not in use: the screensaver and the hold screen are both off. Changes apply when either is turned on.</p>
+                    <p id="admin-media-status" style="font-size:0.72rem;color:#999;margin:0 0 6px;white-space:pre-line;word-break:break-all;">Checking video and image…</p>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Pause between loops</span>
+                        <div class="adm-slider-wrap" data-default="0" data-min="0" data-max="300" data-key="video_loop_pause_s">
+                            <input type="range" class="adm-slider" id="admin-loop-pause-slider" min="0" max="300" value="0" step="5" style="--fill:0%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0;" title="Default: 0 (loop without a break)"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-loop-pause-value">0 sec</span>
+                    </div>
+                    <p style="font-size:0.72rem;color:#999;margin:4px 0 0;">The video rests silently on its first frame between plays. 0 = loop without a break.</p>
+                    <div class="adm-toggle-row" style="margin-top:8px;">
+                        <span class="adm-toggle-row__label">Video Sound</span>
+                        <button class="adm-toggle" id="admin-screensaver-sound-toggle" type="button"></button>
+                    </div>
+                    <div id="admin-screensaver-camera-row">
+                        <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Camera</p>
+                        <div class="adm-opt-group">
+                            <button class="adm-opt adm-ss-camera-opt" data-val="off" type="button"
+                                    data-hint="Camera not used. The screensaver plays until someone touches the screen or scans; the hold screen stays until Esc.">Off</button>
+                            <button class="adm-opt adm-ss-camera-opt" data-val="wake" type="button"
+                                    data-hint="When the camera detects a person, the screensaver closes and the scan screen is ready; it returns after they leave. The hold screen is not affected.">Wake</button>
+                            <button class="adm-opt adm-ss-camera-opt" data-val="sound" type="button"
+                                    data-hint="Screensaver and hold video play silently; when the camera detects a person, the sound fades in, and fades out after they leave.">Sound</button>
+                        </div>
+                        <p id="admin-ss-camera-hint" style="font-size:0.72rem;color:#999;margin:6px 0 0;"></p>
                     </div>
                 </div>
                 <div class="adm-section">
