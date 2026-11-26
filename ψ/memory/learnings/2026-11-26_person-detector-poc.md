@@ -33,7 +33,13 @@ lens count. The camera pointed at a cabinet and the log showed
 
 The one hard frame (someone bending away, back to camera) was missed by every model except D-FINE (0.67).
 At conf 0.35 D-FINE also boxed a real shoulder 5% wide at the frame edge: a min-size rule handles it.
-Not yet covered: someone standing far back facing the camera, several people, event lighting.
+Far back (follow-up, 8 frames, open office, person about 4-5 m away facing the camera, box
+about 11% of width / 40% of height): current detector 0/8 (face too small for 9%);
+YOLO26n 8/8 (0.75-0.79), YOLOX-Nano 8/8 (0.85-0.86), YOLOX-Tiny 8/8, D-FINE-N 8/8 (0.93).
+All also boxed real people further back (seated, walking): no false objects.
+Consequence for the app: presence needs a minimum person size, measured on box **height**
+(it tracks distance; width changes with pose and crossed arms), or far passers-by will wake it.
+Not yet covered: event lighting, a crowd in front of the kiosk.
 
 Recommendation: **YOLOX-Nano** for a per-station "people" detector (Apache-2.0, same hit rate
 as YOLO26n, far under the 200 ms per-frame budget at 5 fps). D-FINE-N is the most sensitive
