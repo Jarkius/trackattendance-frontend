@@ -3,7 +3,8 @@ setlocal EnableExtensions
 
 :: Run this script from inside the hosted release folder itself (e.g. a
 :: network share or mapped drive containing TrackAttendance.exe, _internal\,
-:: data\, exports\, logs\, .env). It deploys "from wherever I am" to this
+:: data\, media\, always-on-screen\, .env). The folder can be dist\TrackAttendance
+:: or a prepared C:\TrackAttendance. It deploys "from wherever I am" to this
 :: laptop -- nothing to configure per machine, no hardcoded server path.
 
 :: Get path and strip the trailing backslash
@@ -20,15 +21,23 @@ if not exist "%SRC%\TrackAttendance.exe" (
     exit /b 1
 )
 
+:: Run from C:\TrackAttendance itself: nothing to copy, just (re)install keep-awake and
+:: the shortcut below.
+if /i "%SRC%"=="%DEST%" (
+    echo Running from %DEST% itself -- skipping the copy.
+    goto :after_copy
+)
+
 echo Deploying TrackAttendance from %SRC% to %DEST%...
 
-:: Exclude this script and any local runtime state that shouldn't be copied
-:: from the shared release source onto the laptop -- each laptop gets its
-:: own fresh database, exports, and logs, not whatever accumulated on the
-:: share from testing/other laptops.
+:: Skip local runtime state, so the source can be a release folder OR a used install
+:: (e.g. C:\TrackAttendance uploaded to a share): each laptop starts with its own fresh
+:: database, logs and exports. exports\ holds backups of test scans with attendee data
+:: and must never spread. This script IS copied, so an installed folder can be shared
+:: onward with the current deploy.bat.
 robocopy "%SRC%" "%DEST%" /E /COPY:DAT /DCOPY:DAT /R:2 /W:2 ^
-    /XF "deploy.bat" "database.db" "database.db-shm" "database.db-wal" "trackattendance.log" ^
-    /XD "%SRC%\data\backups"
+    /XF "database.db" "database.db-shm" "database.db-wal" "*.log" ^
+    /XD "%SRC%\data\backups" "%SRC%\logs" "%SRC%\exports"
 set "RC=%ERRORLEVEL%"
 
 :: Robocopy exit codes < 8 are successful variations
@@ -37,6 +46,8 @@ if %RC% GEQ 8 (
     pause
     exit /b %RC%
 )
+
+:after_copy
 
 :: Each laptop needs its own station identity -- don't carry over a
 :: leftover local database from a previous deploy attempt on this machine.
