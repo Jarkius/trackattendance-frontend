@@ -495,13 +495,14 @@
                 </div>
                 <!-- Screensaver and hold screen each own when they show and what; the video
                      playback settings below them (pause, sound, camera) are shared by both -->
-                <div class="adm-section">
+                <div class="adm-section" id="admin-ss-section">
                     <div class="adm-section__header adm-section__header--display"><i class="material-icons">slideshow</i> Idle Screensaver</div>
                     <p style="font-size:0.72rem;color:#999;margin:-6px 0 8px;">During the event: shows after the station is idle; any input closes it.</p>
-                    <div class="adm-toggle-row">
+                    <div class="adm-toggle-row adm-section__master">
                         <span class="adm-toggle-row__label">Idle Screensaver</span>
                         <button class="adm-toggle" id="admin-screensaver-toggle" type="button"></button>
                     </div>
+                    <p class="adm-off-note">Off. You can still set it up; changes apply when it is turned on.</p>
                     <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Shows</p>
                     <div class="adm-opt-group">
                         <button class="adm-opt adm-ss-content-opt" data-val="video" type="button">Video</button>
@@ -516,13 +517,14 @@
                         <span class="adm-slider-row__value" id="admin-screensaver-idle-value">60 sec</span>
                     </div>
                 </div>
-                <div class="adm-section">
+                <div class="adm-section" id="admin-hold-section">
                     <div class="adm-section__header adm-section__header--display"><i class="material-icons">pause_presentation</i> Hold Screen</div>
                     <p style="font-size:0.72rem;color:#999;margin:-6px 0 8px;">Before check-in opens: shows at once and stays. Esc releases it for good; Ctrl+Shift+H turns it back on.</p>
-                    <div class="adm-toggle-row">
+                    <div class="adm-toggle-row adm-section__master">
                         <span class="adm-toggle-row__label">Hold Screen</span>
                         <button class="adm-toggle" id="admin-hold-toggle" type="button"></button>
                     </div>
+                    <p class="adm-off-note">Off. You can still set it up; changes apply when it is turned on.</p>
                     <p style="font-size:0.78rem;color:#666;margin:10px 0 6px;">Shows</p>
                     <div class="adm-opt-group">
                         <button class="adm-opt adm-hold-content-opt" data-val="image" type="button">Image</button>
@@ -535,9 +537,10 @@
                     </div>
                     <p style="font-size:0.72rem;color:#999;margin:6px 0 0;">Accept = recorded, result shown, then back to hold. Block = ignored, and the camera greeting is muted.</p>
                 </div>
-                <div class="adm-section">
+                <div class="adm-section" id="admin-video-section">
                     <div class="adm-section__header adm-section__header--audio"><i class="material-icons">movie</i> Video, Sound &amp; Camera</div>
-                    <p style="font-size:0.72rem;color:#999;margin:-6px 0 8px;">For both the idle screensaver and the hold screen.</p>
+                    <p class="adm-section__master" style="font-size:0.72rem;color:#999;margin:-6px 0 8px;">For both the idle screensaver and the hold screen.</p>
+                    <p class="adm-off-note">Not in use: the screensaver and the hold screen are both off. Changes apply when either is turned on.</p>
                     <p id="admin-media-status" style="font-size:0.72rem;color:#999;margin:0 0 6px;white-space:pre-line;word-break:break-all;">Checking video and image…</p>
                     <div class="adm-slider-row" style="margin-top:8px;">
                         <span class="adm-slider-row__label">Pause between loops</span>

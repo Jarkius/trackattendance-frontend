@@ -2599,6 +2599,7 @@ ${destination}` : message;
     // Esc / Ctrl+Shift+H change the hold state inside the controller: save it and mirror it in admin
     screensaver.hooks.onHoldChanged = (on) => {
         if (adminHoldToggle) adminHoldToggle.classList.toggle('active', on);
+        updateVideoSectionsDimmed();
         queueOrRun((bridge) => {
             if (bridge.admin_set_hold) bridge.admin_set_hold(on, () => {});
         });
@@ -2847,6 +2848,7 @@ ${destination}` : message;
                     syncSlider(adminLoopPauseSlider, adminLoopPauseValue, result.video_loop_pause_seconds || 0, 0, 300, 'sec');
                     markActive('.adm-hold-scans-opt', result.hold_scans || 'accept');
                     if (adminHoldToggle) adminHoldToggle.classList.toggle('active', !!result.hold_enabled);
+                    updateVideoSectionsDimmed();
                     syncSlider(adminScreensaverIdleSlider, adminScreensaverIdleValue, result.screensaver_idle_seconds || 60, 5, 300, 'sec');
                     if (adminScreensaverSoundToggle) {
                         adminScreensaverSoundToggle.classList.toggle('active', !result.screensaver_muted);
@@ -3153,6 +3155,7 @@ ${destination}` : message;
             e.preventDefault();
             const newState = !adminScreensaverToggle.classList.contains('active');
             adminScreensaverToggle.classList.toggle('active', newState);
+            updateVideoSectionsDimmed();
             screensaver.configure({ enabled: newState });
             queueOrRun((bridge) => {
                 if (bridge.admin_set_screensaver) {
@@ -3171,6 +3174,20 @@ ${destination}` : message;
         const usesVideo = !!document.querySelector(
             '.adm-ss-content-opt.active[data-val="video"], .adm-hold-content-opt.active[data-val="video"]');
         if (adminLoopPauseSlider) adminLoopPauseSlider.disabled = !usesVideo;
+    }
+    // Dim (not lock) a section whose feature is off, so it can still be set up before it is
+    // turned on. The shared video section is in use while either the screensaver or the hold is.
+    function updateVideoSectionsDimmed() {
+        const on = (t) => !!(t && t.classList.contains('active'));
+        const ssOn = on(adminScreensaverToggle);
+        const holdOn = on(adminHoldToggle);
+        const dim = (id, off) => {
+            const s = document.getElementById(id);
+            if (s) s.classList.toggle('adm-section--off', off);
+        };
+        dim('admin-ss-section', !ssOn);
+        dim('admin-hold-section', !holdOn);
+        dim('admin-video-section', !ssOn && !holdOn);
     }
     bindSlider(adminLoopPauseSlider, adminLoopPauseValue, 'sec', (v) => {
         screensaver.configure({ loopPauseS: v });
@@ -3250,12 +3267,14 @@ ${destination}` : message;
             e.preventDefault();
             const newState = !adminHoldToggle.classList.contains('active');
             adminHoldToggle.classList.toggle('active', newState);
+            updateVideoSectionsDimmed();
             screensaver.configure({ hold: newState });
             queueOrRun((bridge) => {
                 if (bridge.admin_set_hold) bridge.admin_set_hold(newState, () => {});
             });
         });
     }
+    updateVideoSectionsDimmed();
 
     // Duplicate detection toggle
     if (adminDupDetectionToggle) {
