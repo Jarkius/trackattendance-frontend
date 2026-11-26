@@ -45,6 +45,20 @@ if exist "%DEST%\data\database.db" (
     echo Delete it manually first if this laptop should start as a fresh station.
 )
 
+:: Keep-awake (always-on-screen): display stays on and the session never locks, without
+:: sending keystrokes (scanner input is safe). Installed in this user's Startup folder so it
+:: runs at every logon, and started now. The .vbs needs the .ps1 in the same folder.
+:: It holds a single-instance mutex, so starting it again is harmless.
+set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+if exist "%SRC%\always-on-screen\KeepAwake-Launcher.vbs" (
+    copy /y "%SRC%\always-on-screen\KeepAwake-Launcher.vbs" "%STARTUP%\" >nul
+    copy /y "%SRC%\always-on-screen\KeepAwake.ps1" "%STARTUP%\" >nul
+    start "" wscript.exe "%STARTUP%\KeepAwake-Launcher.vbs"
+    echo Keep-awake installed in Startup and started.
+) else (
+    echo always-on-screen not in this release - keep-awake not installed.
+)
+
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$target='%EXE%';" ^
     "$desktop=[Environment]::GetFolderPath('Desktop');" ^
@@ -56,6 +70,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$s.IconLocation=$target;" ^
     "$s.Save();"
 
-echo Done! Desktop shortcut created.
+echo Done! Desktop shortcut created. Run this as the account the kiosk logs on with:
+echo the keep-awake Startup entry is per user.
 echo First launch on this laptop will prompt for a station name -- give each laptop a unique one.
 pause

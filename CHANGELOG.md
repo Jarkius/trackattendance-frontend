@@ -16,6 +16,10 @@ Rehearse with the event team, then reset every station from one place.
 - **A failed local clear could leave a station's sync stopped for good.** Sync and auto-sync now always resume; the clear is retried at the next health check.
 - **Dashboard department totals stayed empty after a clear** until each app restarted. The roster summary is now sent again after any clear.
 
+### Deploy
+
+- **Keep-awake ships with the release.** `build.bat` copies `KeepAwake-Launcher.vbs` and `KeepAwake.ps1` from `C:\workspace\always-on-screen` (or `ALWAYS_ON_SCREEN_DIR`) into `always-on-screen\`. `deploy.bat` puts both in the user's Startup folder (`shell:startup`) and starts it, so the display stays on and the session never locks, without sending keystrokes. Run `deploy.bat` as the kiosk's logon user.
+
 ## v2.2.0 (2026-11-26)
 
 Hold screen, idle screensaver and People camera detection (PRs #121, #122, #123). Specs: `docs/specs/native-video-playback.md`, `docs/specs/person-detector-option.md`. Every new setting defaults to off, so existing stations behave as before.
