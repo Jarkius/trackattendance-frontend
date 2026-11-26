@@ -17,6 +17,9 @@ os.environ.setdefault("CLOUD_API_URL", "http://test.example.com")
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+import pytest  # noqa: E402
+pytest.importorskip("PyQt6")  # CI installs no Qt; these run locally
+
 from PyQt6.QtCore import QObject, pyqtSignal  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
