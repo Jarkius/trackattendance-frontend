@@ -42,6 +42,18 @@ if exist "media\" (
     xcopy /e /i /y /q "media" "dist\TrackAttendance\media\" >nul
     echo Included event media\ folder.
 )
+
+:: Kiosk keep-awake (display stays on, session never locks, no keystrokes sent): shipped
+:: next to the exe; deploy.bat installs it in the Startup folder. Override the source
+:: with ALWAYS_ON_SCREEN_DIR.
+if not defined ALWAYS_ON_SCREEN_DIR set "ALWAYS_ON_SCREEN_DIR=C:\workspace\always-on-screen"
+if exist "%ALWAYS_ON_SCREEN_DIR%\KeepAwake.ps1" (
+    xcopy /i /y /q "%ALWAYS_ON_SCREEN_DIR%\KeepAwake-Launcher.vbs" "dist\TrackAttendance\always-on-screen\" >nul
+    xcopy /i /y /q "%ALWAYS_ON_SCREEN_DIR%\KeepAwake.ps1" "dist\TrackAttendance\always-on-screen\" >nul
+    echo Included always-on-screen keep-awake.
+) else (
+    echo WARNING: %ALWAYS_ON_SCREEN_DIR% not found - release has no keep-awake.
+)
 echo.
 echo Built TrackAttendance v%VER% -^> dist\TrackAttendance
 
