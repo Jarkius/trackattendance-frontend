@@ -5,9 +5,9 @@ own files and is changed per event without a rebuild. Video and image are chosen
 independently, each falling back to the neutral defaults bundled in assets/media.
 
 Candidates are returned in order (event file first, built-in second) rather than one
-answer, because only the page's web engine can tell whether a file really plays: a
-normal MP4 (H.264/AAC) does not in PyQt6's QtWebEngine. The page tries them in order
-and falls back, so an unplayable event file never means a black screen.
+answer, because only trying a file tells whether it really plays. Videos are tried in
+order with Qt's own player (native_video.VideoProbe), images by the page, and each falls
+back to the next, so an unplayable event file never means a black screen.
 """
 from __future__ import annotations
 
