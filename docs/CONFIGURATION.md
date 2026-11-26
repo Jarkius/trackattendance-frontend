@@ -90,8 +90,8 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 | `SCREENSAVER_ENABLED` | `False` | Turn the idle screensaver on |
 | `SCREENSAVER_CONTENT` | `video` | `video` / `image` |
 | `SCREENSAVER_IDLE_SECONDS` | `60` | Idle seconds before it appears (min `5`; admin slider 5-300) |
-| `SCREENSAVER_MUTED` | `False` | Play the video silently |
-| `SCREENSAVER_CAMERA` | `wake` | Needs `ENABLE_CAMERA_DETECTION`. `off` = ignore the camera; `wake` = a person arriving closes it and it will not restart while someone is in front of the station; `sound` = the video keeps looping, sound fades in (about 2 s) when a person is seen and out after they leave |
+| `SCREENSAVER_MUTED` | `False` | Play the video silently. Also applies to the hold screen video (Admin: Video Sound) |
+| `SCREENSAVER_CAMERA` | `wake` | Needs `ENABLE_CAMERA_DETECTION`. `off` = ignore the camera; `wake` = a person arriving closes it and it will not restart while someone is in front of the station; `sound` = the video keeps looping, sound fades in (about 2 s) when a person is seen and out after they leave. On the hold screen `sound` works the same, while `wake` and `off` do nothing (only Esc releases the hold) |
 
 **Hold screen** (before check-in opens): shows at once and stays. `Esc` releases it for good (saved; no timeout resume, survives reboot until released). `Ctrl+Shift+H` or the admin toggle turns it back on.
 
