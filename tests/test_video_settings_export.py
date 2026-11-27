@@ -13,13 +13,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 KEYS = ("SCREENSAVER_ENABLED", "SCREENSAVER_CONTENT", "SCREENSAVER_IDLE_SECONDS",
         "HOLD_ENABLED", "HOLD_CONTENT", "HOLD_SCANS",
-        "VIDEO_LOOP_PAUSE_SECONDS", "SCREENSAVER_MUTED", "SCREENSAVER_CAMERA")
+        "VIDEO_LOOP_PAUSE_SECONDS", "VIDEO_END_FADE_SECONDS", "VIDEO_RESTART_EMPTY_SECONDS",
+        "SCREENSAVER_MUTED", "SCREENSAVER_CAMERA")
 
 # Every value differs from its config.py default, so a missed key cannot pass by accident
 CHANGED = {
     "SCREENSAVER_ENABLED": True, "SCREENSAVER_CONTENT": "image", "SCREENSAVER_IDLE_SECONDS": 125,
     "HOLD_ENABLED": True, "HOLD_CONTENT": "video", "HOLD_SCANS": "block",
-    "VIDEO_LOOP_PAUSE_SECONDS": 45, "SCREENSAVER_MUTED": True, "SCREENSAVER_CAMERA": "sound",
+    "VIDEO_LOOP_PAUSE_SECONDS": 45, "VIDEO_END_FADE_SECONDS": 4,
+    "VIDEO_RESTART_EMPTY_SECONDS": 25, "SCREENSAVER_MUTED": True, "SCREENSAVER_CAMERA": "sound",
 }
 
 
@@ -52,6 +54,8 @@ def set_through_admin(a, Api):
     assert Api.admin_set_hold_content(a, v["HOLD_CONTENT"])["ok"]
     assert Api.admin_set_hold_scans(a, v["HOLD_SCANS"])["ok"]
     assert Api.admin_set_video_loop_pause(a, v["VIDEO_LOOP_PAUSE_SECONDS"])["ok"]
+    assert Api.admin_set_video_end_fade(a, v["VIDEO_END_FADE_SECONDS"])["ok"]
+    assert Api.admin_set_video_restart_empty(a, v["VIDEO_RESTART_EMPTY_SECONDS"])["ok"]
     assert Api.admin_set_screensaver_muted(a, v["SCREENSAVER_MUTED"])["ok"]
     assert Api.admin_set_screensaver_camera(a, v["SCREENSAVER_CAMERA"])["ok"]
 

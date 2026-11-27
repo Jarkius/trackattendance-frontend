@@ -551,6 +551,24 @@
                         <span class="adm-slider-row__value" id="admin-loop-pause-value">0 sec</span>
                     </div>
                     <p style="font-size:0.72rem;color:#999;margin:4px 0 0;">The video rests silently on its first frame between plays. 0 = loop without a break.</p>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Sound fade at start/end</span>
+                        <div class="adm-slider-wrap" data-default="0" data-min="0" data-max="10" data-key="video_end_fade_s">
+                            <input type="range" class="adm-slider" id="admin-end-fade-slider" min="0" max="10" value="0" step="1" style="--fill:0%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0;" title="Default: 0 (off)"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-end-fade-value">0 sec</span>
+                    </div>
+                    <p style="font-size:0.72rem;color:#999;margin:4px 0 0;">The sound fades in over the first seconds and out over the last seconds of each play, so a loop does not cut off abruptly. 0 = off. Applies the next time the video starts.</p>
+                    <div class="adm-slider-row" style="margin-top:8px;">
+                        <span class="adm-slider-row__label">Restart when someone arrives</span>
+                        <div class="adm-slider-wrap" data-default="10" data-min="0" data-max="60" data-key="video_restart_empty_s">
+                            <input type="range" class="adm-slider" id="admin-restart-empty-slider" min="0" max="60" value="10" step="1" style="--fill:16.7%;">
+                            <div class="adm-slider-default-mark" style="--default-pct:0.1667;" title="Default: 10"></div>
+                        </div>
+                        <span class="adm-slider-row__value" id="admin-restart-empty-value">10 sec</span>
+                    </div>
+                    <p style="font-size:0.72rem;color:#999;margin:4px 0 0;">Camera "Sound" mode: the video starts over when a person arrives after nobody was there for this long. Another person joining, or the camera briefly losing someone, does not restart it. 0 = never.</p>
                     <div class="adm-toggle-row" style="margin-top:8px;">
                         <span class="adm-toggle-row__label">Video Sound</span>
                         <button class="adm-toggle" id="admin-screensaver-sound-toggle" type="button"></button>

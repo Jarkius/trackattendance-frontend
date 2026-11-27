@@ -129,6 +129,25 @@ class ScreensaverSettingsTests(unittest.TestCase):
         Api.load_saved_settings(self.api)
         self.assertEqual(config.VIDEO_LOOP_PAUSE_SECONDS, 0)
 
+    def test_video_fade_and_restart_settings_survive_restart_and_are_bounded(self):
+        for name in ("VIDEO_END_FADE_SECONDS", "VIDEO_RESTART_EMPTY_SECONDS"):
+            self.addCleanup(setattr, config, name, getattr(config, name))
+        self.assertEqual(Api.admin_set_video_end_fade(self.api, 4)["value"], 4)
+        self.assertEqual(Api.admin_set_video_restart_empty(self.api, 25)["value"], 25)
+        config.VIDEO_END_FADE_SECONDS = 0
+        config.VIDEO_RESTART_EMPTY_SECONDS = 10
+        Api.load_saved_settings(self.api)
+        self.assertEqual(config.VIDEO_END_FADE_SECONDS, 4)
+        self.assertEqual(config.VIDEO_RESTART_EMPTY_SECONDS, 25)
+        self.assertEqual(Api.admin_set_video_end_fade(self.api, 99)["value"], 10)
+        self.assertEqual(Api.admin_set_video_end_fade(self.api, -1)["value"], 0)
+        self.assertEqual(Api.admin_set_video_restart_empty(self.api, 9999)["value"], 600)
+        # A saved 0 ("off") must beat a non-zero .env value
+        Api.admin_set_video_restart_empty(self.api, 0)
+        config.VIDEO_RESTART_EMPTY_SECONDS = 10
+        Api.load_saved_settings(self.api)
+        self.assertEqual(config.VIDEO_RESTART_EMPTY_SECONDS, 0)
+
     def test_defaults_when_nothing_saved(self):
         self._restart()
         self.assertFalse(config.SCREENSAVER_ENABLED)

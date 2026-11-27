@@ -2876,6 +2876,9 @@ ${destination}` : message;
                     markActive('.adm-hold-content-opt', result.hold_content || 'image');
                     updateLoopPauseEnabled();
                     syncSlider(adminLoopPauseSlider, adminLoopPauseValue, result.video_loop_pause_seconds || 0, 0, 300, 'sec');
+                    syncSlider(adminEndFadeSlider, adminEndFadeValue, result.video_end_fade_seconds || 0, 0, 10, 'sec');
+                    syncSlider(adminRestartEmptySlider, adminRestartEmptyValue,
+                               Math.min(60, result.video_restart_empty_seconds || 0), 0, 60, 'sec');
                     markActive('.adm-hold-scans-opt', result.hold_scans || 'accept');
                     if (adminHoldToggle) adminHoldToggle.classList.toggle('active', !!result.hold_enabled);
                     updateVideoSectionsDimmed();
@@ -3199,11 +3202,17 @@ ${destination}` : message;
     // one of them shows video, so greyed out when both show the image.
     const adminLoopPauseSlider = document.getElementById('admin-loop-pause-slider');
     const adminLoopPauseValue = document.getElementById('admin-loop-pause-value');
+    const adminEndFadeSlider = document.getElementById('admin-end-fade-slider');
+    const adminEndFadeValue = document.getElementById('admin-end-fade-value');
+    const adminRestartEmptySlider = document.getElementById('admin-restart-empty-slider');
+    const adminRestartEmptyValue = document.getElementById('admin-restart-empty-value');
     function updateLoopPauseEnabled() {
         // Runs after bindChooser's handler (registered earlier) has marked the clicked option
         const usesVideo = !!document.querySelector(
             '.adm-ss-content-opt.active[data-val="video"], .adm-hold-content-opt.active[data-val="video"]');
-        if (adminLoopPauseSlider) adminLoopPauseSlider.disabled = !usesVideo;
+        [adminLoopPauseSlider, adminEndFadeSlider, adminRestartEmptySlider].forEach((s) => {
+            if (s) s.disabled = !usesVideo;
+        });
     }
     // Dim (not lock) a section whose feature is off, so it can still be set up before it is
     // turned on. The shared video section is in use while either the screensaver or the hold is.
@@ -3223,6 +3232,18 @@ ${destination}` : message;
         screensaver.configure({ loopPauseS: v });
         queueOrRun((bridge) => {
             if (bridge.admin_set_video_loop_pause) bridge.admin_set_video_loop_pause(v, () => {});
+        });
+    });
+
+    bindSlider(adminEndFadeSlider, adminEndFadeValue, 'sec', (v) => {
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_video_end_fade) bridge.admin_set_video_end_fade(v, () => {});
+        });
+    });
+    bindSlider(adminRestartEmptySlider, adminRestartEmptyValue, 'sec', (v) => {
+        screensaver.configure({ restartEmptyS: v });
+        queueOrRun((bridge) => {
+            if (bridge.admin_set_video_restart_empty) bridge.admin_set_video_restart_empty(v, () => {});
         });
     });
 
