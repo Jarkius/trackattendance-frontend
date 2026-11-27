@@ -103,6 +103,7 @@ All of these are also in the admin panel (Settings) and persist across restarts;
 | `HOLD_CONTENT` | `image` | `image` / `video` |
 | `VIDEO_LOOP_PAUSE_SECONDS` | `0` | Screensaver and hold screen video: seconds resting on the first frame (silent) between loops; `0` = loop without a break (max 300) |
 | `VIDEO_RESTART_EMPTY_SECONDS` | `10` | Camera `sound` mode: restart the playing video from the start when a person arrives after the station has been empty for at least this many seconds. Another person joining, or the camera briefly losing someone, does not restart it. `0` = never (max 600, `.env` only) |
+| `VIDEO_END_FADE_SECONDS` | `0` | Video sound (screensaver and hold screen) fades in over the first N seconds and out over the last N of every play, so a loop does not cut off abruptly; `0` = off (max 10, `.env` only; capped at half the clip length) |
 | `HOLD_SCANS` | `accept` | Scans while held: `accept` = recorded, normal result shown for about 8 s, then back to the hold screen; `block` = scans ignored and the camera greeting is muted, since it would ask people to scan (use when early scans must not count) |
 
 Notes:

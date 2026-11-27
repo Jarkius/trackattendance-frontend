@@ -39,12 +39,14 @@ class RecordingPlayer(QObject):
 
     def __init__(self):
         super().__init__()
+        self.length_ms = 10_000
         self.calls = []
         self.source = None
         self.loops = None
         self.position = None
         self.audio = None
 
+    def duration(self): return self.length_ms
     def setSource(self, url): self.source = url; self.calls.append("setSource")
     def setLoops(self, n): self.loops = n
     def setPosition(self, ms): self.position = ms; self.calls.append(f"setPosition({ms})")
@@ -183,6 +185,35 @@ class TestRestart(PanelTestCase):
         self.panel.restart()
         self.assertFalse(self.timer.isActive())
         self.assertEqual(self.player.calls[-1], "play")
+
+
+class TestEdgeFade(PanelTestCase):
+    def _volume_at(self, pos_ms):
+        self.player.positionChanged.emit(pos_ms)
+        return self.audios[-1].volume
+
+    def test_off_by_default_volume_untouched(self):
+        self.panel.play(self.video, volume=0.8, loop_pause_s=0)
+        self.assertEqual(self._volume_at(9_900), 0.8)
+
+    def test_fades_in_at_start_and_out_at_end(self):
+        self.panel.play(self.video, volume=0.8, loop_pause_s=0, end_fade_s=2)
+        self.assertEqual(self.audios[-1].volume, 0.0)
+        self.assertAlmostEqual(self._volume_at(1_000), 0.4)
+        self.assertAlmostEqual(self._volume_at(5_000), 0.8)      # middle: full volume
+        self.assertAlmostEqual(self._volume_at(9_000), 0.4)
+        self.assertEqual(self._volume_at(10_000), 0.0)
+
+    def test_page_volume_changes_scale_the_envelope(self):
+        self.panel.play(self.video, volume=1, loop_pause_s=0, end_fade_s=2)
+        self._volume_at(9_000)                                   # envelope 0.5
+        self.panel.set_volume(0.5)
+        self.assertAlmostEqual(self.audios[-1].volume, 0.25)
+
+    def test_short_clip_fades_never_overlap(self):
+        self.player.length_ms = 2_000
+        self.panel.play(self.video, volume=1, loop_pause_s=0, end_fade_s=5)
+        self.assertAlmostEqual(self._volume_at(1_000), 1.0)      # fade capped at half the clip
 
 
 class TestStopVolumeAndErrors(PanelTestCase):
