@@ -35,6 +35,7 @@ class RecordingPlayer(QObject):
     """Stand-in for QMediaPlayer: records what the panel asks it to do."""
     mediaStatusChanged = pyqtSignal(object)
     errorOccurred = pyqtSignal(object, str)
+    positionChanged = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -151,6 +152,37 @@ class TestPauseBetweenLoops(PanelTestCase):
         self.player.mediaStatusChanged.emit(Status.EndOfMedia)
         self.assertEqual(self.player.calls, [])
         self.assertFalse(self.timer.isActive())
+
+
+class TestRestart(PanelTestCase):
+    def test_restart_goes_back_to_first_frame_and_plays(self):
+        self.panel.play(self.video, volume=1, loop_pause_s=0)
+        self.player.positionChanged.emit(30_000)
+        self.player.calls.clear()
+        self.panel.restart()
+        self.assertEqual(self.player.calls, ["setPosition(0)", "play"])
+
+    def test_restart_skipped_when_already_near_the_start(self):
+        self.panel.play(self.video, volume=1, loop_pause_s=0)
+        self.player.positionChanged.emit(1_500)
+        self.player.calls.clear()
+        self.panel.restart()
+        self.assertEqual(self.player.calls, [])
+
+    def test_restart_ignored_when_not_playing(self):
+        self.player.calls.clear()
+        self.panel.restart()
+        self.assertEqual(self.player.calls, [])
+
+    def test_restart_during_rest_between_loops_resumes_now(self):
+        self.panel.play(self.video, volume=1, loop_pause_s=30)
+        self.player.positionChanged.emit(30_000)
+        self.player.mediaStatusChanged.emit(Status.EndOfMedia)
+        self.assertTrue(self.timer.isActive())
+        self.player.calls.clear()
+        self.panel.restart()
+        self.assertFalse(self.timer.isActive())
+        self.assertEqual(self.player.calls[-1], "play")
 
 
 class TestStopVolumeAndErrors(PanelTestCase):

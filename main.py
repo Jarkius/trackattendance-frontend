@@ -1692,6 +1692,7 @@ class Api(QObject):
             "hold_enabled": config.HOLD_ENABLED,
             "hold_content": config.HOLD_CONTENT,
             "video_loop_pause_seconds": config.VIDEO_LOOP_PAUSE_SECONDS,
+            "video_restart_empty_seconds": config.VIDEO_RESTART_EMPTY_SECONDS,
             "hold_scans": config.HOLD_SCANS,
             "screensaver_camera": config.SCREENSAVER_CAMERA,
             "log_level": config.LOGGING_LEVEL,
@@ -2227,6 +2228,13 @@ class Api(QObject):
             return {"ok": False, "message": "No usable video"}
         panel.play(path, max(0.0, min(1.0, float(volume))), max(0, min(300, int(loop_pause_s))))
         return {"ok": True}
+
+    @pyqtSlot()
+    def screensaver_video_restart(self) -> None:
+        """Start the playing video over (a person arrived after the station was empty)."""
+        panel = getattr(self, "_video_panel", None)
+        if panel is not None:
+            panel.restart()
 
     @pyqtSlot()
     def screensaver_video_stop(self) -> None:

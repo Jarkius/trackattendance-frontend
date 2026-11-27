@@ -21,6 +21,8 @@ from PyQt6.QtWidgets import QApplication, QWidget
 
 LOGGER = logging.getLogger(__name__)
 
+RESTART_MIN_POS_MS = 2000   # a video this close to its start is not restarted again
+
 
 def _default_audio():
     """An audio output on the *current* default device (a speaker switched after start-up)."""
@@ -63,9 +65,12 @@ class NativeVideoPanel(QObject):
         self._loop_timer.setSingleShot(True)
         self._loop_timer.timeout.connect(self._resume_after_pause)
         self._loop_pause_ms = 0
+        self._pos_ms = 0
         self.is_playing = False
 
         self._player.mediaStatusChanged.connect(self._on_status)
+        if hasattr(self._player, "positionChanged"):
+            self._player.positionChanged.connect(self._on_position)
         self._player.errorOccurred.connect(self._on_error)
         page.installEventFilter(self)
         # Safety net: Esc always takes the panel down, even if the page stopped driving it.
@@ -77,6 +82,7 @@ class NativeVideoPanel(QObject):
     # ── control ──
     def play(self, path: Path, volume: float, loop_pause_s: int) -> None:
         self._loop_timer.stop()
+        self._pos_ms = 0
         self._loop_pause_ms = max(0, int(loop_pause_s)) * 1000
         self._audio = self._make_audio()
         self._audio.setVolume(_clamp(volume))
@@ -94,6 +100,18 @@ class NativeVideoPanel(QObject):
         self.is_playing = False
         self._player.stop()
         self.widget.hide()
+
+    def restart(self) -> None:
+        """Start over from the first frame. No-op when not playing or already within the
+        first RESTART_MIN_POS_MS (it is effectively at the start)."""
+        if not self.is_playing or self._pos_ms < RESTART_MIN_POS_MS:
+            return
+        self._loop_timer.stop()          # arrival during the rest between loops: resume now
+        self._player.setPosition(0)
+        self._player.play()
+
+    def _on_position(self, pos_ms: int) -> None:
+        self._pos_ms = pos_ms
 
     def set_volume(self, volume: float) -> None:
         if self._audio is not None:
