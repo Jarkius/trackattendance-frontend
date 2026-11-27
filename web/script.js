@@ -2793,9 +2793,12 @@ ${destination}` : message;
     };
 
     // Helper: bind slider with value label update + save callback
-    const bindSlider = (slider, valueEl, unit, saveFn) => {
+    // saveFn runs on every move by default. With onRelease it runs once when the thumb is
+    // released (or a key press ends), while the fill and value label still follow the drag.
+    const bindSlider = (slider, valueEl, unit, saveFn, { onRelease = false } = {}) => {
         if (!slider || slider.dataset.bound) return;
         slider.dataset.bound = 'true';
+        if (onRelease) slider.addEventListener('change', () => saveFn(parseFloat(slider.value)));
         slider.addEventListener('input', () => {
             const min = parseFloat(slider.min);
             const max = parseFloat(slider.max);
@@ -2804,7 +2807,7 @@ ${destination}` : message;
             slider.style.setProperty('--fill', pct + '%');
             if (valueEl) valueEl.textContent = v + ' ' + unit;
             updateSliderDefaultState(slider);
-            saveFn(v);
+            if (!onRelease) saveFn(v);
         });
     };
 
@@ -3233,19 +3236,19 @@ ${destination}` : message;
         queueOrRun((bridge) => {
             if (bridge.admin_set_video_loop_pause) bridge.admin_set_video_loop_pause(v, () => {});
         });
-    });
+    }, { onRelease: true });
 
     bindSlider(adminEndFadeSlider, adminEndFadeValue, 'sec', (v) => {
         queueOrRun((bridge) => {
             if (bridge.admin_set_video_end_fade) bridge.admin_set_video_end_fade(v, () => {});
         });
-    });
+    }, { onRelease: true });
     bindSlider(adminRestartEmptySlider, adminRestartEmptyValue, 'sec', (v) => {
         screensaver.configure({ restartEmptyS: v });
         queueOrRun((bridge) => {
             if (bridge.admin_set_video_restart_empty) bridge.admin_set_video_restart_empty(v, () => {});
         });
-    });
+    }, { onRelease: true });
 
     bindSlider(adminScreensaverIdleSlider, adminScreensaverIdleValue, 'sec', (v) => {
         screensaver.setIdleSeconds(v);
