@@ -810,6 +810,8 @@ class Api(QObject):
             "scan_feedback_ms": config.SCAN_FEEDBACK_DURATION_MS,
             "connection_check_s": config.CONNECTION_CHECK_INTERVAL_MS / 1000,
             "screensaver_idle_s": config.SCREENSAVER_IDLE_SECONDS,
+            "video_end_fade_s": config.VIDEO_END_FADE_SECONDS,
+            "video_restart_empty_s": config.VIDEO_RESTART_EMPTY_SECONDS,
             # The event-ready hold state a clear returns to (see _rearm_hold_after_clear)
             "hold_enabled": config.HOLD_ENABLED,
             "hold_scans": config.HOLD_SCANS,
@@ -1693,6 +1695,7 @@ class Api(QObject):
             "hold_content": config.HOLD_CONTENT,
             "video_loop_pause_seconds": config.VIDEO_LOOP_PAUSE_SECONDS,
             "video_restart_empty_seconds": config.VIDEO_RESTART_EMPTY_SECONDS,
+            "video_end_fade_seconds": config.VIDEO_END_FADE_SECONDS,
             "hold_scans": config.HOLD_SCANS,
             "screensaver_camera": config.SCREENSAVER_CAMERA,
             "log_level": config.LOGGING_LEVEL,
@@ -1973,6 +1976,14 @@ class Api(QObject):
         if v is not None and v.isdigit():
             config.VIDEO_LOOP_PAUSE_SECONDS = max(0, min(300, int(v)))
             count += 1
+        v = db.get_meta("setting:video_end_fade_seconds")
+        if v is not None and v.isdigit():
+            config.VIDEO_END_FADE_SECONDS = max(0, min(10, int(v)))
+            count += 1
+        v = db.get_meta("setting:video_restart_empty_seconds")
+        if v is not None and v.isdigit():
+            config.VIDEO_RESTART_EMPTY_SECONDS = max(0, min(600, int(v)))
+            count += 1
         v = db.get_meta("setting:hold_scans")
         if v in ("accept", "block"):
             config.HOLD_SCANS = v
@@ -2160,6 +2171,26 @@ class Api(QObject):
         config.VIDEO_LOOP_PAUSE_SECONDS = seconds
         self._save_setting("video_loop_pause_seconds", str(seconds))
         LOGGER.info("[Admin] Video loop pause set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_video_end_fade(self, seconds: int) -> dict:
+        """Video sound fades in/out over this many seconds at the start/end of every play
+        (0 = off). Applies from the next time the video starts. Persisted."""
+        seconds = max(0, min(10, int(seconds)))
+        config.VIDEO_END_FADE_SECONDS = seconds
+        self._save_setting("video_end_fade_seconds", str(seconds))
+        LOGGER.info("[Admin] Video end fade set to %ds", seconds)
+        return {"ok": True, "value": seconds}
+
+    @pyqtSlot(int, result="QVariant")
+    def admin_set_video_restart_empty(self, seconds: int) -> dict:
+        """Camera sound mode: restart the video when a person arrives after the station was
+        empty this many seconds (0 = never). Persisted."""
+        seconds = max(0, min(600, int(seconds)))
+        config.VIDEO_RESTART_EMPTY_SECONDS = seconds
+        self._save_setting("video_restart_empty_seconds", str(seconds))
+        LOGGER.info("[Admin] Video restart-after-empty set to %ds", seconds)
         return {"ok": True, "value": seconds}
 
     @pyqtSlot(str, result="QVariant")
@@ -2577,6 +2608,8 @@ class Api(QObject):
             "HOLD_ENABLED": config.HOLD_ENABLED,
             "HOLD_CONTENT": config.HOLD_CONTENT,
             "VIDEO_LOOP_PAUSE_SECONDS": config.VIDEO_LOOP_PAUSE_SECONDS,
+            "VIDEO_END_FADE_SECONDS": config.VIDEO_END_FADE_SECONDS,
+            "VIDEO_RESTART_EMPTY_SECONDS": config.VIDEO_RESTART_EMPTY_SECONDS,
             "HOLD_SCANS": config.HOLD_SCANS,
             "SCREENSAVER_CAMERA": config.SCREENSAVER_CAMERA,
             "AUTO_EXPORT_ON_SHUTDOWN": config.AUTO_EXPORT_ON_SHUTDOWN,
