@@ -38,7 +38,7 @@ class RecordingPanel(QObject):
         self.calls = []
         self.is_playing = False
 
-    def play(self, path, volume, loop_pause_s):
+    def play(self, path, volume, loop_pause_s, end_fade_s=0):
         self.calls.append(("play", Path(path).name, volume, loop_pause_s))
         self.is_playing = True
 

@@ -63,9 +63,14 @@ class NativeVideoPanel(QObject):
         self._loop_timer.setSingleShot(True)
         self._loop_timer.timeout.connect(self._resume_after_pause)
         self._loop_pause_ms = 0
+        self._end_fade_ms = 0
+        self._base_volume = 1.0      # what the page asked for; the edge fade scales it
+        self._envelope = 1.0
         self.is_playing = False
 
         self._player.mediaStatusChanged.connect(self._on_status)
+        if hasattr(self._player, "positionChanged"):
+            self._player.positionChanged.connect(self._on_position)
         self._player.errorOccurred.connect(self._on_error)
         page.installEventFilter(self)
         # Safety net: Esc always takes the panel down, even if the page stopped driving it.
@@ -75,11 +80,14 @@ class NativeVideoPanel(QObject):
             app.installEventFilter(self)
 
     # ── control ──
-    def play(self, path: Path, volume: float, loop_pause_s: int) -> None:
+    def play(self, path: Path, volume: float, loop_pause_s: int, end_fade_s: float = 0) -> None:
         self._loop_timer.stop()
         self._loop_pause_ms = max(0, int(loop_pause_s)) * 1000
+        self._end_fade_ms = max(0, int(float(end_fade_s) * 1000))
+        self._base_volume = _clamp(volume)
+        self._envelope = 1.0 if not self._end_fade_ms else 0.0   # fade in from the first frame
         self._audio = self._make_audio()
-        self._audio.setVolume(_clamp(volume))
+        self._audio.setVolume(self._base_volume * self._envelope)
         self._player.setAudioOutput(self._audio)
         self._player.setLoops(QMediaPlayer.Loops.Infinite if self._loop_pause_ms == 0 else 1)
         self._player.setSource(QUrl.fromLocalFile(str(path)))
@@ -96,8 +104,22 @@ class NativeVideoPanel(QObject):
         self.widget.hide()
 
     def set_volume(self, volume: float) -> None:
+        self._base_volume = _clamp(volume)
         if self._audio is not None:
-            self._audio.setVolume(_clamp(volume))
+            self._audio.setVolume(self._base_volume * self._envelope)
+
+    # ── sound fades in at the start and out at the end of every play ──
+    def _on_position(self, pos_ms: int) -> None:
+        if not (self._end_fade_ms and self.is_playing and self._audio is not None):
+            return
+        duration = self._player.duration()
+        if duration <= 0:
+            return
+        fade = min(self._end_fade_ms, duration // 2)     # short clips: never overlap the two fades
+        envelope = max(0.0, min(1.0, pos_ms / fade, (duration - pos_ms) / fade))
+        if abs(envelope - self._envelope) >= 0.01 or envelope in (0.0, 1.0):
+            self._envelope = envelope
+            self._audio.setVolume(self._base_volume * envelope)
 
     # ── loop with a rest between plays ──
     def _on_status(self, status) -> None:

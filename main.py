@@ -2225,7 +2225,8 @@ class Api(QObject):
         path = getattr(self, "_screensaver_video_path", None)
         if panel is None or path is None:
             return {"ok": False, "message": "No usable video"}
-        panel.play(path, max(0.0, min(1.0, float(volume))), max(0, min(300, int(loop_pause_s))))
+        panel.play(path, max(0.0, min(1.0, float(volume))), max(0, min(300, int(loop_pause_s))),
+                   config.VIDEO_END_FADE_SECONDS)
         return {"ok": True}
 
     @pyqtSlot()

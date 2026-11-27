@@ -316,6 +316,9 @@ HOLD_SCANS = _choice("HOLD_SCANS", "accept", ("accept", "block"))
 # Video (idle screensaver and hold screen): seconds to rest on the first frame (silent)
 # between loops, so a looping video with sound is less tiring during an event. 0 = none.
 VIDEO_LOOP_PAUSE_SECONDS = _safe_int("VIDEO_LOOP_PAUSE_SECONDS", 0, min_val=0, max_val=300)
+# Video sound fades in over the first N seconds and out over the last N of every play, so a
+# loop does not cut off abruptly. 0 = off (the default).
+VIDEO_END_FADE_SECONDS = _safe_int("VIDEO_END_FADE_SECONDS", 0, min_val=0, max_val=10)
 
 # Confetti burst on a successful (matched, non-duplicate) scan. Off by default
 # so the new visual doesn't surprise anyone until explicitly enabled.
