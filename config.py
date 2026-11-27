@@ -91,10 +91,8 @@ def _safe_float(key: str, default: float, min_val: float = None, max_val: float 
         return default
 
 
-# =============================================================================
-# Cloud API Configuration
-# =============================================================================
-
+# ======================================================================# Cloud API Configuration
+# ======================================================================
 # Production Cloud Run API endpoint
 CLOUD_API_URL = os.getenv(
     "CLOUD_API_URL",
@@ -124,10 +122,8 @@ if CLOUD_READ_ONLY:
 CLOUD_SYNC_BATCH_SIZE = _safe_int("CLOUD_SYNC_BATCH_SIZE", 100, min_val=1, max_val=1000)
 
 
-# =============================================================================
-# Connection Health Check
-# =============================================================================
-
+# ======================================================================# Connection Health Check
+# ======================================================================
 def _parse_connection_interval_ms() -> int:
     """
     Parse connection interval from env.
@@ -162,10 +158,8 @@ CONNECTION_CHECK_TIMEOUT_SECONDS = _safe_float("CONNECTION_CHECK_TIMEOUT_SECONDS
 CONNECTION_CHECK_INITIAL_DELAY_MS = int(float(os.getenv("CONNECTION_CHECK_INITIAL_DELAY_SECONDS", "15")) * 1000)
 
 
-# =============================================================================
-# Auto-Sync Configuration
-# =============================================================================
-
+# ======================================================================# Auto-Sync Configuration
+# ======================================================================
 # Enable/disable automatic synchronization
 AUTO_SYNC_ENABLED = os.getenv("AUTO_SYNC_ENABLED", "True").lower() in ("true", "1", "yes")
 
@@ -206,10 +200,8 @@ AUTO_SYNC_MESSAGE_DURATION_MS = _safe_int("AUTO_SYNC_MESSAGE_DURATION_MS", 3000,
 AUTO_SYNC_CONNECTION_TIMEOUT = _safe_int("AUTO_SYNC_CONNECTION_TIMEOUT", 5, min_val=1, max_val=30)
 
 
-# =============================================================================
-# Sync Resilience Configuration
-# =============================================================================
-
+# ======================================================================# Sync Resilience Configuration
+# ======================================================================
 # Retry failed sync operations with exponential backoff
 SYNC_RETRY_ENABLED = os.getenv("SYNC_RETRY_ENABLED", "True").lower() in ("true", "1", "yes")
 SYNC_RETRY_MAX_ATTEMPTS = _safe_int("SYNC_RETRY_MAX_ATTEMPTS", 3, min_val=1, max_val=10)
@@ -220,10 +212,8 @@ AUTO_SYNC_MAX_CONSECUTIVE_FAILURES = _safe_int("AUTO_SYNC_MAX_CONSECUTIVE_FAILUR
 AUTO_SYNC_FAILURE_COOLDOWN_SECONDS = _safe_int("AUTO_SYNC_FAILURE_COOLDOWN_SECONDS", 300, min_val=30, max_val=3600)
 
 
-# =============================================================================
-# Roster Validation Configuration
-# =============================================================================
-
+# ======================================================================# Roster Validation Configuration
+# ======================================================================
 # Expected column headers in employee.xlsx
 REQUIRED_ROSTER_COLUMNS = [
     "Legacy ID",
@@ -244,10 +234,8 @@ ROSTER_VALIDATION_ENABLED = os.getenv("ROSTER_VALIDATION_ENABLED", "True").lower
 ROSTER_STRICT_VALIDATION = os.getenv("ROSTER_STRICT_VALIDATION", "True").lower() in ("true", "1", "yes")
 
 
-# =============================================================================
-# Logging Configuration
-# =============================================================================
-
+# ======================================================================# Logging Configuration
+# ======================================================================
 # File logging for diagnostics
 LOGGING_ENABLED = os.getenv("LOGGING_ENABLED", "True").lower() in ("true", "1", "yes")
 LOGGING_FILE = os.getenv("LOGGING_FILE", "logs/trackattendance.log")
@@ -256,10 +244,8 @@ LOGGING_CONSOLE = os.getenv("LOGGING_CONSOLE", "True").lower() in ("true", "1", 
 LOG_SECRETS = os.getenv("LOG_SECRETS", "False").lower() in ("true", "1", "yes")
 
 
-# =============================================================================
-# Application Paths
-# =============================================================================
-
+# ======================================================================# Application Paths
+# ======================================================================
 # These are relative paths from the application root
 # Actual paths are computed in main.py based on execution mode
 
@@ -270,10 +256,8 @@ DATABASE_FILENAME = "database.db"
 EMPLOYEE_WORKBOOK_FILENAME = "employee.xlsx"
 
 
-# =============================================================================
-# UI Configuration
-# =============================================================================
-
+# ======================================================================# UI Configuration
+# ======================================================================
 # Window behavior
 SHOW_FULL_SCREEN = os.getenv("SHOW_FULL_SCREEN", "True").lower() in ("true", "1", "yes")
 ENABLE_FADE_ANIMATION = os.getenv("ENABLE_FADE_ANIMATION", "True").lower() in ("true", "1", "yes")
@@ -316,6 +300,10 @@ HOLD_SCANS = _choice("HOLD_SCANS", "accept", ("accept", "block"))
 # Video (idle screensaver and hold screen): seconds to rest on the first frame (silent)
 # between loops, so a looping video with sound is less tiring during an event. 0 = none.
 VIDEO_LOOP_PAUSE_SECONDS = _safe_int("VIDEO_LOOP_PAUSE_SECONDS", 0, min_val=0, max_val=300)
+# Camera "sound" mode: restart the playing video from the start when a person arrives after
+# the station has been empty for at least this many seconds (so flicker and back-to-back
+# arrivals do not keep restarting it). 0 = never restart.
+VIDEO_RESTART_EMPTY_SECONDS = _safe_int("VIDEO_RESTART_EMPTY_SECONDS", 10, min_val=0, max_val=600)
 # Video sound fades in over the first N seconds and out over the last N of every play, so a
 # loop does not cut off abruptly. 0 = off (the default).
 VIDEO_END_FADE_SECONDS = _safe_int("VIDEO_END_FADE_SECONDS", 0, min_val=0, max_val=10)
@@ -328,10 +316,8 @@ CONFETTI_ENABLED = os.getenv("CONFETTI_ENABLED", "False").lower() in ("true", "1
 AUTO_EXPORT_ON_SHUTDOWN = os.getenv("AUTO_EXPORT_ON_SHUTDOWN", "True").lower() in ("true", "1", "yes")
 
 
-# =============================================================================
-# Duplicate Badge Detection Configuration (Issue #20, #21)
-# =============================================================================
-
+# ======================================================================# Duplicate Badge Detection Configuration (Issue #20, #21)
+# ======================================================================
 # Enable/disable duplicate badge detection
 # Prevents users from scanning the same badge multiple times in quick succession
 DUPLICATE_BADGE_DETECTION_ENABLED = os.getenv("DUPLICATE_BADGE_DETECTION_ENABLED", "True").lower() in ("true", "1", "yes")
@@ -359,10 +345,8 @@ DUPLICATE_BADGE_ALERT_DURATION_MS = _safe_int("DUPLICATE_BADGE_ALERT_DURATION_MS
 SCAN_FEEDBACK_DURATION_MS = _safe_int("SCAN_FEEDBACK_DURATION_MS", 2000, min_val=500, max_val=30000)
 
 
-# =============================================================================
-# Voice Playback Configuration
-# =============================================================================
-
+# ======================================================================# Voice Playback Configuration
+# ======================================================================
 # Enable/disable voice confirmation on successful scans
 VOICE_ENABLED = os.getenv("VOICE_ENABLED", "True").lower() in ("true", "1", "yes")
 
@@ -370,10 +354,8 @@ VOICE_ENABLED = os.getenv("VOICE_ENABLED", "True").lower() in ("true", "1", "yes
 VOICE_VOLUME = _safe_float("VOICE_VOLUME", 1.0, min_val=0.0, max_val=1.0)
 
 
-# =============================================================================
-# Camera Proximity Detection Plugin (Optional)
-# =============================================================================
-
+# ======================================================================# Camera Proximity Detection Plugin (Optional)
+# ======================================================================
 # Enable camera-based proximity greeting. When a person is detected near the
 # kiosk, plays a voice greeting prompting them to scan their badge.
 # Camera does NOT scan barcodes — badge scanning remains USB-only.
@@ -435,10 +417,8 @@ CAMERA_RESOLUTION_WIDTH = _safe_int("CAMERA_RESOLUTION_WIDTH", 1280, min_val=320
 CAMERA_RESOLUTION_HEIGHT = _safe_int("CAMERA_RESOLUTION_HEIGHT", 720, min_val=240, max_val=2160)
 
 
-# =============================================================================
-# Admin Configuration
-# =============================================================================
-
+# ======================================================================# Admin Configuration
+# ======================================================================
 # PIN for admin features (4-6 digits). Leave empty to disable admin features.
 ADMIN_PIN = os.getenv("ADMIN_PIN", "")
 ADMIN_FEATURES_ENABLED = bool(ADMIN_PIN and ADMIN_PIN.isdigit() and 4 <= len(ADMIN_PIN) <= 6)

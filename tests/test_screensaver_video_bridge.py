@@ -42,6 +42,9 @@ class RecordingPanel(QObject):
         self.calls.append(("play", Path(path).name, volume, loop_pause_s))
         self.is_playing = True
 
+    def restart(self):
+        self.calls.append(("restart",))
+
     def stop(self):
         self.calls.append(("stop",))
         self.is_playing = False
@@ -159,6 +162,12 @@ class TestPlayback(BridgeTestCase):
         Api.screensaver_video_play(self.api, 1.0, 0)
         Api.screensaver_video_stop(self.api)
         self.assertEqual(self.panel.calls[-1], ("stop",))
+
+    def test_restart_reaches_the_panel(self):
+        self.start()
+        Api.screensaver_video_play(self.api, 1.0, 0)
+        Api.screensaver_video_restart(self.api)
+        self.assertEqual(self.panel.calls[-1], ("restart",))
 
     def test_panel_failure_reaches_the_page(self):
         self.start()

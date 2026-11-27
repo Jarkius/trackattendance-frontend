@@ -21,6 +21,8 @@ from PyQt6.QtWidgets import QApplication, QWidget
 
 LOGGER = logging.getLogger(__name__)
 
+RESTART_MIN_POS_MS = 2000   # a video this close to its start is not restarted again
+
 
 def _default_audio():
     """An audio output on the *current* default device (a speaker switched after start-up)."""
@@ -63,6 +65,7 @@ class NativeVideoPanel(QObject):
         self._loop_timer.setSingleShot(True)
         self._loop_timer.timeout.connect(self._resume_after_pause)
         self._loop_pause_ms = 0
+        self._pos_ms = 0
         self._end_fade_ms = 0
         self._base_volume = 1.0      # what the page asked for; the edge fade scales it
         self._envelope = 1.0
@@ -82,6 +85,7 @@ class NativeVideoPanel(QObject):
     # ── control ──
     def play(self, path: Path, volume: float, loop_pause_s: int, end_fade_s: float = 0) -> None:
         self._loop_timer.stop()
+        self._pos_ms = 0
         self._loop_pause_ms = max(0, int(loop_pause_s)) * 1000
         self._end_fade_ms = max(0, int(float(end_fade_s) * 1000))
         self._base_volume = _clamp(volume)
@@ -103,6 +107,15 @@ class NativeVideoPanel(QObject):
         self._player.stop()
         self.widget.hide()
 
+    def restart(self) -> None:
+        """Start over from the first frame. No-op when not playing or already within the
+        first RESTART_MIN_POS_MS (it is effectively at the start)."""
+        if not self.is_playing or self._pos_ms < RESTART_MIN_POS_MS:
+            return
+        self._loop_timer.stop()          # arrival during the rest between loops: resume now
+        self._player.setPosition(0)
+        self._player.play()
+
     def set_volume(self, volume: float) -> None:
         self._base_volume = _clamp(volume)
         if self._audio is not None:
@@ -110,6 +123,7 @@ class NativeVideoPanel(QObject):
 
     # ── sound fades in at the start and out at the end of every play ──
     def _on_position(self, pos_ms: int) -> None:
+        self._pos_ms = pos_ms
         if not (self._end_fade_ms and self.is_playing and self._audio is not None):
             return
         duration = self._player.duration()

@@ -2351,6 +2351,7 @@ ${destination}` : message;
                     if (!(r && r.ok)) { log(`video play refused: ${r && r.message}`); hide('no video'); arm(); }
                 });
             }),
+            restart: () => queueOrRun((bridge) => { if (bridge.screensaver_video_restart) bridge.screensaver_video_restart(); }),
             stop: () => queueOrRun((bridge) => { if (bridge.screensaver_video_stop) bridge.screensaver_video_stop(); }),
             setVolume: (vol) => queueOrRun((bridge) => {
                 if (bridge.screensaver_video_set_volume) bridge.screensaver_video_set_volume(vol);
@@ -2359,7 +2360,8 @@ ${destination}` : message;
         const HOLD_RETURN_MS = 8000;   // how long a scan's result stays up before the hold returns
         const cfg = { enabled: false, content: 'video', idleMs: 60000, muted: false,
                       camera: 'wake', cameraAvailable: true, cameraRunning: true,
-                      hold: false, holdContent: 'image', holdScans: 'accept', loopPauseS: 0 };
+                      hold: false, holdContent: 'image', holdScans: 'accept', loopPauseS: 0,
+                      restartEmptyS: 0 };
         const hooks = { onHoldChanged: null };
         let kind = null;             // what is on screen: 'hold' | 'idle' | null
         let timer = null;
@@ -2367,6 +2369,7 @@ ${destination}` : message;
         let shownAt = 0;
         let peeking = false;         // hold lifted briefly to show a scan result
         let personPresent = false;   // from the camera plugin (stays false without a camera)
+        let emptySince = Date.now(); // when the station last became empty (restart-on-arrival)
         let lastSkip = '';
 
         // Diagnostics go to the app log (trackattendance.log) via the bridge: the web console
@@ -2441,6 +2444,7 @@ ${destination}` : message;
             el.classList.add('screensaver--active');
             el.setAttribute('aria-hidden', 'false');
             shownAt = Date.now();
+            if (!personPresent) emptySince = shownAt;
         };
         const show = () => {
             if (!el || isActive()) return;
@@ -2548,6 +2552,9 @@ ${destination}` : message;
                 if (o.loopPauseS !== undefined) {
                     cfg.loopPauseS = Math.max(0, Math.min(300, Number(o.loopPauseS) || 0));
                 }
+                if (o.restartEmptyS !== undefined) {
+                    cfg.restartEmptyS = Math.max(0, Math.min(600, Number(o.restartEmptyS) || 0));
+                }
                 if (o.enabled !== undefined) cfg.enabled = !!o.enabled;
                 if (o.content === 'video' || o.content === 'image') cfg.content = o.content;
                 if (o.muted !== undefined) cfg.muted = !!o.muted;
@@ -2586,7 +2593,17 @@ ${destination}` : message;
             },
             // Camera saw someone step up (true) or leave (false)
             setPresent(present) {
+                const wasPresent = personPresent;
                 personPresent = camera() !== 'off' && !!present;
+                if (wasPresent && !personPresent) emptySince = Date.now();
+                // Sound mode: someone arriving after a real gap hears the video from the start.
+                // Another person joining (no empty gap) or camera flicker does not restart it.
+                if (!wasPresent && personPresent && camera() === 'sound' && cfg.restartEmptyS > 0 &&
+                    isActive() && contentFor(kind) === 'video' &&
+                    Date.now() - emptySince >= cfg.restartEmptyS * 1000) {
+                    log(`restart: person arrived after ${Math.round((Date.now() - emptySince) / 1000)}s empty`);
+                    nativeVideo.restart();
+                }
                 log(`presence signal=${!!present} -> personPresent=${personPresent} (effective camera mode=${camera()})`);
                 if (wakesOnCamera() && !cfg.hold) {
                     if (personPresent) { if (kind === 'idle') hide('person arrived (wake)'); clearTimeout(timer); } else { arm(); }
@@ -2709,6 +2726,7 @@ ${destination}` : message;
                     idleSeconds: r.screensaver_idle_seconds, cameraAvailable: !!r.camera_enabled,
                     hold: !!r.hold_enabled, holdContent: r.hold_content, holdScans: r.hold_scans,
                     loopPauseS: r.video_loop_pause_seconds || 0,
+                    restartEmptyS: r.video_restart_empty_seconds || 0,
                 });
             });
         }
@@ -2847,6 +2865,7 @@ ${destination}` : message;
                         idleSeconds: result.screensaver_idle_seconds, cameraAvailable: !!result.camera_enabled,
                         hold: !!result.hold_enabled, holdContent: result.hold_content, holdScans: result.hold_scans,
                         loopPauseS: result.video_loop_pause_seconds || 0,
+                        restartEmptyS: result.video_restart_empty_seconds || 0,
                     });
                     const markActive = (sel, val) => document.querySelectorAll(sel).forEach(b => {
                         b.classList.toggle('active', b.dataset.val === val);
